@@ -25,7 +25,12 @@ export default function MfaChallengePage() {
         body: JSON.stringify({ code: code.trim() }),
       });
 
-      router.push('/dashboard');
+      const me = await apiClient<{ user: { isSuperAdmin: boolean } }>('/auth/me');
+      if (me.user?.isSuperAdmin) {
+        window.location.href = '/super-admin/dashboard';
+      } else {
+        window.location.href = '/dashboard';
+      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid verification code. Please check your authenticator app.');

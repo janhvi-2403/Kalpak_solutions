@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import {
   Button,
@@ -13,21 +12,28 @@ import {
   Dialog,
   Badge,
 } from '@/components/ui';
-import { Building2, ArrowRight } from 'lucide-react';
+import { Building2, ArrowRight, KeyRound, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
 export function LoginForm() {
-  const router = useRouter();
   const { refetchSession } = useAuth();
+
+  // Login form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [tenantSlug, setTenantSlug] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Inline MFA Challenge state
+  const [isMfaStep, setIsMfaStep] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [isBackupCode, setIsBackupCode] = useState(false);
+  const [cachedUser, setCachedUser] = useState<AuthLoginResponse['user'] | null>(null);
 
   // Multi-tenant organization selection state
   const [showOrgPicker, setShowOrgPicker] = useState(false);
@@ -49,9 +55,13 @@ export function LoginForm() {
         }),
       });
 
+      setCachedUser(response.user);
+
       // Handle MFA Challenge
       if (response.mfaRequired) {
-        router.push('/mfa');
+        setIsMfaStep(true);
+        setTotpCode('');
+        setIsLoading(false);
         return;
       }
 
@@ -62,14 +72,47 @@ export function LoginForm() {
         return;
       }
 
-      // Refresh session state and navigate to Dashboard
+      // Refresh session state and route according to role
       await refetchSession();
-      window.location.href = '/dashboard';
+      if (response.user?.isSuperAdmin) {
+        window.location.href = '/super-admin/dashboard';
+      } else {
+        window.location.href = '/dashboard';
+      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid email or password. Please try again.');
       } else {
         setError('Unable to communicate with the authentication service. Please check your connection.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      await apiClient('/auth/mfa/verify', {
+        method: 'POST',
+        body: JSON.stringify({ code: totpCode.trim() }),
+      });
+
+      await refetchSession();
+
+      if (cachedUser?.isSuperAdmin) {
+        window.location.href = '/super-admin/dashboard';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.errorResponse.message || 'Invalid verification code or backup code');
+      } else {
+        setError('Failed to verify code. Please check your network connection.');
       }
     } finally {
       setIsLoading(false);
@@ -98,15 +141,34 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="bg-white p-8 sm:p-10 rounded-2xl border border-slate-200/80 shadow-lg shadow-slate-100">
+      <div className="bg-white p-8 sm:p-10 rounded-2xl border border-slate-200/80 shadow-xl shadow-orange-500/5">
         <div className="mb-8">
-          <div className="mb-3">
+          <div className="mb-4">
             <KalpakLogo />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Sign In to Platform</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Enter your credentials to access your service management portal.
-          </p>
+
+          {!isMfaStep ? (
+            <>
+              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Sign In to Platform</h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Enter your credentials to access your service management workspace.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-600 border border-orange-500/20 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Two-Factor Authentication</h1>
+              </div>
+              <p className="text-sm text-slate-500">
+                {isBackupCode
+                  ? 'Enter one of your emergency single-use backup codes.'
+                  : 'Enter the 6-digit verification code from your authenticator app.'}
+              </p>
+            </>
+          )}
         </div>
 
         {error && (
@@ -115,93 +177,158 @@ export function LoginForm() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            id="login-email"
-            type="email"
-            label="Work Email Address"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="alice@company.com"
-          />
-
-          <PasswordInput
-            id="login-password"
-            label="Password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-
-          <div className="pt-1">
+        {!isMfaStep ? (
+          /* Step 1: Standard / Super Admin Login Form */
+          <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              id="login-tenant"
-              type="text"
-              label="Organization Slug (Optional)"
-              value={tenantSlug}
-              onChange={(e) => setTenantSlug(e.target.value)}
-              placeholder="e.g. acme-corp"
-              helperText="Specify if your account belongs to multiple client organizations"
+              id="login-email"
+              type="email"
+              label="Work or Official Email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="alice@company.com"
             />
-          </div>
 
-          <div className="flex items-center justify-between pt-1 text-sm">
-            <Checkbox
-              id="remember-session"
-              label="Remember session"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
+            <PasswordInput
+              id="login-password"
+              label="Password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••"
             />
-            <Link
-              href="/forgot-password"
-              className="font-semibold text-orange-600 hover:text-orange-700 transition-colors text-xs"
+
+            <div className="pt-1">
+              <Input
+                id="login-tenant"
+                type="text"
+                label="Organization Slug (Optional)"
+                value={tenantSlug}
+                onChange={(e) => setTenantSlug(e.target.value)}
+                placeholder="e.g. acme-corp"
+                helperText="Leave empty for Super Admin or default workspace"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-sm">
+              <Checkbox
+                id="remember-session"
+                label="Remember session"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              <Link
+                href="/forgot-password"
+                className="font-semibold text-orange-600 hover:text-orange-700 transition-colors text-xs"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            <Button
+              type="submit"
+              isLoading={isLoading}
+              className="w-full mt-4 h-11 text-sm font-extrabold shadow-lg shadow-orange-500/20"
             >
-              Forgot password?
-            </Link>
-          </div>
+              <span>Sign In to Workspace</span>
+              <ArrowRight className="ml-2 w-4 h-4" />
+            </Button>
 
-          <Button type="submit" isLoading={isLoading} className="w-full mt-4 h-11 text-sm font-bold shadow-lg shadow-orange-500/20">
-            Sign In to Workspace
-          </Button>
+            {/* Quick-fill Demo Accounts Helper */}
+            <div className="mt-6 pt-4 border-t border-slate-100">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Quick-Fill Demo Credentials:
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('clientadmin@acme.com');
+                    setPassword('AcmeAdmin123!');
+                    setTenantSlug('acme-corp');
+                  }}
+                  className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
+                >
+                  <div className="font-semibold text-slate-800 text-xs">Client Admin</div>
+                  <div className="text-[10px] text-slate-500 font-mono truncate">clientadmin@acme.com</div>
+                </button>
 
-          {/* Quick-fill Demo Accounts Helper */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Demo Credentials:
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('admin@kalpaksolutions.com');
+                    setPassword('KalpakAdmin123!');
+                    setTenantSlug('');
+                  }}
+                  className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
+                >
+                  <div className="font-semibold text-slate-800 text-xs flex items-center gap-1">
+                    <span>Super Admin</span>
+                    <ShieldCheck className="w-3 h-3 text-orange-600" />
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono truncate">admin@kalpaksolutions.com</div>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+          </form>
+        ) : (
+          /* Step 2: Inline MFA Verification Challenge */
+          <form onSubmit={handleMfaSubmit} className="space-y-4">
+            <div>
+              <Input
+                id="login-mfa-code"
+                type="text"
+                label={isBackupCode ? 'Emergency Recovery Code' : '6-Digit TOTP Code'}
+                required
+                autoFocus
+                maxLength={isBackupCode ? 9 : 6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\s+/g, ''))}
+                placeholder={isBackupCode ? 'XXXX-XXXX' : '123456'}
+                className="text-center tracking-widest text-2xl font-mono font-bold"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              isLoading={isLoading}
+              className="w-full h-11 text-sm font-extrabold shadow-lg shadow-orange-500/20 mt-2"
+            >
+              <span>Verify & Continue</span>
+              <ArrowRight className="ml-2 w-4 h-4" />
+            </Button>
+
+            <div className="flex items-center justify-between pt-3 text-xs">
               <button
                 type="button"
                 onClick={() => {
-                  setEmail('clientadmin@acme.com');
-                  setPassword('AcmeAdmin123!');
-                  setTenantSlug('acme-corp');
+                  setIsBackupCode(!isBackupCode);
+                  setTotpCode('');
+                  setError(null);
                 }}
-                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
+                className="text-orange-600 hover:text-orange-700 font-bold transition-colors"
               >
-                <div className="font-semibold text-slate-800 text-xs">Client Admin</div>
-                <div className="text-[10px] text-slate-500 font-mono truncate">clientadmin@acme.com</div>
+                {isBackupCode ? 'Use 6-digit TOTP code' : 'Use emergency backup code'}
               </button>
 
               <button
                 type="button"
                 onClick={() => {
-                  setEmail('tech@acme.com');
-                  setPassword('Tech123456!');
-                  setTenantSlug('acme-corp');
+                  setIsMfaStep(false);
+                  setTotpCode('');
+                  setError(null);
                 }}
-                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
+                className="text-slate-500 hover:text-slate-700 font-medium inline-flex items-center gap-1 transition-colors"
               >
-                <div className="font-semibold text-slate-800 text-xs">Field Technician</div>
-                <div className="text-[10px] text-slate-500 font-mono truncate">tech@acme.com</div>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back</span>
               </button>
             </div>
-          </div>
-        </form>
+          </form>
+        )}
 
         <div className="mt-6 pt-4 border-t border-slate-100 text-center text-sm text-slate-600">
           Need a new organization account?{' '}
