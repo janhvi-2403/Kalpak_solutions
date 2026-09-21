@@ -4,9 +4,9 @@ import { KalpakLogo } from '@/components/KalpakLogo';
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-50">
+    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-50 selection:bg-orange-500 selection:text-white">
       {/* Left Column: Enterprise Branding & Trust Signals */}
-      <div className="hidden lg:flex lg:col-span-5 bg-slate-900 text-white p-12 flex-col justify-between relative overflow-hidden border-r border-slate-800">
+      <div className="hidden lg:flex lg:col-span-5 bg-gradient-to-b from-slate-950 via-slate-900 to-blue-950 text-white p-12 flex-col justify-between relative overflow-hidden border-r border-slate-800">
         <div className="relative z-10">
           <div className="mb-10">
             <KalpakLogo size="lg" variant="dark" />
@@ -23,13 +23,13 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="relative z-10 space-y-4 pt-8 border-t border-slate-800">
+        <div className="relative z-10 space-y-4 pt-8 border-t border-slate-800/80">
           <div className="flex items-center gap-3 text-sm text-slate-300">
-            <ShieldCheck className="w-5 h-5 text-sky-400 shrink-0" />
+            <ShieldCheck className="w-5 h-5 text-orange-400 shrink-0" />
             <span>PostgreSQL Native Row-Level Security (RLS)</span>
           </div>
           <div className="flex items-center gap-3 text-sm text-slate-300">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-5 h-5 text-blue-400 shrink-0" />
             <span>Stateful HttpOnly Session Authentication</span>
           </div>
           <div className="flex items-center gap-3 text-sm text-slate-300">

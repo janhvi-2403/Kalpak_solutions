@@ -37,9 +37,9 @@ export function Stepper({ steps, currentStep, onStepClick, className }: StepperP
                     className={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-colors shrink-0',
                       isCompleted
-                        ? 'bg-sky-600 text-white hover:bg-sky-700'
+                        ? 'bg-orange-600 text-white hover:bg-orange-700'
                         : isCurrent
-                          ? 'bg-sky-100 text-sky-700 ring-2 ring-sky-600 font-bold'
+                          ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-600 font-bold'
                           : 'bg-slate-100 text-slate-400',
                       !onStepClick && 'cursor-default'
                     )}
@@ -51,7 +51,7 @@ export function Stepper({ steps, currentStep, onStepClick, className }: StepperP
                     <div
                       className={cn(
                         'flex-1 h-0.5 ml-2 transition-colors',
-                        isCompleted ? 'bg-sky-600' : 'bg-slate-200'
+                        isCompleted ? 'bg-orange-600' : 'bg-slate-200'
                       )}
                     />
                   )}
@@ -61,7 +61,7 @@ export function Stepper({ steps, currentStep, onStepClick, className }: StepperP
                   <span
                     className={cn(
                       'text-xs font-medium block truncate',
-                      isCurrent ? 'text-sky-700 font-bold' : isCompleted ? 'text-slate-800' : 'text-slate-400'
+                      isCurrent ? 'text-orange-700 font-bold' : isCompleted ? 'text-slate-800' : 'text-slate-400'
                     )}
                   >
                     {step.label}

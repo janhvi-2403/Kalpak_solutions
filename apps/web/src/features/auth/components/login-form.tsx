@@ -158,13 +158,13 @@ export function LoginForm() {
             />
             <Link
               href="/forgot-password"
-              className="font-medium text-sky-600 hover:text-sky-700 transition-colors text-xs"
+              className="font-semibold text-orange-600 hover:text-orange-700 transition-colors text-xs"
             >
               Forgot password?
             </Link>
           </div>
 
-          <Button type="submit" isLoading={isLoading} className="w-full mt-4 h-11 text-sm">
+          <Button type="submit" isLoading={isLoading} className="w-full mt-4 h-11 text-sm font-bold shadow-lg shadow-orange-500/20">
             Sign In to Workspace
           </Button>
 
@@ -181,7 +181,7 @@ export function LoginForm() {
                   setPassword('AcmeAdmin123!');
                   setTenantSlug('acme-corp');
                 }}
-                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
               >
                 <div className="font-semibold text-slate-800 text-xs">Client Admin</div>
                 <div className="text-[10px] text-slate-500 font-mono truncate">clientadmin@acme.com</div>
@@ -190,14 +190,14 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setEmail('admin@kalpak.com');
-                  setPassword('KalpakAdmin123!');
-                  setTenantSlug('');
+                  setEmail('tech@acme.com');
+                  setPassword('Tech123456!');
+                  setTenantSlug('acme-corp');
                 }}
-                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
               >
-                <div className="font-semibold text-slate-800 text-xs">Super Admin</div>
-                <div className="text-[10px] text-slate-500 font-mono truncate">admin@kalpak.com</div>
+                <div className="font-semibold text-slate-800 text-xs">Field Technician</div>
+                <div className="text-[10px] text-slate-500 font-mono truncate">tech@acme.com</div>
               </button>
             </div>
           </div>
@@ -205,7 +205,7 @@ export function LoginForm() {
 
         <div className="mt-6 pt-4 border-t border-slate-100 text-center text-sm text-slate-600">
           Need a new organization account?{' '}
-          <Link href="/signup" className="font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+          <Link href="/signup" className="font-bold text-orange-600 hover:text-orange-700 transition-colors">
             Register Organization
           </Link>
         </div>
@@ -225,10 +225,10 @@ export function LoginForm() {
               type="button"
               disabled={isSwitchingOrg}
               onClick={() => handleSelectOrganization(membership.tenantId)}
-              className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 transition-all text-left group disabled:opacity-50"
+              className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50/30 transition-all text-left group disabled:opacity-50"
             >
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-sky-100 text-slate-700 group-hover:text-sky-700 flex items-center justify-center transition-colors">
+                <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-orange-100 text-slate-700 group-hover:text-orange-700 flex items-center justify-center transition-colors">
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
@@ -241,7 +241,7 @@ export function LoginForm() {
                   </div>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-colors" />
+              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-orange-600 transition-colors" />
             </button>
           ))}
         </div>

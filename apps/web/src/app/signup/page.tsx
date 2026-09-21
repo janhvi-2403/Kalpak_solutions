@@ -88,9 +88,9 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-50">
+    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-50 selection:bg-orange-500 selection:text-white">
       {/* Left Column: Branding */}
-      <div className="hidden lg:flex lg:col-span-4 bg-slate-900 text-white p-10 flex-col justify-between border-r border-slate-800">
+      <div className="hidden lg:flex lg:col-span-4 bg-gradient-to-b from-slate-950 via-slate-900 to-blue-950 text-white p-10 flex-col justify-between border-r border-slate-800">
         <div>
           <div className="mb-10">
             <KalpakLogo size="lg" variant="dark" />
@@ -104,13 +104,13 @@ export default function SignupPage() {
             credit card required during initial setup.
           </p>
 
-          <div className="space-y-4 text-sm text-slate-300 pt-6 border-t border-slate-800">
+          <div className="space-y-4 text-sm text-slate-300 pt-6 border-t border-slate-800/80">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-sky-400 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-orange-400 shrink-0" />
               <span>Full multi-tenant tenant isolation</span>
             </div>
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-blue-400 shrink-0" />
               <span>Automated SLA aging & escalation engine</span>
             </div>
             <div className="flex items-center gap-3">
@@ -118,15 +118,15 @@ export default function SignupPage() {
               <span>Multi-tier technician dispatch matrix</span>
             </div>
             <div className="flex items-center gap-3">
-              <ShieldCheck className="w-5 h-5 text-purple-400 shrink-0" />
+              <ShieldCheck className="w-5 h-5 text-orange-400 shrink-0" />
               <span>Immutable security and compliance audit trail</span>
             </div>
           </div>
         </div>
 
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-400">
           Already have an account?{' '}
-          <Link href="/login" className="text-sky-400 font-medium hover:underline">
+          <Link href="/login" className="text-orange-400 font-semibold hover:text-orange-300 transition-colors">
             Sign In here
           </Link>
         </div>
@@ -287,7 +287,7 @@ export default function SignupPage() {
 
           <div className="mt-8 pt-6 border-t border-slate-100 text-center text-sm text-slate-600">
             Already registered?{' '}
-            <Link href="/login" className="font-semibold text-sky-600 hover:text-sky-700 transition-colors">
+            <Link href="/login" className="font-bold text-orange-600 hover:text-orange-700 transition-colors">
               Sign In to Workspace
             </Link>
           </div>
