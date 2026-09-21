@@ -12,7 +12,7 @@ import {
   Dialog,
   Badge,
 } from '@/components/ui';
-import { Building2, ArrowRight, KeyRound, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Building2, ArrowRight, KeyRound, ArrowLeft } from 'lucide-react';
 import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
@@ -236,43 +236,6 @@ export function LoginForm() {
               <span>Sign In to Workspace</span>
               <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
-
-            {/* Quick-fill Demo Accounts Helper */}
-            <div className="mt-6 pt-4 border-t border-slate-100">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Quick-Fill Demo Credentials:
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('clientadmin@acme.com');
-                    setPassword('AcmeAdmin123!');
-                    setTenantSlug('acme-corp');
-                  }}
-                  className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
-                >
-                  <div className="font-semibold text-slate-800 text-xs">Client Admin</div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">clientadmin@acme.com</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('admin@kalpaksolutions.com');
-                    setPassword('KalpakAdmin123!');
-                    setTenantSlug('');
-                  }}
-                  className="text-left p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-orange-50/40 hover:border-orange-300 transition-colors"
-                >
-                  <div className="font-semibold text-slate-800 text-xs flex items-center gap-1">
-                    <span>Super Admin</span>
-                    <ShieldCheck className="w-3 h-3 text-orange-600" />
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">admin@kalpaksolutions.com</div>
-                </button>
-              </div>
-            </div>
           </form>
         ) : (
           /* Step 2: Inline MFA Verification Challenge */
