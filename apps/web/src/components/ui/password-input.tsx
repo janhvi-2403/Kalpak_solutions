@@ -81,18 +81,21 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
                 )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-500 pt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-[11px] text-slate-500 pt-0.5">
               <span className={checks.length ? 'text-emerald-600 font-medium' : ''}>
-                ✓ At least 8 characters
+                ✓ 8+ characters
               </span>
               <span className={checks.uppercase ? 'text-emerald-600 font-medium' : ''}>
-                ✓ Uppercase letter
+                ✓ Uppercase (A-Z)
               </span>
               <span className={checks.lowercase ? 'text-emerald-600 font-medium' : ''}>
-                ✓ Lowercase letter
+                ✓ Lowercase (a-z)
               </span>
               <span className={checks.number ? 'text-emerald-600 font-medium' : ''}>
                 ✓ Number (0-9)
+              </span>
+              <span className={checks.special ? 'text-emerald-600 font-medium' : ''}>
+                ✓ Special symbol (!@#$)
               </span>
             </div>
           </div>

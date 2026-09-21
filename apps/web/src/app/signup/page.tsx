@@ -78,7 +78,15 @@ export default function SignupPage() {
       router.push('/dashboard');
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        setError(err.errorResponse?.message || err.message || 'Registration failed');
+        if (err.errorResponse?.details && err.errorResponse.details.length > 0) {
+          const detailMessages = err.errorResponse.details
+            .map((d) => d.message)
+            .filter(Boolean)
+            .join(' • ');
+          setError(detailMessages || err.errorResponse.message || 'Validation failed');
+        } else {
+          setError(err.errorResponse?.message || err.message || 'Registration failed');
+        }
       } else {
         setError('An unexpected error occurred. Please try again.');
       }
