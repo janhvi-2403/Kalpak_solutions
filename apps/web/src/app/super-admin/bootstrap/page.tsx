@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   RefreshCw,
   CheckCircle2,
+  Mail,
 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 import { apiClient, ApiClientError } from '@/lib/api-client';
@@ -43,22 +44,29 @@ export default function SuperAdminBootstrapPage() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [status, setStatus] = useState<BootstrapStatus | null>(null);
 
-  // Wizard Step: 1 (Credentials) | 2 (TOTP QR) | 3 (Backup Codes) | 4 (Done)
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Wizard Step: 1 (Credentials) | 2 (Email Verification) | 3 (TOTP QR) | 4 (Backup Codes) | 5 (Done)
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Form State - Step 1
   const [secret, setSecret] = useState('');
-  const [fullName, setFullName] = useState('System Administrator');
+  const [fullName, setFullName] = useState('Kalpak System Administrator');
   const [email, setEmail] = useState('admin@kalpaksolutions.com');
   const [phoneNumber, setPhoneNumber] = useState('+91 93730 28030');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Staged Response - Step 2
+  // Staged Response
   const [stagedData, setStagedData] = useState<StagedPayload | null>(null);
+
+  // Form State - Step 2 (Email Verification)
+  const [emailCode, setEmailCode] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendSuccessMessage, setResendSuccessMessage] = useState<string | null>(null);
+
+  // Form State - Step 3 (TOTP MFA)
   const [totpCode, setTotpCode] = useState('');
 
-  // Backup Codes - Step 3
+  // Backup Codes - Step 4
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [copiedCodes, setCopiedCodes] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
@@ -72,6 +80,13 @@ export default function SuperAdminBootstrapPage() {
   useEffect(() => {
     checkStatus();
   }, []);
+
+  // Countdown timer for resend email
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   const checkStatus = async () => {
     try {
@@ -123,7 +138,7 @@ export default function SuperAdminBootstrapPage() {
 
       setStagedData(data);
       setBackupCodes(data.backupCodes || []);
-      setStep(2);
+      setStep(2); // Go to Email Verification
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Bootstrap initialization failed');
@@ -135,7 +150,66 @@ export default function SuperAdminBootstrapPage() {
     }
   };
 
-  // Step 2: Verify Initial TOTP & Lock Bootstrap
+  // Step 2: Verify Official Email Code
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResendSuccessMessage(null);
+
+    if (!stagedData || !stagedData.tempToken) {
+      setError('Staging session expired. Please re-enter credentials.');
+      setStep(1);
+      return;
+    }
+
+    if (!emailCode.trim() || emailCode.trim().length < 6) {
+      setError('Please enter the 6-digit verification code sent to your email.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await apiClient('/bootstrap/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({
+          tempToken: stagedData.tempToken,
+          code: emailCode.trim(),
+        }),
+      });
+
+      setStep(3); // Proceed to TOTP QR Setup
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.errorResponse.message || 'Invalid email verification code.');
+      } else {
+        setError('Failed to verify email code.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Resend Email Code Helper
+  const handleResendEmail = async () => {
+    if (!stagedData?.tempToken || resendCooldown > 0) return;
+    setError(null);
+    setResendSuccessMessage(null);
+
+    try {
+      const res = await apiClient<{ message: string }>('/bootstrap/resend-email', {
+        method: 'POST',
+        body: JSON.stringify({ tempToken: stagedData.tempToken }),
+      });
+      setResendSuccessMessage(res.message);
+      setResendCooldown(60);
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.errorResponse.message || 'Failed to resend verification email');
+      }
+    }
+  };
+
+  // Step 3: Verify Initial TOTP & Lock Bootstrap
   const handleVerifyTotp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -161,7 +235,7 @@ export default function SuperAdminBootstrapPage() {
         }),
       });
 
-      setStep(3);
+      setStep(4); // Proceed to Recovery Codes
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid 6-digit verification code.');
@@ -269,16 +343,17 @@ export default function SuperAdminBootstrapPage() {
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-10 backdrop-blur-md">
             {/* Step Progress Bar */}
             <div className="mb-8">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-3">
-                <span className={step >= 1 ? 'text-orange-400' : ''}>1. Deployment Authorization</span>
-                <span className={step >= 2 ? 'text-orange-400' : ''}>2. TOTP Authenticator</span>
-                <span className={step >= 3 ? 'text-orange-400' : ''}>3. Recovery Codes</span>
-                <span className={step >= 4 ? 'text-orange-400' : ''}>4. Complete</span>
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-3 overflow-x-auto gap-2">
+                <span className={step >= 1 ? 'text-orange-400 whitespace-nowrap' : 'whitespace-nowrap'}>1. Authorization</span>
+                <span className={step >= 2 ? 'text-orange-400 whitespace-nowrap' : 'whitespace-nowrap'}>2. Email Verification</span>
+                <span className={step >= 3 ? 'text-orange-400 whitespace-nowrap' : 'whitespace-nowrap'}>3. TOTP MFA</span>
+                <span className={step >= 4 ? 'text-orange-400 whitespace-nowrap' : 'whitespace-nowrap'}>4. Backup Codes</span>
+                <span className={step >= 5 ? 'text-orange-400 whitespace-nowrap' : 'whitespace-nowrap'}>5. Complete</span>
               </div>
               <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden flex">
                 <div
                   className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 h-full transition-all duration-300"
-                  style={{ width: `${(step / 4) * 100}%` }}
+                  style={{ width: `${(step / 5) * 100}%` }}
                 />
               </div>
             </div>
@@ -382,20 +457,89 @@ export default function SuperAdminBootstrapPage() {
                     isLoading={isLoading}
                     className="h-11 px-8 text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-700 shadow-lg shadow-orange-500/25"
                   >
-                    <span>Proceed to Two-Factor Setup</span>
+                    <span>Proceed to Email Verification</span>
                     <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>
                 </div>
               </form>
             )}
 
-            {/* STEP 2: TOTP Authenticator App QR Setup */}
+            {/* STEP 2: Official Email Verification */}
             {step === 2 && stagedData && (
+              <form onSubmit={handleVerifyEmail} className="space-y-6">
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold">
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Step 2: Official Email Verification</span>
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-white tracking-tight">
+                    Verify Your Official Email
+                  </h2>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    A 6-digit confirmation code has been dispatched to{' '}
+                    <strong className="text-white">{stagedData.email}</strong>. Enter the code below to verify ownership.
+                  </p>
+                </div>
+
+                {resendSuccessMessage && (
+                  <Alert variant="success">{resendSuccessMessage}</Alert>
+                )}
+
+                <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 max-w-md mx-auto">
+                  <Input
+                    id="email-otp-code"
+                    type="text"
+                    label="6-Digit Email Verification Code"
+                    required
+                    autoFocus
+                    maxLength={6}
+                    value={emailCode}
+                    onChange={(e) => setEmailCode(e.target.value.replace(/\s+/g, ''))}
+                    placeholder="123456"
+                    className="text-center tracking-widest text-2xl font-mono font-bold bg-slate-900 border-slate-700 text-white placeholder-slate-600"
+                    helperText="Check your email inbox or server terminal for the 6-digit code."
+                  />
+
+                  <div className="flex items-center justify-between text-xs text-slate-400 pt-2">
+                    <span>Did not receive the code?</span>
+                    <button
+                      type="button"
+                      disabled={resendCooldown > 0}
+                      onClick={handleResendEmail}
+                      className="text-orange-400 hover:text-orange-300 font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    &larr; Back to credentials
+                  </button>
+                  <Button
+                    type="submit"
+                    isLoading={isLoading}
+                    className="h-11 px-8 text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 shadow-lg shadow-orange-500/25"
+                  >
+                    <span>Verify Email & Setup MFA</span>
+                    <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* STEP 3: TOTP Authenticator App QR Setup */}
+            {step === 3 && stagedData && (
               <form onSubmit={handleVerifyTotp} className="space-y-6">
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-bold">
                     <QrCode className="w-3.5 h-3.5" />
-                    <span>Step 2: Authenticator App Registration</span>
+                    <span>Step 3: Authenticator App Registration</span>
                   </div>
                   <h2 className="text-2xl font-extrabold text-white tracking-tight">
                     Set Up Two-Factor Authentication (TOTP)
@@ -463,10 +607,10 @@ export default function SuperAdminBootstrapPage() {
                 <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(2)}
                     className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
                   >
-                    &larr; Back to credentials
+                    &larr; Back to email verification
                   </button>
                   <Button
                     type="submit"
@@ -480,13 +624,13 @@ export default function SuperAdminBootstrapPage() {
               </form>
             )}
 
-            {/* STEP 3: Emergency Backup Codes */}
-            {step === 3 && (
+            {/* STEP 4: Emergency Backup Codes */}
+            {step === 4 && (
               <div className="space-y-6">
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>MFA Verified & Super Admin Created</span>
+                    <span>Email & MFA Verified</span>
                   </div>
                   <h2 className="text-2xl font-extrabold text-white tracking-tight">
                     Save Your Emergency Recovery Codes
@@ -548,7 +692,7 @@ export default function SuperAdminBootstrapPage() {
                   <Button
                     type="button"
                     disabled={!savedConfirmation}
-                    onClick={() => setStep(4)}
+                    onClick={() => setStep(5)}
                     className="h-11 px-8 text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 shadow-lg shadow-orange-500/25 disabled:opacity-50"
                   >
                     <span>Finalize Installation</span>
@@ -558,8 +702,8 @@ export default function SuperAdminBootstrapPage() {
               </div>
             )}
 
-            {/* STEP 4: Permanent Completion & Lock */}
-            {step === 4 && (
+            {/* STEP 5: Permanent Completion & Lock */}
+            {step === 5 && (
               <div className="text-center py-6 space-y-6">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40 shadow-lg">
                   <CheckCircle2 className="w-8 h-8" />
@@ -579,6 +723,10 @@ export default function SuperAdminBootstrapPage() {
                   <div className="flex justify-between">
                     <span className="text-slate-500">Super Admin Account:</span>
                     <span className="font-semibold text-white">{email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Email Verification:</span>
+                    <span className="font-semibold text-emerald-400">Verified & Active</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Two-Factor MFA:</span>

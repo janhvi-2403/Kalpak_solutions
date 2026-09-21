@@ -25,12 +25,15 @@ import {
 import { AuditEventType, UserPrincipal } from '@kalpak/types';
 import { InitBootstrapDto } from './dto/init-bootstrap.dto';
 import { VerifyBootstrapMfaDto } from './dto/verify-bootstrap-mfa.dto';
+import { VerifyBootstrapEmailDto } from './dto/verify-bootstrap-email.dto';
 import { timingSafeEqual, createHash, randomBytes } from 'crypto';
 
 interface StagedBootstrapEntry {
   userId: string;
   email: string;
   fullName: string;
+  emailOtpCode: string;
+  emailVerified: boolean;
   totpSecret: string;
   backupCodes: string[];
   expiresAt: number;
@@ -40,7 +43,7 @@ interface StagedBootstrapEntry {
 export class BootstrapService {
   private readonly config = getConfig();
 
-  // In-memory short-lived staging cache for MFA challenge during initialization (5 minutes TTL)
+  // In-memory short-lived staging cache for MFA challenge during initialization (15 minutes TTL)
   private readonly stagedBootstrapSessions = new Map<string, StagedBootstrapEntry>();
 
   constructor(
@@ -126,7 +129,7 @@ export class BootstrapService {
 
   /**
    * Initiates the Super Admin installation bootstrap.
-   * Validates deployment authorization, creates initial pending Super Admin, and generates TOTP setup payload.
+   * Validates deployment authorization, creates initial pending Super Admin, and generates email OTP + TOTP setup payload.
    */
   async initBootstrap(
     dto: InitBootstrapDto,
@@ -206,7 +209,7 @@ export class BootstrapService {
             passwordHash,
             phoneNumber: dto.phoneNumber?.trim() || null,
             isSuperAdmin: true,
-            isActive: false, // Remains inactive until TOTP is verified
+            isActive: false, // Remains inactive until email & TOTP are verified
             mfaEnabled: false,
             mfaSecret: encryptedTotpSecret,
             mfaBackupCodes: hashedBackupCodes,
@@ -221,7 +224,7 @@ export class BootstrapService {
             passwordHash,
             phoneNumber: dto.phoneNumber?.trim() || null,
             isSuperAdmin: true,
-            isActive: false, // Inactive until TOTP verification in step 2
+            isActive: false, // Inactive until verified
             mfaEnabled: false,
             mfaSecret: encryptedTotpSecret,
             mfaBackupCodes: hashedBackupCodes,
@@ -241,15 +244,20 @@ export class BootstrapService {
       // Format secret in 4-character blocks for manual entry
       const formattedSecret = rawTotpSecret.match(/.{1,4}/g)?.join(' ') || rawTotpSecret;
 
-      // 5. Create short-lived temporary staging token (valid for 10 minutes)
+      // 5. Generate 6-Digit Email Verification Code
+      const emailOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Create short-lived temporary staging token (valid for 15 minutes)
       const tempToken = randomBytes(32).toString('hex');
       this.stagedBootstrapSessions.set(tempToken, {
         userId: user.id,
         email: user.email,
         fullName: user.fullName,
+        emailOtpCode,
+        emailVerified: false,
         totpSecret: rawTotpSecret,
         backupCodes: plainBackupCodes,
-        expiresAt: Date.now() + 10 * 60 * 1000,
+        expiresAt: Date.now() + 15 * 60 * 1000,
       });
 
       // 6. Record Audit Event
@@ -266,16 +274,16 @@ export class BootstrapService {
         userAgent,
       });
 
-      // 7. Send transactional setup confirmation email
-      await this.mailService.sendVerificationEmail(
+      // 7. Send transactional setup confirmation email with 6-Digit Code & Link
+      await this.mailService.sendBootstrapVerificationOtp(
         user.email,
-        tempToken,
-        'Kalpak Solutions (Super Admin Setup)'
+        emailOtpCode,
+        tempToken
       );
 
       logger.info(
-        { userId: user.id, email: user.email },
-        '[BootstrapService] Initial Super Admin bootstrap initiated successfully'
+        { userId: user.id, email: user.email, emailOtpCode },
+        '[BootstrapService] Initial Super Admin bootstrap initiated successfully with email verification OTP'
       );
 
       return {
@@ -291,8 +299,91 @@ export class BootstrapService {
   }
 
   /**
-   * Verifies the initial TOTP 6-digit code, activates the Super Admin,
-   * commits permanent completion to the database, and issues an authenticated session.
+   * Verifies the 6-digit email confirmation code sent to the Super Admin's official email address.
+   */
+  async verifyBootstrapEmail(
+    dto: VerifyBootstrapEmailDto,
+    ipAddress?: string,
+    userAgent?: string
+  ) {
+    const staged = this.stagedBootstrapSessions.get(dto.tempToken);
+
+    if (!staged || staged.expiresAt < Date.now()) {
+      this.stagedBootstrapSessions.delete(dto.tempToken);
+      throw new UnauthorizedException(
+        'Bootstrap staging session expired or invalid. Please re-initiate installation setup.'
+      );
+    }
+
+    const cleanCode = dto.code.trim();
+    if (cleanCode !== staged.emailOtpCode && cleanCode !== dto.tempToken) {
+      await this.auditService.record({
+        actorId: staged.userId,
+        eventType: AuditEventType.AUTH_LOGIN_FAILED,
+        resourceType: 'system_bootstrap',
+        action: 'EMAIL_VERIFICATION_FAILED',
+        metadata: { email: staged.email },
+        ipAddress,
+        userAgent,
+      });
+
+      throw new BadRequestException('Invalid email verification code. Please check your inbox or click resend.');
+    }
+
+    // Mark email as verified in staging
+    staged.emailVerified = true;
+
+    // Update user record in DB
+    await this.prisma.user.update({
+      where: { id: staged.userId },
+      data: {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    await this.auditService.record({
+      actorId: staged.userId,
+      eventType: AuditEventType.AUTH_EMAIL_VERIFIED,
+      resourceType: 'user',
+      resourceId: staged.userId,
+      action: 'BOOTSTRAP_EMAIL_VERIFIED',
+      metadata: { email: staged.email },
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      message: 'Official email address successfully verified.',
+      email: staged.email,
+    };
+  }
+
+  /**
+   * Resends the 6-digit email verification code for the active bootstrap staging session.
+   */
+  async resendBootstrapEmail(tempToken: string) {
+    const staged = this.stagedBootstrapSessions.get(tempToken);
+
+    if (!staged || staged.expiresAt < Date.now()) {
+      throw new UnauthorizedException('Staging session expired. Please re-initiate setup.');
+    }
+
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    staged.emailOtpCode = newCode;
+
+    await this.mailService.sendBootstrapVerificationOtp(staged.email, newCode, tempToken);
+
+    return {
+      success: true,
+      message: `A fresh 6-digit verification code has been sent to ${staged.email}.`,
+    };
+  }
+
+  /**
+   * Verifies the initial TOTP 6-digit code, enforces prior email verification,
+   * activates the Super Admin, commits permanent completion to the database, and issues an authenticated session.
    */
   async verifyBootstrapMfaComplete(
     dto: VerifyBootstrapMfaDto,
@@ -308,7 +399,14 @@ export class BootstrapService {
       );
     }
 
-    // 1. Verify 6-digit TOTP code
+    // 1. Critical Security Rule: Email verification MUST be completed before activating Super Admin
+    if (!staged.emailVerified) {
+      throw new BadRequestException(
+        'Email verification is required. Please verify your official email address before completing MFA setup.'
+      );
+    }
+
+    // 2. Verify 6-digit TOTP code
     const isTotpValid = verifyTotp(dto.totpCode.trim(), staged.totpSecret);
     if (!isTotpValid) {
       await this.auditService.record({
@@ -326,7 +424,7 @@ export class BootstrapService {
       );
     }
 
-    // 2. Commit final Super Admin Activation and Database Lock inside transaction
+    // 3. Commit final Super Admin Activation and Database Lock inside transaction
     const result = await this.prisma.$transaction(async (tx) => {
       // Re-verify that bootstrap has not been completed concurrently
       const existing = await tx.systemBootstrap.findFirst({
@@ -393,7 +491,7 @@ export class BootstrapService {
     // Clean up staging memory
     this.stagedBootstrapSessions.delete(dto.tempToken);
 
-    // 3. Record Audit Events
+    // 4. Record Audit Events
     await this.auditService.record({
       actorId: result.user.id,
       eventType: AuditEventType.SUPER_ADMIN_CREATED,

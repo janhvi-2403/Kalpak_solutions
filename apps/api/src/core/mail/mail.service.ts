@@ -27,6 +27,25 @@ export class MailService {
     console.log('======================================================\n');
   }
 
+  async sendBootstrapVerificationOtp(email: string, otpCode: string, token: string): Promise<void> {
+    const verificationUrl = `${this.config.WEB_BASE_URL}/verify-email?token=${token}`;
+
+    logger.info(
+      {
+        to: email,
+        actionUrl: verificationUrl,
+      },
+      `[MailService] SUPER ADMIN EMAIL OTP: ${otpCode} | LINK: ${verificationUrl}`
+    );
+
+    console.log('\n======================================================');
+    console.log(`[TRANSACTIONAL EMAIL] Super Admin Email Verification Code`);
+    console.log(`Recipient: ${email}`);
+    console.log(`6-Digit Verification Code: ${otpCode}`);
+    console.log(`Verification URL: ${verificationUrl}`);
+    console.log('======================================================\n');
+  }
+
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
     const resetUrl = `${this.config.WEB_BASE_URL}/reset-password?token=${token}`;
 

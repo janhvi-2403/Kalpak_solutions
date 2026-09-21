@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
 import { BootstrapService } from './bootstrap.service';
 import { InitBootstrapDto } from './dto/init-bootstrap.dto';
 import { VerifyBootstrapMfaDto } from './dto/verify-bootstrap-mfa.dto';
+import { VerifyBootstrapEmailDto } from './dto/verify-bootstrap-email.dto';
 import { Public } from '../../core/auth/public.decorator';
 import { getConfig } from '@kalpak/config';
 
@@ -41,7 +42,7 @@ export class BootstrapController {
     required: false,
     description: 'Deployment initialization secret (alternatively provided in request body)',
   })
-  @ApiResponse({ status: 200, description: 'Super Admin staged and TOTP authenticator QR payload generated.' })
+  @ApiResponse({ status: 200, description: 'Super Admin staged, verification email sent, and TOTP QR payload generated.' })
   @ApiResponse({ status: 403, description: 'Invalid deployment secret or bootstrap disabled' })
   @ApiResponse({ status: 409, description: 'Bootstrap already completed or Super Admin already exists' })
   async initBootstrap(
@@ -56,11 +57,37 @@ export class BootstrapController {
   }
 
   @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify 6-digit confirmation code sent to official email' })
+  @ApiResponse({ status: 200, description: 'Official email address successfully verified.' })
+  @ApiResponse({ status: 400, description: 'Invalid verification code' })
+  @ApiResponse({ status: 401, description: 'Expired staging session' })
+  async verifyBootstrapEmail(
+    @Body() dto: VerifyBootstrapEmailDto,
+    @Req() req: Request
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+
+    return this.bootstrapService.verifyBootstrapEmail(dto, ipAddress, userAgent);
+  }
+
+  @Public()
+  @Post('resend-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification code for active bootstrap staging session' })
+  @ApiResponse({ status: 200, description: 'Verification email resent.' })
+  async resendBootstrapEmail(@Body('tempToken') tempToken: string) {
+    return this.bootstrapService.resendBootstrapEmail(tempToken);
+  }
+
+  @Public()
   @Post('verify-mfa')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify initial TOTP code, activate Super Admin, and permanently lock bootstrap' })
   @ApiResponse({ status: 200, description: 'Super Admin activated, bootstrap locked, HttpOnly session cookie issued.' })
-  @ApiResponse({ status: 400, description: 'Invalid TOTP verification code' })
+  @ApiResponse({ status: 400, description: 'Invalid TOTP verification code or unverified email' })
   @ApiResponse({ status: 401, description: 'Expired or invalid staging session' })
   async verifyBootstrapMfa(
     @Body() dto: VerifyBootstrapMfaDto,
