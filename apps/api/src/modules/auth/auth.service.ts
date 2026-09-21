@@ -22,6 +22,8 @@ import {
   generateSessionToken,
   hashToken,
   verifyTotp,
+  decryptSecret,
+  verifyAndConsumeBackupCode,
 } from '@kalpak/auth';
 import {
   AuditEventType,
@@ -694,23 +696,47 @@ export class AuthService {
       throw new UnauthorizedException('Session is invalid or expired');
     }
 
-    if (!session.user.mfaSecret) {
+    if (!session.user.mfaSecret && (!session.user.mfaBackupCodes || session.user.mfaBackupCodes.length === 0)) {
       throw new ForbiddenException('MFA is not configured for this account');
     }
 
-    const isValid = verifyTotp(code, session.user.mfaSecret);
+    const cleanCode = code.trim();
+    let isValid = false;
+
+    // 1. Try 6-digit TOTP verification first
+    if (/^\d{6}$/.test(cleanCode) && session.user.mfaSecret) {
+      const rawSecret = decryptSecret(session.user.mfaSecret, this.config.MFA_ENCRYPTION_KEY);
+      isValid = verifyTotp(cleanCode, rawSecret);
+    }
+
+    // 2. Try Emergency Backup Code if TOTP failed or backup code format entered (XXXX-XXXX)
+    if (!isValid && session.user.mfaBackupCodes && session.user.mfaBackupCodes.length > 0) {
+      const backupResult = verifyAndConsumeBackupCode(cleanCode, session.user.mfaBackupCodes);
+      if (backupResult.valid && backupResult.matchedHash) {
+        isValid = true;
+        // Remove the consumed single-use backup code from database
+        const remainingCodes = session.user.mfaBackupCodes.filter(
+          (h) => h !== backupResult.matchedHash
+        );
+        await this.prisma.user.update({
+          where: { id: session.user.id },
+          data: { mfaBackupCodes: remainingCodes },
+        });
+      }
+    }
+
     if (!isValid) {
       await this.auditService.record({
         tenantId: session.activeTenantId,
         actorId: session.userId,
-        eventType: AuditEventType.AUTH_LOGIN_FAILED,
-        resourceType: 'AUTH',
+        eventType: AuditEventType.AUTH_MFA_FAILED,
+        resourceType: 'SESSION',
+        resourceId: session.id,
         action: 'MFA_VERIFICATION_FAILED',
-        metadata: { sessionId },
         ipAddress,
         userAgent,
       });
-      throw new UnauthorizedException('Invalid MFA verification code');
+      throw new UnauthorizedException('Invalid verification code or backup code');
     }
 
     await this.prisma.session.update({
@@ -721,11 +747,10 @@ export class AuthService {
     await this.auditService.record({
       tenantId: session.activeTenantId,
       actorId: session.userId,
-      eventType: AuditEventType.AUTH_MFA_VERIFIED,
+      eventType: AuditEventType.AUTH_MFA_SUCCESS,
       resourceType: 'SESSION',
       resourceId: session.id,
       action: 'MFA_VERIFIED_SUCCESS',
-      metadata: { sessionId },
       ipAddress,
       userAgent,
     });

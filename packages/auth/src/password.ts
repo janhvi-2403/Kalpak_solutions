@@ -1,4 +1,5 @@
-import { scrypt, randomBytes, timingSafeEqual, BinaryLike, ScryptOptions } from 'crypto';
+import { hash, verify } from '@node-rs/argon2';
+import { scrypt, timingSafeEqual, BinaryLike, ScryptOptions } from 'crypto';
 
 const scryptAsync = (
   password: BinaryLike,
@@ -14,67 +15,59 @@ const scryptAsync = (
   });
 };
 
-// OWASP Recommended Scrypt Parameters
-const SALT_LENGTH = 32;
-const KEY_LENGTH = 64;
-const SCRYPT_OPTIONS = {
-  N: 16384, // CPU/memory cost
-  r: 8,     // Block size
-  p: 1,     // Parallelization
-  maxmem: 32 * 1024 * 1024, // 32MB
+// OWASP Recommended Argon2id Parameters
+const ARGON2_OPTIONS = {
+  memoryCost: 65536, // 64 MB
+  timeCost: 3,       // 3 iterations
+  parallelism: 4,    // 4 parallel threads
+  outputLen: 32,
 };
 
 /**
- * Hashes a plaintext password using salted scrypt with OWASP parameters.
- * Format: scrypt:N:r:p:salt:derivedKey (hex encoded)
+ * Hashes a plaintext password using Argon2id with OWASP-recommended parameters.
  */
 export async function hashPassword(password: string): Promise<string> {
   if (!password || password.length < 8) {
     throw new Error('Password must be at least 8 characters long');
   }
 
-  const salt = randomBytes(SALT_LENGTH);
-  const derivedKey = (await scryptAsync(
-    password,
-    salt,
-    KEY_LENGTH,
-    SCRYPT_OPTIONS
-  )) as Buffer;
-
-  return [
-    'scrypt',
-    SCRYPT_OPTIONS.N,
-    SCRYPT_OPTIONS.r,
-    SCRYPT_OPTIONS.p,
-    salt.toString('hex'),
-    derivedKey.toString('hex'),
-  ].join(':');
+  return hash(password, ARGON2_OPTIONS);
 }
 
 /**
- * Verifies a plaintext password against a stored hash in constant time.
+ * Verifies a plaintext password against a stored Argon2id or legacy scrypt hash in constant time.
  */
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  if (!password || !storedHash) {
+    return false;
+  }
+
   try {
-    const parts = storedHash.split(':');
-    if (parts.length !== 6 || parts[0] !== 'scrypt') {
-      return false;
+    // Check if hash is standard Argon2 format ($argon2id$...)
+    if (storedHash.startsWith('$argon2')) {
+      return await verify(storedHash, password);
     }
 
-    const N = parseInt(parts[1] as string, 10);
-    const r = parseInt(parts[2] as string, 10);
-    const p = parseInt(parts[3] as string, 10);
-    const salt = Buffer.from(parts[4] as string, 'hex');
-    const expectedKey = Buffer.from(parts[5] as string, 'hex');
+    // Fallback: Legacy scrypt verification
+    const parts = storedHash.split(':');
+    if (parts.length === 6 && parts[0] === 'scrypt') {
+      const N = parseInt(parts[1] as string, 10);
+      const r = parseInt(parts[2] as string, 10);
+      const p = parseInt(parts[3] as string, 10);
+      const salt = Buffer.from(parts[4] as string, 'hex');
+      const expectedKey = Buffer.from(parts[5] as string, 'hex');
 
-    const derivedKey = (await scryptAsync(password, salt, expectedKey.length, {
-      N,
-      r,
-      p,
-      maxmem: 32 * 1024 * 1024,
-    })) as Buffer;
+      const derivedKey = (await scryptAsync(password, salt, expectedKey.length, {
+        N,
+        r,
+        p,
+        maxmem: 32 * 1024 * 1024,
+      })) as Buffer;
 
-    return timingSafeEqual(derivedKey, expectedKey);
+      return timingSafeEqual(derivedKey, expectedKey);
+    }
+
+    return false;
   } catch {
     return false;
   }

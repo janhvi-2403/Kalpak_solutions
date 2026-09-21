@@ -1,4 +1,5 @@
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, createHash, timingSafeEqual } from 'crypto';
+import QRCode from 'qrcode';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -71,6 +72,21 @@ export function getTotpUri(secret: string, accountName: string, issuer: string):
 }
 
 /**
+ * Generates a high-quality Data URL (base64 image/png) for displaying TOTP setup QR code in frontend.
+ */
+export async function generateTotpQrDataUrl(otpauthUri: string): Promise<string> {
+  return QRCode.toDataURL(otpauthUri, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    scale: 6,
+    color: {
+      dark: '#0f172a',
+      light: '#ffffff',
+    },
+  });
+}
+
+/**
  * Calculates the current TOTP token for a secret at a given timestamp.
  */
 export function calculateTotp(secret: string, timestampMs: number = Date.now(), timeStepSec: number = 30): string {
@@ -111,4 +127,37 @@ export function verifyTotp(token: string, secret: string, windowSteps: number = 
   }
 
   return false;
+}
+
+/**
+ * Hashes a backup code with SHA-256 for secure storage.
+ */
+export function hashBackupCode(code: string): string {
+  const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+/**
+ * Verifies a provided backup code against a list of stored SHA-256 backup code hashes.
+ * Returns the matched hash if valid, or null if not found.
+ */
+export function verifyAndConsumeBackupCode(
+  providedCode: string,
+  storedHashes: string[]
+): { valid: boolean; matchedHash: string | null } {
+  if (!providedCode || !storedHashes || storedHashes.length === 0) {
+    return { valid: false, matchedHash: null };
+  }
+
+  const providedHash = hashBackupCode(providedCode);
+  const providedBuffer = Buffer.from(providedHash, 'hex');
+
+  for (const storedHash of storedHashes) {
+    const storedBuffer = Buffer.from(storedHash, 'hex');
+    if (storedBuffer.length === providedBuffer.length && timingSafeEqual(storedBuffer, providedBuffer)) {
+      return { valid: true, matchedHash: storedHash };
+    }
+  }
+
+  return { valid: false, matchedHash: null };
 }

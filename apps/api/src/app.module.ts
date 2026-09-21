@@ -12,6 +12,7 @@ import { MailModule } from './core/mail/mail.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BootstrapModule } from './modules/bootstrap/bootstrap.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
@@ -33,6 +34,7 @@ import { ContractsModule } from './modules/contracts/contracts.module';
     AuditModule,
     HealthModule,
     AuthModule,
+    BootstrapModule,
     TenantsModule,
     UsersModule,
     DepartmentsModule,

@@ -44,6 +44,20 @@ export const envSchema = z.object({
   // MFA Configuration
   MFA_APP_NAME: z.string().default('Kalpak Solutions'),
   MFA_BACKUP_CODES_COUNT: z.coerce.number().int().positive().default(10),
+  MFA_ENCRYPTION_KEY: z
+    .string()
+    .min(32, 'MFA_ENCRYPTION_KEY must be at least 32 characters long')
+    .default('dev_mfa_encryption_key_min_32_characters_must_be_set_in_production'),
+
+  // Super Admin Bootstrap & Installation-Time Authorization
+  INITIAL_BOOTSTRAP_SECRET: z
+    .string()
+    .min(32, 'INITIAL_BOOTSTRAP_SECRET must be at least 32 characters long')
+    .default('dev_initial_bootstrap_secret_min_32_characters_long_for_install'),
+  ENABLE_INITIAL_BOOTSTRAP: z
+    .string()
+    .transform((val) => val === 'true')
+    .default('true'),
 
   // Logging & Observability
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

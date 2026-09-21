@@ -35,130 +35,143 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-orange-500 selection:text-white">
-      {/* Top Banner: Rotating Recognition Announcements & 14-Day Free Trial Notice */}
-      <RotatingAnnouncementBar />
+      {/* Fixed Header & Top Banner Container — Permanently positioned relative to viewport */}
+      <div className="fixed top-0 left-0 right-0 z-50 w-full bg-white/95 backdrop-blur-md">
+        {/* Top Banner: Rotating Recognition Announcements & 14-Day Free Trial Notice */}
+        <RotatingAnnouncementBar />
 
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200/90 bg-white/95 backdrop-blur-md shadow-xs">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 xl:px-12 h-18 sm:h-22 flex items-center justify-between gap-3">
-          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 shrink">
-            {/* Mobile Hamburger Menu Toggle */}
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-1.5 sm:p-2 rounded-lg text-slate-700 hover:text-orange-600 hover:bg-orange-50 focus:outline-none transition-colors shrink-0"
-              aria-label="Toggle Navigation Menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5 text-orange-600" /> : <Menu className="w-5 h-5" />}
-            </button>
+        {/* Top Navigation Bar */}
+        <header className="w-full border-b border-slate-200/90 shadow-xs">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 xl:px-12 h-18 sm:h-22 flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 shrink">
+              {/* Mobile Hamburger Menu Toggle */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="lg:hidden p-1.5 sm:p-2 rounded-lg text-slate-700 hover:text-orange-600 hover:bg-orange-50 focus:outline-none transition-colors shrink-0"
+                aria-label="Toggle Navigation Menu"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5 text-orange-600" /> : <Menu className="w-5 h-5" />}
+              </button>
 
-            <KalpakLogo size="md" />
-          </div>
+              <KalpakLogo size="md" />
+            </div>
 
-          <nav className="hidden lg:flex items-center space-x-8 text-sm font-medium text-slate-700 ml-10 xl:ml-16">
-            <a href="#services" className="hover:text-orange-600 transition-colors font-semibold">
-              Services
-            </a>
-            <a href="#capabilities" className="hover:text-orange-600 transition-colors">
-              Field Operations
-            </a>
-            <a href="#pricing" className="hover:text-orange-600 transition-colors">
-              Pricing & Plans
-            </a>
-            <a href="#payment-gateway" className="hover:text-orange-600 transition-colors">
-              Payment Gateway
-            </a>
-            <a href="#awards" className="hover:text-orange-600 transition-colors">
-              Awards
-            </a>
-            <a href="#contact" className="hover:text-orange-600 transition-colors">
-              Contact
-            </a>
-          </nav>
-
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            <Link
-              href="/login"
-              className="hidden sm:inline-block whitespace-nowrap text-xs sm:text-sm font-bold text-slate-800 hover:text-orange-600 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg hover:bg-orange-50 transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/signup"
-              className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-700 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-500/25 hover:shadow-lg hover:shadow-orange-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all border border-orange-400/40 shrink-0"
-            >
-              <span className="hidden sm:inline">Start 14-Day Free Trial</span>
-              <span className="sm:hidden">Free Trial</span>
-              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Mobile Slide-Down Navigation Menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden bg-white border-t border-slate-200 shadow-xl px-4 py-4 space-y-3">
-            <nav className="flex flex-col space-y-1 text-sm font-semibold text-slate-800">
-              <a
-                href="#services"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>🎫 Services</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+            <nav className="hidden lg:flex items-center space-x-8 text-sm font-medium text-slate-700 ml-10 xl:ml-16">
+              <a href="#services" className="hover:text-orange-600 transition-colors font-semibold">
+                Services
               </a>
-              <a
-                href="#capabilities"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>⚙️ Field Operations</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+              <a href="#capabilities" className="hover:text-orange-600 transition-colors">
+                Field Operations
               </a>
-              <a
-                href="#pricing"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>💳 Pricing & Plans</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+              <a href="#pricing" className="hover:text-orange-600 transition-colors">
+                Pricing & Plans
               </a>
-              <a
-                href="#payment-gateway"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>🔒 Payment Gateway</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+              <a href="#payment-gateway" className="hover:text-orange-600 transition-colors">
+                Payment Gateway
               </a>
-              <a
-                href="#awards"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>🏆 Awards</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+              <a href="#awards" className="hover:text-orange-600 transition-colors">
+                Awards
               </a>
-              <a
-                href="#contact"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
-              >
-                <span>📍 Contact & Pune Office</span>
-                <span className="text-xs text-slate-400">&rarr;</span>
+              <a href="#contact" className="hover:text-orange-600 transition-colors">
+                Contact
               </a>
             </nav>
-            <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+
+            <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+              <Link
+                href="/login"
+                className="hidden sm:inline-block whitespace-nowrap text-xs sm:text-sm font-bold text-slate-800 hover:text-orange-600 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg hover:bg-orange-50 transition-colors"
+              >
+                Sign In
+              </Link>
               <Link
                 href="/signup"
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full text-center py-2.5 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 shadow-md"
+                className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-700 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-500/25 hover:shadow-lg hover:shadow-orange-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all border border-orange-400/40 shrink-0"
               >
-                Start 14-Day Free Trial
+                <span className="hidden sm:inline">Start 14-Day Free Trial</span>
+                <span className="sm:hidden">Free Trial</span>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </Link>
             </div>
           </div>
-        )}
-      </header>
+
+          {/* Mobile Slide-Down Navigation Menu */}
+          {mobileMenuOpen && (
+            <div className="lg:hidden bg-white border-t border-slate-200 shadow-xl px-4 py-4 space-y-3 max-h-[calc(100vh-120px)] overflow-y-auto">
+              <nav className="flex flex-col space-y-1 text-sm font-semibold text-slate-800">
+                <a
+                  href="#services"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>🎫 Services</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+                <a
+                  href="#capabilities"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>⚙️ Field Operations</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+                <a
+                  href="#pricing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>💳 Pricing & Plans</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+                <a
+                  href="#payment-gateway"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>🔒 Payment Gateway</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+                <a
+                  href="#awards"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>🏆 Awards</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+                <a
+                  href="#contact"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-orange-50 hover:text-orange-600 transition-colors flex items-center justify-between"
+                >
+                  <span>📍 Contact & Pune Office</span>
+                  <span className="text-xs text-slate-400">&rarr;</span>
+                </a>
+              </nav>
+              <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+                <Link
+                  href="/signup"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2.5 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 shadow-md"
+                >
+                  Start 14-Day Free Trial
+                </Link>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full text-center py-2 text-sm font-semibold text-slate-700 hover:text-orange-600"
+                >
+                  Sign In
+                </Link>
+              </div>
+            </div>
+          )}
+        </header>
+      </div>
+
+      {/* Spacer to offset fixed header height permanently */}
+      <div className="h-[108px] sm:h-[124px] w-full shrink-0" aria-hidden="true" />
 
       {/* Hero Section */}
       <section className="relative pt-20 sm:pt-24 pb-20 sm:pb-24 overflow-hidden border-b border-slate-200/80 bg-gradient-to-b from-white via-orange-50/20 to-slate-50">

@@ -108,3 +108,42 @@ export interface OnboardingState {
     dailyDigest?: boolean;
   };
 }
+
+export interface BootstrapStatusResponse {
+  isAvailable: boolean;
+  isCompleted: boolean;
+  message: string;
+  requiresDeploymentAuth: boolean;
+}
+
+export interface SuperAdminBootstrapDto {
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  password: string;
+  secret?: string;
+}
+
+export interface BootstrapInitResponse {
+  tempToken: string;
+  email: string;
+  fullName: string;
+  qrCodeDataUrl: string;
+  otpauthUri: string;
+  totpSecretFormatted: string;
+  backupCodes: string[];
+}
+
+export interface BootstrapVerifyMfaDto {
+  tempToken: string;
+  totpCode: string;
+}
+
+export interface BootstrapCompleteResponse {
+  success: boolean;
+  message: string;
+  user: UserPrincipal;
+  backupCodes: string[];
+  token?: string;
+}
+

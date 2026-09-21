@@ -56,7 +56,7 @@ model User {
   isActive              Boolean                  @default(true) @map("is_active")
   isSuperAdmin          Boolean                  @default(false) @map("is_super_admin")
   mfaEnabled            Boolean                  @default(false) @map("mfa_enabled")
-  mfaSecret             String?                  @map("mfa_secret") @db.VarChar(64)
+  mfaSecret             String?                  @map("mfa_secret") @db.VarChar(255)
   mfaBackupCodes        String[]                 @default([]) @map("mfa_backup_codes")
   lastLoginAt           DateTime?                @map("last_login_at") @db.Timestamptz(6)
   createdAt             DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -64,6 +64,7 @@ model User {
   deletedAt             DateTime?                @map("deleted_at") @db.Timestamptz(6)
   emailVerified         Boolean                  @default(false) @map("email_verified")
   emailVerifiedAt       DateTime?                @map("email_verified_at") @db.Timestamptz(6)
+  bootstrapRecord       SystemBootstrap?         @relation("SuperAdminBootstrap")
   auditEvents           AuditEvent[]
   customerAccount       Customer?                @relation("CustomerUser")
   headedDepartments     Department[]             @relation("DepartmentHead")
@@ -933,3 +934,18 @@ enum PmFrequency {
   BI_ANNUAL
   ANNUAL
 }
+
+model SystemBootstrap {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  isCompleted   Boolean   @default(false) @map("is_completed")
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  superAdminId  String?   @unique @map("super_admin_id") @db.Uuid
+  initializedIp String?   @map("initialized_ip") @db.VarChar(45)
+  bootstrapHash String?   @map("bootstrap_hash") @db.VarChar(64)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  superAdmin    User?     @relation("SuperAdminBootstrap", fields: [superAdminId], references: [id])
+
+  @@map("system_bootstrap")
+}
+
