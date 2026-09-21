@@ -25,7 +25,10 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [error, setError] = useState<string | null>(null);
+  // Error States
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [errorList, setErrorList] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Auto-generate slug from company name
@@ -34,6 +37,9 @@ export default function SignupPage() {
     setCompanyName(val);
     if (!slug || slug === autoSlug(companyName)) {
       setSlug(autoSlug(val));
+    }
+    if (fieldErrors['companyName']) {
+      setFieldErrors((prev) => ({ ...prev, companyName: '' }));
     }
   };
 
@@ -47,12 +53,73 @@ export default function SignupPage() {
       .slice(0, 50);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const validateClientSide = (): boolean => {
+    const errors: Record<string, string> = {};
+    const messages: string[] = [];
+
+    if (!companyName.trim() || companyName.trim().length < 2) {
+      errors.companyName = 'Company name must be at least 2 characters';
+      messages.push('Company Name: Must be at least 2 characters');
+    }
+
+    const cleanSlug = slug.trim().toLowerCase();
+    if (!cleanSlug || cleanSlug.length < 3) {
+      errors.slug = 'Slug must be at least 3 characters';
+      messages.push('Organization Slug: Must be at least 3 characters');
+    } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(cleanSlug)) {
+      errors.slug = 'Slug can only contain lowercase letters, numbers, and hyphens (e.g. acme-service)';
+      messages.push('Organization Slug: Must only contain lowercase letters, numbers, and single hyphens');
+    }
+
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      errors.fullName = 'Full name must be at least 2 characters';
+      messages.push('Administrator Name: Must be at least 2 characters');
+    }
+
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = 'Please enter a valid work email address';
+      messages.push('Work Email: A valid email address is required');
+    }
+
+    if (businessEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(businessEmail.trim())) {
+      errors.businessEmail = 'Please enter a valid business email address';
+      messages.push('Business Email: Invalid email format');
+    }
+
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+    const hasLength = password.length >= 8;
+
+    if (!hasLength || !hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      errors.password = 'Password must have 8+ chars, uppercase, lowercase, number & special symbol (!@#$)';
+      messages.push('Password: Requires 8+ characters, uppercase, lowercase, number, and special symbol (!@#$)');
+    }
 
     if (password !== confirmPassword) {
-      setError('Password and confirmation do not match');
+      errors.confirmPassword = 'Passwords do not match';
+      messages.push('Confirm Password: Passwords do not match');
+    }
+
+    setFieldErrors(errors);
+    setErrorList(messages);
+
+    if (messages.length > 0) {
+      setGeneralError('Please correct the highlighted fields below to continue.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeneralError(null);
+    setFieldErrors({});
+    setErrorList([]);
+
+    if (!validateClientSide()) {
       return;
     }
 
@@ -78,17 +145,53 @@ export default function SignupPage() {
       router.push('/dashboard');
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
-        if (err.errorResponse?.details && err.errorResponse.details.length > 0) {
-          const detailMessages = err.errorResponse.details
-            .map((d) => d.message)
-            .filter(Boolean)
-            .join(' • ');
-          setError(detailMessages || err.errorResponse.message || 'Validation failed');
+        const res = err.errorResponse;
+        const newFieldErrors: Record<string, string> = {};
+        const newErrorList: string[] = [];
+
+        // Check if backend returned specific validation details
+        if (res?.details && res.details.length > 0) {
+          res.details.forEach((d) => {
+            const msg = d.message || '';
+            newErrorList.push(msg);
+
+            const lower = msg.toLowerCase();
+            if (lower.includes('company') || lower.includes('companyname')) {
+              newFieldErrors.companyName = msg;
+            } else if (lower.includes('slug')) {
+              newFieldErrors.slug = msg;
+            } else if (lower.includes('business email') || lower.includes('businessemail')) {
+              newFieldErrors.businessEmail = msg;
+            } else if (lower.includes('full name') || lower.includes('fullname')) {
+              newFieldErrors.fullName = msg;
+            } else if (lower.includes('password') || lower.includes('character')) {
+              newFieldErrors.password = msg;
+            } else if (lower.includes('email')) {
+              newFieldErrors.email = msg;
+            }
+          });
+
+          setFieldErrors(newFieldErrors);
+          setErrorList(newErrorList);
+          setGeneralError(res.message || 'Validation failed. Please review the highlighted parameters:');
+        } else if (res?.message) {
+          const msg = res.message;
+          setGeneralError(msg);
+          newErrorList.push(msg);
+
+          const lower = msg.toLowerCase();
+          if (lower.includes('email') && lower.includes('exists')) {
+            newFieldErrors.email = msg;
+          } else if (lower.includes('slug') && lower.includes('taken')) {
+            newFieldErrors.slug = msg;
+          }
+          setFieldErrors(newFieldErrors);
+          setErrorList(newErrorList);
         } else {
-          setError(err.errorResponse?.message || err.message || 'Registration failed');
+          setGeneralError(err.message || 'Registration failed. Please try again.');
         }
       } else {
-        setError('An unexpected error occurred. Please try again.');
+        setGeneralError('An unexpected network error occurred. Please check your connection.');
       }
     } finally {
       setIsLoading(false);
@@ -135,13 +238,28 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {error && (
+          {/* User-friendly Validation Error Alert */}
+          {generalError && (
             <div className="mb-6">
-              <Alert variant="error">{error}</Alert>
+              <Alert variant="error" title="Please resolve the following issues:">
+                <div className="space-y-1.5 mt-1 text-xs">
+                  {errorList.length > 0 ? (
+                    <ul className="list-disc list-inside space-y-1">
+                      {errorList.map((errItem, idx) => (
+                        <li key={idx} className="leading-relaxed font-medium">
+                          {errItem}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>{generalError}</p>
+                  )}
+                </div>
+              </Alert>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             {/* Organization Information Section */}
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
@@ -154,6 +272,7 @@ export default function SignupPage() {
                     label="Company / Business Name"
                     required
                     value={companyName}
+                    error={fieldErrors['companyName']}
                     onChange={handleCompanyNameChange}
                     placeholder="Acme Service Solutions"
                   />
@@ -164,9 +283,15 @@ export default function SignupPage() {
                     label="Organization Slug"
                     required
                     value={slug}
-                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    error={fieldErrors['slug']}
+                    onChange={(e) => {
+                      setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'));
+                      if (fieldErrors['slug']) {
+                        setFieldErrors((prev) => ({ ...prev, slug: '' }));
+                      }
+                    }}
                     placeholder="acme-service"
-                    helperText="Unique identifier for workspace URL"
+                    helperText={!fieldErrors['slug'] ? 'Unique identifier for workspace URL' : undefined}
                   />
                 </div>
                 <div>
@@ -175,7 +300,13 @@ export default function SignupPage() {
                     type="email"
                     label="Business Email (Optional)"
                     value={businessEmail}
-                    onChange={(e) => setBusinessEmail(e.target.value)}
+                    error={fieldErrors['businessEmail']}
+                    onChange={(e) => {
+                      setBusinessEmail(e.target.value);
+                      if (fieldErrors['businessEmail']) {
+                        setFieldErrors((prev) => ({ ...prev, businessEmail: '' }));
+                      }
+                    }}
                     placeholder="support@acme.com"
                   />
                 </div>
@@ -185,6 +316,7 @@ export default function SignupPage() {
                     type="tel"
                     label="Phone Number (Optional)"
                     value={phoneNumber}
+                    error={fieldErrors['phoneNumber']}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="+1 (555) 019-2834"
                   />
@@ -223,7 +355,13 @@ export default function SignupPage() {
                       label="Full Name"
                       required
                       value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
+                      error={fieldErrors['fullName']}
+                      onChange={(e) => {
+                        setFullName(e.target.value);
+                        if (fieldErrors['fullName']) {
+                          setFieldErrors((prev) => ({ ...prev, fullName: '' }));
+                        }
+                      }}
                       placeholder="Alice Johnson"
                     />
                   </div>
@@ -234,7 +372,13 @@ export default function SignupPage() {
                       label="Work Email Address"
                       required
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      error={fieldErrors['email']}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (fieldErrors['email']) {
+                          setFieldErrors((prev) => ({ ...prev, email: '' }));
+                        }
+                      }}
                       placeholder="alice@acme.com"
                     />
                   </div>
@@ -248,7 +392,13 @@ export default function SignupPage() {
                       required
                       showStrength={true}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      error={fieldErrors['password']}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (fieldErrors['password']) {
+                          setFieldErrors((prev) => ({ ...prev, password: '' }));
+                        }
+                      }}
                       placeholder="••••••••"
                     />
                   </div>
@@ -258,7 +408,13 @@ export default function SignupPage() {
                       label="Confirm Password"
                       required
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      error={fieldErrors['confirmPassword']}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (fieldErrors['confirmPassword']) {
+                          setFieldErrors((prev) => ({ ...prev, confirmPassword: '' }));
+                        }
+                      }}
                       placeholder="••••••••"
                     />
                   </div>

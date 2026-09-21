@@ -34,8 +34,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
         // Handle class-validator validation array error
         if (Array.isArray(resObj['message'])) {
-          message = 'Validation failed';
-          details = (resObj['message'] as string[]).map((msg) => ({
+          const validationMessages = resObj['message'] as string[];
+          message = validationMessages.join(' • ');
+          details = validationMessages.map((msg) => ({
             message: msg,
           }));
         }
