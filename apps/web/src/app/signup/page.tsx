@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button, Input, PasswordInput, Alert } from '@/components/ui';
-import { ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
 export default function SignupPage() {
@@ -99,29 +99,10 @@ export default function SignupPage() {
           <h2 className="text-2xl font-bold tracking-tight text-white mb-4">
             Start Your 14-Day Free Organization Trial
           </h2>
-          <p className="text-slate-400 text-sm leading-relaxed mb-8">
+          <p className="text-slate-400 text-sm leading-relaxed">
             Create an isolated tenant workspace for your field service and equipment maintenance team. No
             credit card required during initial setup.
           </p>
-
-          <div className="space-y-4 text-sm text-slate-300 pt-6 border-t border-slate-800/80">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-orange-400 shrink-0" />
-              <span>Full multi-tenant tenant isolation</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-blue-400 shrink-0" />
-              <span>Automated SLA aging & escalation engine</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
-              <span>Multi-tier technician dispatch matrix</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="w-5 h-5 text-orange-400 shrink-0" />
-              <span>Immutable security and compliance audit trail</span>
-            </div>
-          </div>
         </div>
 
         <div className="text-xs text-slate-400">

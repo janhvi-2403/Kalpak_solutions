@@ -1,5 +1,4 @@
 import { LoginForm } from '@/features/auth/components/login-form';
-import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
 export default function LoginPage() {
@@ -20,21 +19,6 @@ export default function LoginPage() {
               Log, prioritize, dispatch, and track customer hardware service calls with full SLA lifecycle
               controls and PostgreSQL Row-Level Security isolation.
             </p>
-          </div>
-        </div>
-
-        <div className="relative z-10 space-y-4 pt-8 border-t border-slate-800/80">
-          <div className="flex items-center gap-3 text-sm text-slate-300">
-            <ShieldCheck className="w-5 h-5 text-orange-400 shrink-0" />
-            <span>PostgreSQL Native Row-Level Security (RLS)</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-slate-300">
-            <CheckCircle2 className="w-5 h-5 text-blue-400 shrink-0" />
-            <span>Stateful HttpOnly Session Authentication</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-slate-300">
-            <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
-            <span>Automated SLA Aging & Escalation Engine</span>
           </div>
         </div>
 
