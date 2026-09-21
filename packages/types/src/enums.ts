@@ -1,0 +1,157 @@
+// ==============================================================================
+// Domain Roles & System Permissions
+// ==============================================================================
+
+export enum SystemRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  CLIENT_ADMIN = 'CLIENT_ADMIN',
+  DEPARTMENT_ADMIN = 'DEPARTMENT_ADMIN',
+  SUPPORT_EMPLOYEE = 'SUPPORT_EMPLOYEE',
+  CUSTOMER = 'CUSTOMER',
+}
+
+export enum TenantStatus {
+  ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  TRIAL = 'TRIAL',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum PermissionCode {
+  // Tenant Administration
+  TENANT_READ = 'tenant:read',
+  TENANT_UPDATE = 'tenant:update',
+  TENANT_SETTINGS = 'tenant:settings',
+  TENANT_MANAGE_ALL = 'tenant:manage:all', // Super Admin only
+
+  // User & RBAC Administration
+  USER_READ = 'user:read',
+  USER_CREATE = 'user:create',
+  USER_UPDATE = 'user:update',
+  USER_DELETE = 'user:delete',
+  ROLE_ASSIGN = 'role:assign',
+  ROLE_MANAGE = 'role:manage',
+
+  // Service Calls & Tickets
+  TICKET_CREATE = 'ticket:create',
+  TICKET_READ = 'ticket:read',
+  TICKET_UPDATE = 'ticket:update',
+  TICKET_ASSIGN = 'ticket:assign',
+  TICKET_RESOLVE = 'ticket:resolve',
+  TICKET_DELETE = 'ticket:delete',
+
+  // Customer Management
+  CUSTOMER_READ = 'customer:read',
+  CUSTOMER_CREATE = 'customer:create',
+  CUSTOMER_UPDATE = 'customer:update',
+
+  // Products & Services
+  PRODUCT_READ = 'product:read',
+  PRODUCT_MANAGE = 'product:manage',
+  SERVICE_READ = 'service:read',
+  SERVICE_MANAGE = 'service:manage',
+
+  // Reporting & Analytics
+  REPORT_VIEW = 'report:view',
+  REPORT_EXPORT = 'report:export',
+
+  // Audit Logs
+  AUDIT_READ = 'audit:read',
+
+  // Billing & Subscriptions
+  BILLING_VIEW = 'billing:view',
+  BILLING_MANAGE = 'billing:manage',
+}
+
+export enum AuditEventType {
+  AUTH_LOGIN_SUCCESS = 'AUTH_LOGIN_SUCCESS',
+  AUTH_LOGIN_FAILED = 'AUTH_LOGIN_FAILED',
+  AUTH_LOGOUT = 'AUTH_LOGOUT',
+  AUTH_MFA_CHALLENGE = 'AUTH_MFA_CHALLENGE',
+  AUTH_MFA_VERIFIED = 'AUTH_MFA_VERIFIED',
+  AUTH_PASSWORD_RESET_REQUESTED = 'AUTH_PASSWORD_RESET_REQUESTED',
+  AUTH_PASSWORD_RESET_COMPLETED = 'AUTH_PASSWORD_RESET_COMPLETED',
+  AUTH_SESSION_REVOKED = 'AUTH_SESSION_REVOKED',
+  AUTH_EMAIL_VERIFIED = 'AUTH_EMAIL_VERIFIED',
+
+  INVITATION_CREATED = 'INVITATION_CREATED',
+  INVITATION_ACCEPTED = 'INVITATION_ACCEPTED',
+  INVITATION_REVOKED = 'INVITATION_REVOKED',
+
+  ONBOARDING_UPDATED = 'ONBOARDING_UPDATED',
+  ONBOARDING_COMPLETED = 'ONBOARDING_COMPLETED',
+
+  USER_CREATED = 'USER_CREATED',
+  USER_UPDATED = 'USER_UPDATED',
+  USER_DEACTIVATED = 'USER_DEACTIVATED',
+  USER_ROLE_ASSIGNED = 'USER_ROLE_ASSIGNED',
+
+  TENANT_CREATED = 'TENANT_CREATED',
+  TENANT_UPDATED = 'TENANT_UPDATED',
+  TENANT_STATUS_CHANGED = 'TENANT_STATUS_CHANGED',
+
+  TICKET_CREATED = 'TICKET_CREATED',
+  TICKET_STATUS_CHANGED = 'TICKET_STATUS_CHANGED',
+  TICKET_ASSIGNED = 'TICKET_ASSIGNED',
+
+  SECURITY_POLICY_VIOLATION = 'SECURITY_POLICY_VIOLATION',
+  PERMISSION_OVERRIDE = 'PERMISSION_OVERRIDE',
+
+  DEPARTMENT_CREATED = 'DEPARTMENT_CREATED',
+  DEPARTMENT_UPDATED = 'DEPARTMENT_UPDATED',
+  DEPARTMENT_DELETED = 'DEPARTMENT_DELETED',
+
+  CUSTOMER_CREATED = 'CUSTOMER_CREATED',
+  CUSTOMER_UPDATED = 'CUSTOMER_UPDATED',
+  CUSTOMER_DELETED = 'CUSTOMER_DELETED',
+
+  PRODUCT_CREATED = 'PRODUCT_CREATED',
+  PRODUCT_UPDATED = 'PRODUCT_UPDATED',
+  PRODUCT_DELETED = 'PRODUCT_DELETED',
+
+  ASSET_CREATED = 'ASSET_CREATED',
+  ASSET_UPDATED = 'ASSET_UPDATED',
+  ASSET_DELETED = 'ASSET_DELETED',
+
+  POLICY_UPDATED = 'POLICY_UPDATED',
+}
+
+export enum BusinessType {
+  SERVICE = 'SERVICE',
+  PRODUCT = 'PRODUCT',
+  BOTH = 'BOTH',
+}
+
+export enum PurposeOfUse {
+  INTERNAL = 'INTERNAL',
+  EXTERNAL = 'EXTERNAL',
+  BOTH = 'BOTH',
+}
+
+export enum AssignmentStrategy {
+  MANUAL_DEPT_HEAD = 'MANUAL_DEPT_HEAD',
+  AUTO_SKILLS = 'AUTO_SKILLS',
+  AUTO_ROUND_ROBIN = 'AUTO_ROUND_ROBIN',
+}
+
+export enum ClosureAuthority {
+  SUPPORT_EMPLOYEE = 'SUPPORT_EMPLOYEE',
+  CLIENT = 'CLIENT',
+  ADMIN = 'ADMIN',
+  DEPT_HEAD = 'DEPT_HEAD',
+  ANYONE = 'ANYONE',
+}
+
+export enum NotificationChannel {
+  EMAIL = 'EMAIL',
+  WHATSAPP = 'WHATSAPP',
+  BOTH = 'BOTH',
+  NONE = 'NONE',
+}
+
+export enum PlatformAccess {
+  WEB = 'WEB',
+  MOBILE = 'MOBILE',
+  BOTH = 'BOTH',
+}
+

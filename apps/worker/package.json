@@ -1,0 +1,22 @@
+{
+  "name": "@kalpak/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "ts-node --transpile-only src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kalpak/config": "workspace:*",
+    "@kalpak/database": "workspace:*",
+    "@kalpak/logger": "workspace:*",
+    "@kalpak/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}

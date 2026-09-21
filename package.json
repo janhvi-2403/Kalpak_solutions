@@ -1,0 +1,34 @@
+{
+  "name": "kalpak-saas-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-grade multi-tenant SaaS platform for Kalpak Solutions - Service Calls & Ticket Management",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=@kalpak/api",
+    "dev:web": "npm run dev --workspace=@kalpak/web",
+    "dev:worker": "npm run dev --workspace=@kalpak/worker",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "db:generate": "npm run db:generate --workspace=@kalpak/database",
+    "db:migrate": "npm run db:migrate --workspace=@kalpak/database",
+    "db:seed": "npm run db:seed --workspace=@kalpak/database",
+    "docker:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f infrastructure/docker/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "prettier": "^3.5.2",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@10.29.2"
+}

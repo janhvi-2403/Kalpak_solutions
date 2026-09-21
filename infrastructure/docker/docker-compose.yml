@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kalpak_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kalpak_saas_db
+      POSTGRES_USER: kalpak_user
+      POSTGRES_PASSWORD: kalpak_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-rls.sql:/docker-entrypoint-initdb.d/01-init-rls.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kalpak_user -d kalpak_saas_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kalpak_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
