@@ -44,7 +44,7 @@ export class AuthController {
    */
   private getCookieDomain(): string | undefined {
     const raw = this.config.COOKIE_DOMAIN?.trim();
-    if (!raw || raw === 'localhost') {
+    if (!raw || raw === 'localhost' || raw.includes('onrender.com')) {
       return undefined;
     }
     return raw.startsWith('.') ? raw : `.${raw}`;
