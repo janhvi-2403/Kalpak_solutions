@@ -7,14 +7,9 @@ import { useAuth } from '@/lib/auth-context';
 import { Button, Input, PasswordInput, Alert } from '@/components/ui';
 import { ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
-import { PaymentGatewayModal } from '@/components/PaymentGatewayModal';
 
 function SignupContent() {
   const { refetchSession } = useAuth();
-
-  // Registration Flow Stages: FORM -> PAYMENT_GATEWAY -> DASHBOARD
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [registeredOrg, setRegisteredOrg] = useState<{ name: string; slug: string; adminEmail: string; adminName: string } | null>(null);
 
   // Organization Fields
   const [companyName, setCompanyName] = useState('');
@@ -149,14 +144,8 @@ function SignupContent() {
       // Refresh auth state with newly issued session
       await refetchSession();
 
-      // Trigger Payment Gateway Simulation Stage immediately on user registration
-      setRegisteredOrg({
-        name: companyName.trim(),
-        slug: slug.trim().toLowerCase(),
-        adminEmail: email.trim().toLowerCase(),
-        adminName: fullName.trim(),
-      });
-      setShowPaymentModal(true);
+      // Redirect client admin directly to real subscription checkout
+      window.location.href = '/checkout/starter';
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         const res = err.errorResponse;
@@ -452,26 +441,6 @@ function SignupContent() {
           </div>
         </div>
       </div>
-
-      {/* Interactive Payment Gateway Simulation Stage Modal */}
-      {showPaymentModal && registeredOrg && (
-        <PaymentGatewayModal
-          isOpen={showPaymentModal}
-          onClose={() => {
-            setShowPaymentModal(false);
-            window.location.href = '/dashboard';
-          }}
-          plan="STARTER"
-          billingCycle="MONTHLY"
-          tenantName={registeredOrg.name}
-          tenantSlug={registeredOrg.slug}
-          userEmail={registeredOrg.adminEmail}
-          userFullName={registeredOrg.adminName}
-          onPaymentSuccess={() => {
-            window.location.href = '/dashboard';
-          }}
-        />
-      )}
     </main>
   );
 }

@@ -73,10 +73,10 @@ export const envSchema = z.object({
     .default('http://localhost:3000,http://127.0.0.1:3000')
     .transform((val) => val.split(',').map((origin) => origin.trim())),
 
-  // Razorpay Gateway Configuration
-  RAZORPAY_KEY_ID: z.string().default('rzp_test_kalpak_mock_key_id'),
-  RAZORPAY_KEY_SECRET: z.string().default('dev_razorpay_mock_secret_key_12345'),
-  RAZORPAY_WEBHOOK_SECRET: z.string().default('dev_razorpay_mock_webhook_secret_12345'),
+  // Razorpay Gateway Configuration (Loaded from Environment Variables)
+  RAZORPAY_KEY_ID: z.string().optional().default(''),
+  RAZORPAY_KEY_SECRET: z.string().optional().default(''),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
 
   // Inbound Email Integration Configuration
   EMAIL_PROVIDER: z.enum(['gmail', 'resend', 'mailgun', 'postmark', 'sendgrid', 'generic', 'cloudmailin']).default('gmail'),

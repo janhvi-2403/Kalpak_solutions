@@ -29,7 +29,7 @@ import {
   BillingCycle,
 } from '@kalpak/types';
 import { KALPAK_LOGO_DATA_URL } from '@/lib/kalpak-logo-base64';
-import { PaymentGatewayModal } from '@/components/PaymentGatewayModal';
+import { loadRazorpayScript } from '@/lib/razorpay';
 
 declare global {
   interface Window {
@@ -52,7 +52,6 @@ export default function StarterCheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentSuccessData, setPaymentSuccessData] = useState<VerifyPaymentResponse | null>(null);
-  const [showSimulatorModal, setShowSimulatorModal] = useState(false);
 
   // Basic Company Setup State
   const [setupStep, setSetupStep] = useState<'CHECKOUT' | 'COMPANY_SETUP'>('CHECKOUT');
@@ -164,87 +163,89 @@ export default function StarterCheckoutPage() {
         }),
       });
 
-      // 2. Open Razorpay Checkout Modal
-      if (typeof window !== 'undefined' && window.Razorpay && !orderResponse.isMockMode) {
-        const options = {
-          key: orderResponse.keyId,
-          amount: orderResponse.amount,
-          currency: orderResponse.currency,
-          name: 'Kalpak Solutions',
-          description: `Kalpak Starter Plan (${billingCycle === 'ANNUAL' ? '1-Year' : '1-Month'} Subscription)`,
-          order_id: orderResponse.orderId,
-          image: KALPAK_LOGO_DATA_URL,
-          prefill: {
-            name: user?.fullName || orderResponse.companyName || 'Valued Customer',
-            email: user?.email || orderResponse.customerEmail || 'billing@kalpak.com',
-            contact: (user as any)?.phoneNumber || orderResponse.customerPhone || '9876543210',
-          },
-          theme: {
-            color: '#ea580c', // Kalpak Orange theme
-          },
-          config: {
-            display: {
-              blocks: {
-                upi: {
-                  name: 'UPI / QR Code (GPay, PhonePe, BHIM)',
-                  instruments: [
-                    {
-                      method: 'upi',
-                    },
-                  ],
-                },
-                other: {
-                  name: 'Cards, Netbanking & Wallets',
-                  instruments: [
-                    {
-                      method: 'card',
-                    },
-                    {
-                      method: 'netbanking',
-                    },
-                    {
-                      method: 'wallet',
-                    },
-                  ],
-                },
-              },
-              sequence: ['block.upi', 'block.other'],
-              preferences: {
-                show_default_blocks: true,
-              },
-            },
-          },
-          modal: {
-            backdropclose: false,
-            escape: true,
-            handleback: true,
-            confirm_close: true,
-            ondismiss: () => {
-              setIsProcessing(false);
-            },
-          },
-          handler: async (response: {
-            razorpay_order_id: string;
-            razorpay_payment_id: string;
-            razorpay_signature: string;
-          }) => {
-            await verifyPaymentWithBackend(response);
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', (failRes: any) => {
-          setIsProcessing(false);
-          setErrorMessage(
-            failRes.error?.description || 'Payment was declined or failed. Please try another payment method.'
-          );
-        });
-        rzp.open();
-      } else {
-        // Open the Interactive Payment Gateway Simulation Modal so payment is NEVER silently bypassed!
+      // 2. Ensure official Razorpay Checkout SDK is ready
+      const isScriptLoaded = await loadRazorpayScript();
+      if (!isScriptLoaded || typeof window === 'undefined' || !window.Razorpay) {
         setIsProcessing(false);
-        setShowSimulatorModal(true);
+        setErrorMessage('Razorpay Checkout SDK could not be loaded. Please check your internet connection.');
+        return;
       }
+
+      // 3. Open official Razorpay Checkout Modal
+      const options = {
+        key: orderResponse.keyId,
+        amount: orderResponse.amount,
+        currency: orderResponse.currency,
+        name: 'Kalpak Solutions',
+        description: `Kalpak Starter Plan (${billingCycle === 'ANNUAL' ? '1-Year' : '1-Month'} Subscription)`,
+        order_id: orderResponse.orderId,
+        image: KALPAK_LOGO_DATA_URL,
+        prefill: {
+          name: user?.fullName || orderResponse.companyName || 'Valued Customer',
+          email: user?.email || orderResponse.customerEmail || 'billing@kalpak.com',
+          contact: (user as any)?.phoneNumber || orderResponse.customerPhone || '9876543210',
+        },
+        theme: {
+          color: '#ea580c', // Kalpak Orange theme
+        },
+        config: {
+          display: {
+            blocks: {
+              upi: {
+                name: 'UPI / QR Code (GPay, PhonePe, BHIM)',
+                instruments: [
+                  {
+                    method: 'upi',
+                  },
+                ],
+              },
+              other: {
+                name: 'Cards, Netbanking & Wallets',
+                instruments: [
+                  {
+                    method: 'card',
+                  },
+                  {
+                    method: 'netbanking',
+                  },
+                  {
+                    method: 'wallet',
+                  },
+                ],
+              },
+            },
+            sequence: ['block.upi', 'block.other'],
+            preferences: {
+              show_default_blocks: true,
+            },
+          },
+        },
+        modal: {
+          backdropclose: false,
+          escape: true,
+          handleback: true,
+          confirm_close: true,
+          ondismiss: () => {
+            setIsProcessing(false);
+          },
+        },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          await verifyPaymentWithBackend(response);
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (failRes: any) => {
+        setIsProcessing(false);
+        setErrorMessage(
+          failRes.error?.description || 'Payment was declined or failed. Please try another payment method.'
+        );
+      });
+      rzp.open();
     } catch (err: unknown) {
       setIsProcessing(false);
       if (err instanceof ApiClientError) {
@@ -418,37 +419,9 @@ export default function StarterCheckoutPage() {
                 <span>Go to Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
-
-              <button
-                type="button"
-                onClick={() => setShowSimulatorModal(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl font-bold text-orange-700 text-sm bg-orange-50 border border-orange-200 hover:bg-orange-100 transition-all"
-              >
-                <Zap className="w-4 h-4 text-orange-600 fill-orange-600" />
-                <span>Simulate Payment Gateway Again</span>
-              </button>
             </div>
           </div>
         </main>
-
-        {showSimulatorModal && (
-          <PaymentGatewayModal
-            isOpen={showSimulatorModal}
-            onClose={() => setShowSimulatorModal(false)}
-            plan="STARTER"
-            billingCycle={billingCycle}
-            tenantName={activeTenant?.name}
-            tenantSlug={activeTenant?.slug}
-            userEmail={user?.email}
-            userFullName={user?.fullName}
-            onPaymentSuccess={(verifyRes) => {
-              setShowSimulatorModal(false);
-              setPaymentSuccessData(verifyRes);
-              setCompanyName(activeTenant?.name || '');
-              setSetupStep('COMPANY_SETUP');
-            }}
-          />
-        )}
 
         <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
           &copy; {new Date().getFullYear()} Kalpak Solutions Inc. All rights reserved.
@@ -693,33 +666,6 @@ export default function StarterCheckoutPage() {
             </Alert>
           </div>
         )}
-
-        {/* Instant Interactive Payment Gateway Simulator Banner */}
-        <div className="mb-8 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-orange-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="space-y-1 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-white text-orange-600">
-                Live Test & Sandbox Mode
-              </span>
-              <span className="text-xs font-bold text-white/90">Zero Real Money Deducted</span>
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-white">
-              Instant Payment Gateway Simulation
-            </h3>
-            <p className="text-xs text-white/80 max-w-xl">
-              Experience the complete NPCI UPI QR / Card authorization, cryptographic signature verification, and instant Starter plan activation.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowSimulatorModal(true)}
-            className="w-full sm:w-auto px-6 py-3 bg-white text-slate-950 hover:bg-slate-50 font-black text-xs rounded-xl shadow-md transition-all shrink-0 flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
-          >
-            <Zap className="w-4 h-4 text-orange-600 fill-orange-600" />
-            <span>Launch Live Simulator Now</span>
-          </button>
-        </div>
 
         <form onSubmit={handleProceedToPayment} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Plan Details & Billing Form (7 cols) */}
@@ -1015,16 +961,6 @@ export default function StarterCheckoutPage() {
                     </span>
                   )}
                 </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowSimulatorModal(true)}
-                  className="w-full justify-center py-3 font-black text-xs border-orange-200 text-orange-700 bg-orange-50/60 hover:bg-orange-100/80 shadow-xs flex items-center gap-2"
-                >
-                  <Zap className="w-3.5 h-3.5 text-orange-600 fill-orange-600" />
-                  <span>⚡ Instant Gateway Simulator (Test Mode)</span>
-                </Button>
               </div>
 
               <div className="mt-4 text-center space-y-1">
@@ -1054,26 +990,6 @@ export default function StarterCheckoutPage() {
           </div>
         </form>
       </main>
-
-      {/* Payment Gateway Simulator Modal */}
-      {showSimulatorModal && (
-        <PaymentGatewayModal
-          isOpen={showSimulatorModal}
-          onClose={() => setShowSimulatorModal(false)}
-          plan="STARTER"
-          billingCycle={billingCycle}
-          tenantName={activeTenant?.name}
-          tenantSlug={activeTenant?.slug}
-          userEmail={user?.email}
-          userFullName={user?.fullName}
-          onPaymentSuccess={(verifyRes) => {
-            setShowSimulatorModal(false);
-            setPaymentSuccessData(verifyRes);
-            setCompanyName(activeTenant?.name || '');
-            setSetupStep('COMPANY_SETUP');
-          }}
-        />
-      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">

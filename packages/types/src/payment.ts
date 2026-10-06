@@ -39,7 +39,6 @@ export interface CreatePaymentOrderResponse {
   companyName: string;
   customerEmail: string;
   customerPhone?: string;
-  isMockMode?: boolean;
 }
 
 export interface VerifyPaymentRequest {

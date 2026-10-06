@@ -3,8 +3,10 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  BadGatewayException,
 } from '@nestjs/common';
 import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { PrismaService } from '../../core/database/prisma.service';
 import { getConfig } from '@kalpak/config';
 import { logger } from '@kalpak/logger';
@@ -68,16 +70,22 @@ export class PaymentsService {
 
   private getRazorpayConfig() {
     const config = getConfig();
-    const keyId = config.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || 'rzp_test_kalpak_mock_key_id';
-    const keySecret = config.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || 'dev_razorpay_mock_secret_key_12345';
-    const webhookSecret = config.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_WEBHOOK_SECRET || 'dev_razorpay_mock_webhook_secret_12345';
-    const isMock = keyId.includes('mock') || (!keyId.startsWith('rzp_live_') && !keyId.startsWith('rzp_test_'));
+    const keyId = (config.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '').trim();
+    const keySecret = (config.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').trim();
+    const webhookSecret = (config.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
 
-    return { keyId, keySecret, webhookSecret, isMock };
+    const isConfigured = Boolean(
+      keyId.length > 0 &&
+      keySecret.length > 0 &&
+      !keyId.includes('mock') &&
+      !keySecret.includes('mock')
+    );
+
+    return { keyId, keySecret, webhookSecret, isConfigured };
   }
 
   /**
-   * 1. Validate security, calculate price + GST, create Razorpay Order & Pending Subscription
+   * 1. Validate security, calculate price + GST, create REAL Razorpay Order & Pending Subscription
    */
   async createOrder(
     userId: string,
@@ -132,46 +140,46 @@ export class PaymentsService {
       where: { id: userId },
     });
 
-    // D. Call Razorpay API to create order
-    const { keyId, keySecret, isMock } = this.getRazorpayConfig();
+    // D. Call REAL Razorpay API to create order
+    const { keyId, keySecret, isConfigured } = this.getRazorpayConfig();
+    if (!isConfigured) {
+      throw new BadGatewayException(
+        'Razorpay payment gateway credentials (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET) are not configured on the server. Please set valid Razorpay API keys in environment variables.'
+      );
+    }
+
     const receipt = `rcpt_${tenant.slug.slice(0, 8)}_${Date.now().toString().slice(-8)}`;
 
-    let orderId = `order_${receipt}`;
+    let orderId: string;
+    try {
+      const razorpay = new Razorpay({
+        key_id: keyId,
+        key_secret: keySecret,
+      });
 
-    if (!isMock && keyId.startsWith('rzp_')) {
-      try {
-        const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-        const response = await fetch('https://api.razorpay.com/v1/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Basic ${authHeader}`,
-          },
-          body: JSON.stringify({
-            amount: totalAmountInPaise,
-            currency: 'INR',
-            receipt,
-            notes: {
-              tenantId,
-              tenantSlug: tenant.slug,
-              userId,
-              plan: dto.plan,
-              billingCycle: dto.billingCycle,
-              gstin: dto.gstin || '',
-            },
-          }),
-        });
+      const razorpayOrder = await razorpay.orders.create({
+        amount: totalAmountInPaise,
+        currency: 'INR',
+        receipt,
+        notes: {
+          tenantId,
+          tenantSlug: tenant.slug,
+          userId,
+          plan: dto.plan,
+          billingCycle: dto.billingCycle,
+          gstin: dto.gstin || '',
+        },
+      });
 
-        if (response.ok) {
-          const data = (await response.json()) as { id: string };
-          orderId = data.id;
-        } else {
-          const errText = await response.text();
-          logger.warn({ errText }, 'Razorpay API returned error, fallback to local test order');
-        }
-      } catch (err) {
-        logger.error({ err }, 'Failed to connect to Razorpay API, fallback to test mode');
+      if (!razorpayOrder || !razorpayOrder.id) {
+        throw new Error('Razorpay Orders API did not return an order ID');
       }
+
+      orderId = razorpayOrder.id;
+    } catch (err: any) {
+      const errMsg = err?.error?.description || err?.message || 'Failed to create Razorpay order';
+      logger.error({ err, tenantId, plan: dto.plan }, 'Razorpay Orders API error');
+      throw new BadGatewayException(`Razorpay Order creation failed: ${errMsg}`);
     }
 
     // E. Initial Subscription status = PENDING_PAYMENT (Starter has no trial)
@@ -229,7 +237,7 @@ export class PaymentsService {
 
     logger.info(
       { tenantId, plan: dto.plan, billingCycle: dto.billingCycle, orderId, totalAmount },
-      'Payment order and pending subscription created successfully'
+      'Razorpay order and pending subscription created successfully'
     );
 
     return {
@@ -245,7 +253,6 @@ export class PaymentsService {
       companyName: tenant.name,
       customerEmail: user?.email || '',
       customerPhone: user?.phoneNumber || tenant.policy?.notificationChannels || '',
-      isMockMode: isMock,
     };
   }
 
@@ -257,26 +264,64 @@ export class PaymentsService {
     tenantId: string,
     dto: VerifyPaymentDto
   ) {
-    const { keySecret, isMock } = this.getRazorpayConfig();
+    const { keySecret, isConfigured } = this.getRazorpayConfig();
+    if (!isConfigured) {
+      throw new BadGatewayException(
+        'Razorpay payment gateway credentials (RAZORPAY_KEY_SECRET) are not configured on the server.'
+      );
+    }
 
-    // A. Verify HMAC SHA-256 Signature
+    if (!dto.razorpay_order_id || !dto.razorpay_payment_id || !dto.razorpay_signature) {
+      throw new BadRequestException('Missing required Razorpay payment verification parameters.');
+    }
+
+    // A. Find existing transaction
+    const transaction = await this.prisma.paymentTransaction.findUnique({
+      where: { orderId: dto.razorpay_order_id },
+    });
+
+    if (!transaction || transaction.tenantId !== tenantId) {
+      throw new NotFoundException('Transaction record matching this order was not found for your organization.');
+    }
+
+    // B. Check for duplicate processing / Idempotency
+    if (transaction.status === 'CAPTURED') {
+      if (transaction.paymentId === dto.razorpay_payment_id) {
+        const activeSub = await this.prisma.subscription.findFirst({
+          where: { tenantId, gatewayOrderId: dto.razorpay_order_id, status: 'ACTIVE' },
+        });
+        return {
+          success: true,
+          message: 'Payment has already been verified and processed.',
+          subscriptionId: activeSub?.id || transaction.id,
+          plan: transaction.plan,
+          billingCycle: transaction.billingCycle,
+          status: 'ACTIVE' as const,
+          startsAt: activeSub?.startsAt.toISOString() || transaction.createdAt.toISOString(),
+          endsAt: activeSub?.endsAt.toISOString() || new Date(Date.now() + 30 * 86400000).toISOString(),
+          redirectUrl: '/dashboard',
+        };
+      }
+      throw new BadRequestException('This order has already been captured with a different payment ID.');
+    }
+
+    // C. Verify cryptographic HMAC SHA-256 Signature (REAL Razorpay verification)
     const expectedSignature = crypto
       .createHmac('sha256', keySecret)
       .update(`${dto.razorpay_order_id}|${dto.razorpay_payment_id}`)
       .digest('hex');
 
-    const signatureBuffer = Buffer.from(dto.razorpay_signature || '', 'utf8');
+    const signatureBuffer = Buffer.from(dto.razorpay_signature, 'utf8');
     const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
 
     const isValidSignature =
-      isMock ||
-      (signatureBuffer.length === expectedBuffer.length &&
-        crypto.timingSafeEqual(signatureBuffer, expectedBuffer));
+      signatureBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
 
-    if (!isValidSignature && !isMock) {
-      // Log payment failure
-      await this.prisma.paymentTransaction.updateMany({
-        where: { orderId: dto.razorpay_order_id, tenantId },
+    if (!isValidSignature) {
+      // Log payment failure in database
+      await this.prisma.paymentTransaction.update({
+        where: { id: transaction.id },
         data: {
           status: 'FAILED',
           errorMessage: 'Cryptographic HMAC signature verification failed',
@@ -286,16 +331,7 @@ export class PaymentsService {
       throw new BadRequestException('Payment verification failed: Invalid transaction signature.');
     }
 
-    // B. Find existing transaction
-    const transaction = await this.prisma.paymentTransaction.findUnique({
-      where: { orderId: dto.razorpay_order_id },
-    });
-
-    if (!transaction || transaction.tenantId !== tenantId) {
-      throw new NotFoundException('Transaction record matching this order was not found for your organization.');
-    }
-
-    // C. Calculate subscription timeframe
+    // D. Calculate subscription timeframe
     const now = new Date();
     const durationMonths = transaction.billingCycle === 'ANNUAL' ? 12 : 1;
 
@@ -420,7 +456,7 @@ export class PaymentsService {
           metadata: {
             plan: transaction.plan,
             billingCycle: transaction.billingCycle,
-            amount: transaction.amount.toString(),
+            amount: (transaction.amount ?? 0).toString(),
             orderId: dto.razorpay_order_id,
             paymentId: dto.razorpay_payment_id,
           },
@@ -446,6 +482,34 @@ export class PaymentsService {
       endsAt: endsAt.toISOString(),
       redirectUrl: '/dashboard',
     };
+  }
+
+  /**
+   * 2b. Explicitly record payment cancellation or client-side failure
+   */
+  async recordPaymentFailure(
+    tenantId: string,
+    dto: { orderId: string; reason?: string }
+  ) {
+    const transaction = await this.prisma.paymentTransaction.findUnique({
+      where: { orderId: dto.orderId },
+    });
+
+    if (!transaction || transaction.tenantId !== tenantId) {
+      throw new NotFoundException('Transaction record not found.');
+    }
+
+    if (transaction.status === 'CAPTURED') {
+      return transaction;
+    }
+
+    return this.prisma.paymentTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: 'FAILED',
+        errorMessage: dto.reason || 'Payment was declined or cancelled by the user.',
+      },
+    });
   }
 
   /**

@@ -20,6 +20,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { Button, Badge, Dialog } from '@/components/ui';
+import { loadRazorpayScript } from '@/lib/razorpay';
 
 declare global {
   interface Window {
@@ -225,7 +226,15 @@ export default function SubscriptionHubPage() {
     setPaymentSuccessMsg(null);
 
     try {
-      // 1. Create Order via Backend API
+      // 1. Ensure Razorpay Checkout SDK is loaded
+      const isScriptLoaded = await loadRazorpayScript();
+      if (!isScriptLoaded || typeof window === 'undefined' || !window.Razorpay) {
+        setIsProcessingPayment(false);
+        setPaymentError('Razorpay Checkout SDK could not be loaded. Please check your internet connection.');
+        return;
+      }
+
+      // 2. Create Order via Backend API
       const orderRes = await apiClient<any>('/payments/create-order', {
         method: 'POST',
         body: JSON.stringify({
@@ -235,43 +244,37 @@ export default function SubscriptionHubPage() {
         }),
       });
 
-      // 2. Open Razorpay Checkout or fallback to simulated payment
-      if (typeof window !== 'undefined' && window.Razorpay && !orderRes.isMockMode) {
-        const options = {
-          key: orderRes.keyId,
-          amount: orderRes.amount,
-          currency: 'INR',
-          name: 'Kalpak Solutions',
-          description: `${orderRes.plan} Plan (${orderRes.billingCycle})`,
-          order_id: orderRes.orderId,
-          prefill: {
-            name: user?.fullName || '',
-            email: user?.email || '',
+      // 3. Open Official Razorpay Checkout
+      const options = {
+        key: orderRes.keyId,
+        amount: orderRes.amount,
+        currency: 'INR',
+        name: 'Kalpak Solutions',
+        description: `${orderRes.plan} Plan (${orderRes.billingCycle})`,
+        order_id: orderRes.orderId,
+        prefill: {
+          name: user?.fullName || '',
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#ea580c',
+        },
+        handler: async (response: any) => {
+          await verifyAndFinalize(response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature);
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessingPayment(false);
           },
-          theme: {
-            color: '#ea580c',
-          },
-          handler: async (response: any) => {
-            await verifyAndFinalize(response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature);
-          },
-          modal: {
-            ondismiss: () => {
-              setIsProcessingPayment(false);
-              setPaymentError('Payment window was closed before completing transaction.');
-            },
-          },
-        };
+        },
+      };
 
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', (err: any) => {
-          setIsProcessingPayment(false);
-          setPaymentError(`Payment Failed: ${err.error?.description || 'Transaction declined.'}`);
-        });
-        rzp.open();
-      } else {
-        // Mock Mode / Sandbox direct simulation
-        await simulateTestPayment(orderRes.orderId);
-      }
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (err: any) => {
+        setIsProcessingPayment(false);
+        setPaymentError(`Payment Failed: ${err.error?.description || 'Transaction declined.'}`);
+      });
+      rzp.open();
     } catch (err: any) {
       setIsProcessingPayment(false);
       setPaymentError(err.message || 'Failed to initialize payment order. Please try again.');
@@ -299,13 +302,6 @@ export default function SubscriptionHubPage() {
       setIsProcessingPayment(false);
       setPaymentError(err.message || 'Signature verification failed. Please contact support.');
     }
-  };
-
-  // Simulate payment for test/mock mode
-  const simulateTestPayment = async (orderId: string) => {
-    const mockPaymentId = `pay_mock_${Date.now().toString().slice(-8)}`;
-    const mockSignature = 'mock_signature_verified_locally';
-    await verifyAndFinalize(orderId, mockPaymentId, mockSignature);
   };
 
   // View & download official tax invoice
