@@ -7,7 +7,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { TenantStatus } from '@kalpak/types';
+import { TenantStatus, PermissionCode, SystemRole } from '@kalpak/types';
 import { PrismaService } from '../database/prisma.service';
 import { SubdomainResolverService } from './subdomain-resolver.service';
 
@@ -111,7 +111,43 @@ export class TenantGuard implements CanActivate {
     request.resolvedTenantId = tenant.id;
     request.resolvedTenant = tenant;
     request.tenantMembership = membership;
-    request.tenantPermissions = membership.role.permissions.map((rp) => rp.permission.code);
+    if (user.isSuperAdmin) {
+      request.tenantPermissions = Object.values(PermissionCode);
+    } else {
+      const dbPerms = membership.role.permissions.map((rp) => rp.permission.code);
+      if (membership.role.name === SystemRole.CLIENT_ADMIN && dbPerms.length === 0) {
+        request.tenantPermissions = [
+          PermissionCode.TENANT_READ,
+          PermissionCode.TENANT_UPDATE,
+          PermissionCode.TENANT_SETTINGS,
+          PermissionCode.USER_READ,
+          PermissionCode.USER_CREATE,
+          PermissionCode.USER_UPDATE,
+          PermissionCode.USER_DELETE,
+          PermissionCode.ROLE_ASSIGN,
+          PermissionCode.ROLE_MANAGE,
+          PermissionCode.TICKET_CREATE,
+          PermissionCode.TICKET_READ,
+          PermissionCode.TICKET_UPDATE,
+          PermissionCode.TICKET_ASSIGN,
+          PermissionCode.TICKET_RESOLVE,
+          PermissionCode.CUSTOMER_READ,
+          PermissionCode.CUSTOMER_CREATE,
+          PermissionCode.CUSTOMER_UPDATE,
+          PermissionCode.PRODUCT_READ,
+          PermissionCode.PRODUCT_MANAGE,
+          PermissionCode.SERVICE_READ,
+          PermissionCode.SERVICE_MANAGE,
+          PermissionCode.REPORT_VIEW,
+          PermissionCode.REPORT_EXPORT,
+          PermissionCode.AUDIT_READ,
+          PermissionCode.BILLING_VIEW,
+          PermissionCode.BILLING_MANAGE,
+        ];
+      } else {
+        request.tenantPermissions = dbPerms;
+      }
+    }
 
     return true;
   }

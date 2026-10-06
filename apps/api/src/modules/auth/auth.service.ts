@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -37,6 +38,7 @@ import {
   UserPrincipal,
   SystemRole,
   TenantStatus,
+  PermissionCode,
 } from '@kalpak/types';
 import { getConfig } from '@kalpak/config';
 import { SubdomainResolverService } from '../../core/tenant/subdomain-resolver.service';
@@ -216,13 +218,46 @@ export class AuthService {
       emailVerified: user.emailVerified,
     };
 
-    const membershipsInfo: TenantMembershipInfo[] = validMemberships.map((m) => ({
-      tenantId: m.tenantId,
-      tenantName: m.tenant.name,
-      tenantSlug: m.tenant.slug,
-      role: m.role.name as SystemRole,
-      permissions: m.role.permissions.map((rp) => rp.permission.code),
-    }));
+    const membershipsInfo: TenantMembershipInfo[] = validMemberships.map((m) => {
+      let perms = m.role.permissions.map((rp) => rp.permission.code);
+      if (m.role.name === SystemRole.CLIENT_ADMIN && perms.length === 0) {
+        perms = [
+          PermissionCode.TENANT_READ,
+          PermissionCode.TENANT_UPDATE,
+          PermissionCode.TENANT_SETTINGS,
+          PermissionCode.USER_READ,
+          PermissionCode.USER_CREATE,
+          PermissionCode.USER_UPDATE,
+          PermissionCode.USER_DELETE,
+          PermissionCode.ROLE_ASSIGN,
+          PermissionCode.ROLE_MANAGE,
+          PermissionCode.TICKET_CREATE,
+          PermissionCode.TICKET_READ,
+          PermissionCode.TICKET_UPDATE,
+          PermissionCode.TICKET_ASSIGN,
+          PermissionCode.TICKET_RESOLVE,
+          PermissionCode.CUSTOMER_READ,
+          PermissionCode.CUSTOMER_CREATE,
+          PermissionCode.CUSTOMER_UPDATE,
+          PermissionCode.PRODUCT_READ,
+          PermissionCode.PRODUCT_MANAGE,
+          PermissionCode.SERVICE_READ,
+          PermissionCode.SERVICE_MANAGE,
+          PermissionCode.REPORT_VIEW,
+          PermissionCode.REPORT_EXPORT,
+          PermissionCode.AUDIT_READ,
+          PermissionCode.BILLING_VIEW,
+          PermissionCode.BILLING_MANAGE,
+        ];
+      }
+      return {
+        tenantId: m.tenantId,
+        tenantName: m.tenant.name,
+        tenantSlug: m.tenant.slug,
+        role: m.role.name as SystemRole,
+        permissions: perms,
+      };
+    });
 
     return {
       rawToken,
@@ -269,15 +304,10 @@ export class AuthService {
       },
     });
 
-    if (!clientAdminRole) {
-      // Auto-provision system CLIENT_ADMIN role if missing
-      clientAdminRole = await this.prisma.role.create({
-        data: {
-          name: SystemRole.CLIENT_ADMIN,
-          description: 'Client Tenant Administrator with full organization access',
-          isSystem: true,
-          tenantId: null,
-        },
+    if (!clientAdminRole || clientAdminRole.permissions.length === 0) {
+      await this.prisma.ensureBaselineRbac();
+      clientAdminRole = await this.prisma.role.findFirst({
+        where: { name: SystemRole.CLIENT_ADMIN, tenantId: null },
         include: {
           permissions: {
             include: {
@@ -286,6 +316,10 @@ export class AuthService {
           },
         },
       });
+    }
+
+    if (!clientAdminRole) {
+      throw new InternalServerErrorException('System role CLIENT_ADMIN could not be initialized');
     }
 
     // 5. Create Tenant, User, and Membership in transaction
