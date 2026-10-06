@@ -11,7 +11,7 @@ services:
     plan: free
     region: oregon
     buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/api run build
-    startCommand: (pnpm --filter @kalpak/database run db:migrate:deploy || pnpm --filter @kalpak/database exec prisma db push --skip-generate) && pnpm --filter @kalpak/api run start
+    startCommand: (pnpm --filter @kalpak/database run db:migrate:deploy || pnpm --filter @kalpak/database exec prisma db push --skip-generate) && (pnpm --filter @kalpak/database run db:seed || true) && pnpm --filter @kalpak/api run start
     healthCheckPath: /health
     autoDeploy: true
     envVars:

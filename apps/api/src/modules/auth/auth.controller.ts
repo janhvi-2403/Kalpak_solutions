@@ -211,6 +211,48 @@ export class AuthController {
     return this.authService.verifyMfa(sessionId, dto.code, ipAddress, userAgent);
   }
 
+  @Get('mfa/status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user MFA status and backup codes state' })
+  async getMfaStatus(@CurrentUser() user: UserPrincipal) {
+    return this.authService.getUserMfaStatus(user.id);
+  }
+
+  @Post('mfa/setup')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate TOTP secret and QR code for in-app 2-step authentication configuration' })
+  async setupMfa(@CurrentUser() user: UserPrincipal) {
+    return this.authService.setupUserMfa(user.id);
+  }
+
+  @Post('mfa/enable')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify 6-digit code and activate Two-Factor Authentication' })
+  async enableMfa(
+    @CurrentUser() user: UserPrincipal,
+    @Body() dto: MfaVerifyDto,
+    @Req() req: Request & { session?: { id: string } }
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.authService.enableUserMfa(user.id, dto.code, req.session?.id, ipAddress, userAgent);
+  }
+
+  @Post('mfa/disable')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Disable Two-Factor Authentication for current user' })
+  async disableMfa(
+    @CurrentUser() user: UserPrincipal,
+    @Body() body: { password?: string },
+    @Req() req: Request
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+    return this.authService.disableUserMfa(user.id, body.password, ipAddress, userAgent);
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()

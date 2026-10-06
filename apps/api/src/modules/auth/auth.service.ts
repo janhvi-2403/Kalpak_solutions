@@ -1256,5 +1256,142 @@ export class AuthService {
       },
     };
   }
+
+  async getUserMfaStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { mfaEnabled: true, mfaBackupCodes: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      mfaEnabled: user.mfaEnabled,
+      backupCodesRemaining: user.mfaBackupCodes?.length || 0,
+    };
+  }
+
+  async setupUserMfa(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, mfaEnabled: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const rawSecret = generateTotpSecret();
+    const otpauthUri = getTotpUri(
+      rawSecret,
+      user.email,
+      this.config.MFA_APP_NAME || 'Kalpak Solutions'
+    );
+    const qrCode = await generateTotpQrDataUrl(otpauthUri);
+    const backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
+    const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
+    const encryptedSecret = encryptSecret(rawSecret, this.config.MFA_ENCRYPTION_KEY);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        mfaSecret: encryptedSecret,
+        mfaBackupCodes: hashedBackupCodes,
+      },
+    });
+
+    return {
+      secret: rawSecret,
+      otpauthUri,
+      qrCode,
+      backupCodes,
+    };
+  }
+
+  async enableUserMfa(
+    userId: string,
+    code: string,
+    sessionId?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user || !user.mfaSecret) {
+      throw new BadRequestException('MFA setup has not been initiated. Please generate a QR code first.');
+    }
+
+    const rawSecret = decryptSecret(user.mfaSecret, this.config.MFA_ENCRYPTION_KEY);
+    const isValid = verifyTotp(code.trim(), rawSecret);
+    if (!isValid) {
+      throw new BadRequestException('Invalid verification code. Please check your authenticator app.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { mfaEnabled: true },
+    });
+
+    if (sessionId) {
+      await this.prisma.session.updateMany({
+        where: { id: sessionId },
+        data: { mfaVerified: true },
+      });
+    }
+
+    await this.auditService.record({
+      actorId: user.id,
+      eventType: AuditEventType.AUTH_MFA_ENABLED,
+      resourceType: 'USER',
+      resourceId: user.id,
+      action: 'MFA_ENABLED',
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      message: 'Two-Factor Authentication (2FA) has been successfully activated for your account.',
+    };
+  }
+
+  async disableUserMfa(
+    userId: string,
+    password?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (password) {
+      const isPasswordValid = await verifyPassword(password, user.passwordHash);
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Incorrect password provided.');
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        mfaEnabled: false,
+        mfaSecret: null,
+        mfaBackupCodes: [],
+      },
+    });
+
+    await this.auditService.record({
+      actorId: user.id,
+      eventType: AuditEventType.AUTH_MFA_DISABLED,
+      resourceType: 'USER',
+      resourceId: user.id,
+      action: 'MFA_DISABLED',
+      ipAddress,
+      userAgent,
+    });
+
+    return {
+      success: true,
+      message: 'Two-Factor Authentication (2FA) has been disabled.',
+    };
+  }
 }
 
