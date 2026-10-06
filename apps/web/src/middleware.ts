@@ -20,6 +20,9 @@ export function middleware(request: NextRequest) {
   } else if (cleanHost.endsWith('.lvh.me')) {
     const parts = cleanHost.replace(/\.lvh\.me$/, '').split('.');
     candidate = parts[parts.length - 1] || null;
+  } else if (cleanHost.endsWith('.onrender.com')) {
+    const parts = cleanHost.replace(/\.onrender\.com$/, '').split('.');
+    candidate = parts.length > 1 ? (parts[0] ?? null) : null;
   } else {
     const parts = cleanHost.split('.');
     if (parts.length >= 3) {

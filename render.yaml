@@ -63,10 +63,7 @@ services:
       - key: NEXT_PUBLIC_APP_ENV
         value: production
       - key: API_BASE_URL
-        fromService:
-          type: web
-          name: kalpak-api
-          property: host
+        value: https://kalpak-api.onrender.com
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PostgreSQL Managed Database

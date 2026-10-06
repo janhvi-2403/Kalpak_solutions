@@ -47,6 +47,9 @@ export const RESERVED_SUBDOMAINS = [
   'webhook',
   'webhooks',
   'localhost',
+  'kalpak-web',
+  'kalpak-api',
+  'onrender',
 ] as const;
 
 export type ReservedSubdomain = (typeof RESERVED_SUBDOMAINS)[number];
