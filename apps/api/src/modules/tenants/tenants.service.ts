@@ -18,6 +18,14 @@ import { getConfig } from '@kalpak/config';
 export class TenantsService {
   private readonly config = getConfig();
 
+  private getWebBaseUrl(): string {
+    const configured = this.config.WEB_BASE_URL;
+    if (process.env.NODE_ENV === 'production' && (!configured || configured.includes('localhost'))) {
+      return 'https://kalpak-web.onrender.com';
+    }
+    return configured || 'https://kalpak-web.onrender.com';
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -528,7 +536,7 @@ export class TenantsService {
         phone: invitation.phone,
         expiresAt: invitation.expiresAt,
         token: rawToken,
-        inviteUrl: `${this.config.WEB_BASE_URL}/accept-invitation?token=${rawToken}`,
+        inviteUrl: `${this.getWebBaseUrl()}/accept-invitation?token=${rawToken}`,
       },
     };
   }
@@ -651,7 +659,7 @@ export class TenantsService {
       message: `Invitation resent successfully to ${invitation.email}`,
       expiresAt: updated.expiresAt,
       token: rawToken,
-      inviteUrl: `${this.config.WEB_BASE_URL}/accept-invitation?token=${rawToken}`,
+      inviteUrl: `${this.getWebBaseUrl()}/accept-invitation?token=${rawToken}`,
     };
   }
 

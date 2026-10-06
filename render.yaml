@@ -43,6 +43,10 @@ services:
         value: smtp
       - key: CLOUDMAILIN_FORWARD_TARGET
         value: support@kalpak.solutions
+      - key: WEB_BASE_URL
+        value: https://kalpak-web.onrender.com
+      - key: API_BASE_URL
+        value: https://kalpak-api.onrender.com
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Next.js 15 Frontend Web Service

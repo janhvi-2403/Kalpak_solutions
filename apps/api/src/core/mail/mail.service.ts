@@ -8,7 +8,16 @@ import * as nodemailer from 'nodemailer';
 export class MailService {
   private readonly config = getConfig();
 
+  public getWebBaseUrl(): string {
+    const configured = this.config.WEB_BASE_URL;
+    if (process.env.NODE_ENV === 'production' && (!configured || configured.includes('localhost'))) {
+      return 'https://kalpak-web.onrender.com';
+    }
+    return configured || 'https://kalpak-web.onrender.com';
+  }
+
   private getTransporter(): nodemailer.Transporter | null {
+    // 1. Standard SMTP configuration (compatible with Mailgun, Brevo, AWS SES, SendGrid, Resend SMTP)
     if (process.env.SMTP_HOST) {
       return nodemailer.createTransport({
         host: process.env.SMTP_HOST,
@@ -24,6 +33,35 @@ export class MailService {
       });
     }
 
+    // 2. Resend API Key via SMTP
+    const resendKey = process.env.RESEND_API_KEY || (process.env.EMAIL_PROVIDER === 'resend' ? process.env.EMAIL_PROVIDER_API_KEY : '');
+    if (resendKey) {
+      return nodemailer.createTransport({
+        host: 'smtp.resend.com',
+        port: 465,
+        secure: true,
+        auth: {
+          user: 'resend',
+          pass: resendKey,
+        },
+      });
+    }
+
+    // 3. SendGrid API Key via SMTP
+    const sendgridKey = process.env.SENDGRID_API_KEY || (process.env.EMAIL_PROVIDER === 'sendgrid' ? process.env.EMAIL_PROVIDER_API_KEY : '');
+    if (sendgridKey) {
+      return nodemailer.createTransport({
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        secure: false,
+        auth: {
+          user: 'apikey',
+          pass: sendgridKey,
+        },
+      });
+    }
+
+    // 4. Gmail App Password
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       return nodemailer.createTransport({
         service: 'gmail',
@@ -38,7 +76,7 @@ export class MailService {
   }
 
   async sendVerificationEmail(email: string, token: string, organizationName?: string): Promise<void> {
-    const verificationUrl = `${this.config.WEB_BASE_URL}/verify-email?token=${token}`;
+    const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
 
     logger.info(
       {
@@ -59,7 +97,7 @@ export class MailService {
   }
 
   async sendBootstrapVerificationOtp(email: string, otpCode: string, token: string): Promise<void> {
-    const verificationUrl = `${this.config.WEB_BASE_URL}/verify-email?token=${token}`;
+    const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
 
     logger.info(
       {
@@ -78,7 +116,7 @@ export class MailService {
   }
 
   async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    const resetUrl = `${this.config.WEB_BASE_URL}/reset-password?token=${token}`;
+    const resetUrl = `${this.getWebBaseUrl()}/reset-password?token=${token}`;
 
     logger.info(
       {
@@ -104,7 +142,7 @@ export class MailService {
     fullName?: string,
     phone?: string
   ): Promise<void> {
-    const inviteUrl = `${this.config.WEB_BASE_URL}/accept-invitation?token=${token}`;
+    const inviteUrl = `${this.getWebBaseUrl()}/accept-invitation?token=${token}`;
     const isCustomer = role === 'CUSTOMER';
     const roleTitle = role === 'DEPARTMENT_ADMIN' ? 'Department Head' : isCustomer ? 'Customer' : role;
     const greeting = fullName ? `Hello ${fullName},` : 'Hello,';

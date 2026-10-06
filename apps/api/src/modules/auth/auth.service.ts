@@ -249,6 +249,20 @@ export class AuthService {
           PermissionCode.BILLING_VIEW,
           PermissionCode.BILLING_MANAGE,
         ];
+      } else if (m.role.name === SystemRole.DEPARTMENT_ADMIN && perms.length === 0) {
+        perms = [
+          PermissionCode.TENANT_READ,
+          PermissionCode.USER_READ,
+          PermissionCode.TICKET_CREATE,
+          PermissionCode.TICKET_READ,
+          PermissionCode.TICKET_UPDATE,
+          PermissionCode.TICKET_ASSIGN,
+          PermissionCode.TICKET_RESOLVE,
+          PermissionCode.CUSTOMER_READ,
+          PermissionCode.PRODUCT_READ,
+          PermissionCode.SERVICE_READ,
+          PermissionCode.REPORT_VIEW,
+        ];
       }
       return {
         tenantId: m.tenantId,
@@ -872,9 +886,37 @@ export class AuthService {
           });
         }
 
-        if (department) {
-          const isDeptHead = invitation.role.name === 'DEPARTMENT_ADMIN';
+        const isDeptHead = invitation.role.name === 'DEPARTMENT_ADMIN';
 
+        if (!department) {
+          const cleanCode = trimmedDept
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .substring(0, 5) || 'DEPT';
+
+          let finalCode = cleanCode;
+          const existingCode = await tx.department.findFirst({
+            where: { tenantId: invitation.tenantId, code: finalCode },
+          });
+          if (existingCode) {
+            finalCode = `${cleanCode}${Math.floor(10 + Math.random() * 90)}`;
+          }
+
+          department = await tx.department.create({
+            data: {
+              tenantId: invitation.tenantId,
+              name: trimmedDept,
+              code: finalCode,
+              description: `${trimmedDept} Department`,
+              isActive: true,
+              headUserId: isDeptHead ? user.id : null,
+              pocUserId: user.id,
+              pocName: user.fullName || dto.fullName.trim(),
+              pocEmail: user.email,
+              pocPhone: resolvedPhone,
+            },
+          });
+        } else {
           // Assign as head and POC of department
           await tx.department.update({
             where: { id: department.id },
@@ -886,27 +928,27 @@ export class AuthService {
               pocPhone: resolvedPhone || department.pocPhone,
             },
           });
-
-          // Create or update employee profile for the member
-          await tx.employeeProfile.upsert({
-            where: { userId: user.id },
-            create: {
-              tenantId: invitation.tenantId,
-              userId: user.id,
-              departmentId: department.id,
-              designation: isDeptHead ? 'Department Head' : 'Department Specialist',
-              phone: resolvedPhone,
-              isAvailable: true,
-            },
-            update: {
-              tenantId: invitation.tenantId,
-              departmentId: department.id,
-              designation: isDeptHead ? 'Department Head' : undefined,
-              phone: resolvedPhone || undefined,
-              isAvailable: true,
-            },
-          });
         }
+
+        // Create or update employee profile for the member
+        await tx.employeeProfile.upsert({
+          where: { userId: user.id },
+          create: {
+            tenantId: invitation.tenantId,
+            userId: user.id,
+            departmentId: department.id,
+            designation: isDeptHead ? 'Department Head' : 'Department Specialist',
+            phone: resolvedPhone,
+            isAvailable: true,
+          },
+          update: {
+            tenantId: invitation.tenantId,
+            departmentId: department.id,
+            designation: isDeptHead ? 'Department Head' : undefined,
+            phone: resolvedPhone || undefined,
+            isAvailable: true,
+          },
+        });
       }
 
       // Link to Customer account if an organization customer exists with this email

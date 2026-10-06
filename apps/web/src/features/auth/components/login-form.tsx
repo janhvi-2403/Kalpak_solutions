@@ -118,14 +118,18 @@ export function LoginForm() {
         body: JSON.stringify({ code: totpCode.trim() }),
       });
 
-      await refetchSession();
+      const freshSession = await refetchSession();
+      const userRole = freshSession?.activeRole;
 
       if (cachedUser?.isSuperAdmin) {
         window.location.href = '/super-admin/dashboard';
       } else {
+        let defaultDest = '/dashboard';
+        if (userRole === 'DEPARTMENT_ADMIN') defaultDest = '/dashboard/department';
+        if (userRole === 'SUPPORT_EMPLOYEE') defaultDest = '/dashboard/employee';
         const dest =
           searchParams?.get('returnUrl') ||
-          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : '/dashboard');
+          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
         window.location.href = dest;
       }
     } catch (err) {

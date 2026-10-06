@@ -144,6 +144,20 @@ export class TenantGuard implements CanActivate {
           PermissionCode.BILLING_VIEW,
           PermissionCode.BILLING_MANAGE,
         ];
+      } else if (membership.role.name === SystemRole.DEPARTMENT_ADMIN && dbPerms.length === 0) {
+        request.tenantPermissions = [
+          PermissionCode.TENANT_READ,
+          PermissionCode.USER_READ,
+          PermissionCode.TICKET_CREATE,
+          PermissionCode.TICKET_READ,
+          PermissionCode.TICKET_UPDATE,
+          PermissionCode.TICKET_ASSIGN,
+          PermissionCode.TICKET_RESOLVE,
+          PermissionCode.CUSTOMER_READ,
+          PermissionCode.PRODUCT_READ,
+          PermissionCode.SERVICE_READ,
+          PermissionCode.REPORT_VIEW,
+        ];
       } else {
         request.tenantPermissions = dbPerms;
       }
