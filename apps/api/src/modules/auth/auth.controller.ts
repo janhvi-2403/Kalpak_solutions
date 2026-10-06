@@ -39,6 +39,17 @@ export class AuthController {
     private readonly subdomainResolver: SubdomainResolverService
   ) {}
 
+  /**
+   * Resolves top-level domain for cookie sharing across tenant subdomains (*.kalpaksolutions.com).
+   */
+  private getCookieDomain(): string | undefined {
+    const raw = this.config.COOKIE_DOMAIN?.trim();
+    if (!raw || raw === 'localhost') {
+      return undefined;
+    }
+    return raw.startsWith('.') ? raw : `.${raw}`;
+  }
+
   @Public()
   @Get('resolve-subdomain')
   @ApiOperation({ summary: 'Resolve tenant metadata and branding from host subdomain or parameters' })
@@ -76,14 +87,16 @@ export class AuthController {
 
     const result = await this.authService.login(dto, ipAddress, userAgent, subdomain);
 
-    // Set secure HttpOnly cookie for browser clients
+    // Set secure HttpOnly cookie for browser clients (shared across tenant subdomains)
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+    const cookieDomain = this.getCookieDomain();
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
       secure: this.config.COOKIE_SECURE,
       sameSite: 'lax',
       maxAge: maxAgeMs,
       path: '/',
+      domain: cookieDomain,
     });
 
     return {
@@ -114,12 +127,14 @@ export class AuthController {
 
     // Set secure HttpOnly session cookie for browser clients
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+    const cookieDomain = this.getCookieDomain();
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
       secure: this.config.COOKIE_SECURE,
       sameSite: 'lax',
       maxAge: maxAgeMs,
       path: '/',
+      domain: cookieDomain,
     });
 
     return result;
@@ -269,11 +284,13 @@ export class AuthController {
       await this.authService.logout(sessionId, ipAddress, userAgent);
     }
 
+    const cookieDomain = this.getCookieDomain();
     res.clearCookie(this.config.SESSION_COOKIE_NAME, {
       httpOnly: true,
       secure: this.config.COOKIE_SECURE,
       sameSite: 'lax',
       path: '/',
+      domain: cookieDomain,
     });
 
     return { message: 'Logged out successfully' };

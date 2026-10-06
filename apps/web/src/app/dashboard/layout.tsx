@@ -7,14 +7,15 @@ import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/api-client';
 import { Sidebar } from '@/features/shell/components/sidebar';
 import { Header } from '@/features/shell/components/header';
-import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertTriangle, RefreshCw, ShieldAlert, ArrowRight, LogOut } from 'lucide-react';
+import { buildTenantSubdomainUrl } from '@/lib/subdomain';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, activeTenant, subdomainSlug, logout } = useAuth();
   const router = useRouter();
   const [showLoginFallback, setShowLoginFallback] = useState(false);
   const [expiryAlert, setExpiryAlert] = useState<{
@@ -98,8 +99,66 @@ export default function DashboardLayout({
     );
   }
 
+  const isCrossTenant = Boolean(
+    subdomainSlug &&
+    activeTenant?.slug &&
+    subdomainSlug.toLowerCase() !== activeTenant.slug.toLowerCase()
+  );
+
   if (!isAuthenticated) {
     return null;
+  }
+
+  // Cross-tenant protection barrier: prevents rendering any tenant dashboard data
+  // if user manually altered the subdomain in the browser URL
+  if (isCrossTenant && activeTenant) {
+    const authorizedUrl = buildTenantSubdomainUrl(activeTenant.slug, '/dashboard');
+
+    return (
+      <div className="flex h-screen bg-slate-100/90 items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-rose-200 shadow-2xl p-7 flex flex-col items-center gap-5 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-inner">
+            <ShieldAlert className="w-7 h-7" />
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
+              Cross-Tenant Access Denied
+            </span>
+            <h2 className="text-lg font-bold text-slate-900 mt-2">
+              Unauthorized Workspace
+            </h2>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-sm">
+              You are signed in as <span className="font-semibold text-slate-800">{user?.email}</span> with access to{' '}
+              <span className="font-bold text-slate-900">{activeTenant.name}</span> (<code className="text-orange-600 font-mono text-[11px]">{activeTenant.slug}</code>).
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              You cannot access or view data from the <code className="text-rose-600 font-mono font-bold text-[11px]">{subdomainSlug}</code> workspace.
+            </p>
+          </div>
+
+          <div className="w-full pt-4 border-t border-slate-100 flex flex-col gap-2.5">
+            <button
+              onClick={() => {
+                window.location.href = authorizedUrl;
+              }}
+              className="w-full py-3 px-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <span>Go to Your Authorized Workspace ({activeTenant.slug})</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={logout}
+              className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5 text-slate-500" />
+              <span>Sign In with a Different Account</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

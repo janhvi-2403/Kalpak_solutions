@@ -193,6 +193,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   ): Promise<T> {
     return this.$transaction(async (tx) => {
       if (tenantId) {
+        // Enforce strict UUID format to prevent SQL injection in transaction context
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+        if (!isUuid) {
+          throw new Error(`Invalid tenant ID format for RLS context: "${tenantId}"`);
+        }
         await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
       }
       if (isSuperAdmin) {

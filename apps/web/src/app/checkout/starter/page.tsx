@@ -30,6 +30,7 @@ import {
 } from '@kalpak/types';
 import { KALPAK_LOGO_DATA_URL } from '@/lib/kalpak-logo-base64';
 import { loadRazorpayScript } from '@/lib/razorpay';
+import { buildTenantSubdomainUrl } from '@/lib/subdomain';
 
 declare global {
   interface Window {
@@ -327,8 +328,10 @@ export default function StarterCheckoutPage() {
         }),
       });
 
-      await refetchSession();
-      window.location.href = '/dashboard';
+      const updated = await refetchSession();
+      const targetSlug = updated?.activeTenant?.slug || activeTenant?.slug;
+      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/dashboard') : '/dashboard';
+      window.location.href = targetUrl;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         setSetupError(err.errorResponse.message || 'Failed to save company profile');

@@ -35,24 +35,55 @@ export class TenantGuard implements CanActivate {
     const { subdomain, tenant: subdomainTenant } = await this.subdomainResolver.resolveFromRequest(request);
     
     if (subdomain && !subdomainTenant) {
-      throw new ForbiddenException(`Organization subdomain "${subdomain}" does not exist or has been cancelled`);
-    }
-
-    // Determine target tenant ID (subdomain takes priority if present)
-    let tenantId = subdomainTenant?.id || request.session?.activeTenantId || request.headers['x-tenant-id'];
-
-    if (isOptional && !tenantId) {
-      return true;
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'TENANT_NOT_FOUND',
+        message: `Organization workspace "${subdomain}" does not exist, has been cancelled, or is invalid`,
+      });
     }
 
     if (!user) {
       throw new UnauthorizedException('Authentication required to access tenant-scoped resources');
     }
 
-    if (!tenantId) {
-      if (user.isSuperAdmin) {
-        return true; // Super admins can operate across tenants
+    const sessionUserTenantId = request.session?.activeTenantId || null;
+
+    // Strict Cross-Tenant Verification (Requirements 5, 6, 7, 8):
+    // Never trust URL/subdomain alone. Verify hostnameTenantId === sessionUserTenantId on every protected request.
+    if (subdomainTenant) {
+      const hostnameTenantId = subdomainTenant.id;
+
+      if (!sessionUserTenantId) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'FORBIDDEN_NO_TENANT_SESSION',
+          message: 'Active session does not have an active tenant workspace assigned',
+        });
       }
+
+      if (hostnameTenantId !== sessionUserTenantId) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'FORBIDDEN_CROSS_TENANT',
+          message: `Cross-tenant access denied. Your session belongs to a different workspace and cannot access "${subdomainTenant.name}" (${subdomainTenant.slug})`,
+          authorizedTenantId: sessionUserTenantId,
+          requestedTenantId: hostnameTenantId,
+          requestedSlug: subdomainTenant.slug,
+        });
+      }
+    }
+
+    // Determine target tenant ID (session user tenant ID or subdomain tenant ID)
+    const tenantId = subdomainTenant?.id || sessionUserTenantId || request.headers['x-tenant-id'];
+
+    if (isOptional && !tenantId) {
+      return true;
+    }
+
+    if (!tenantId) {
       throw new ForbiddenException('Active tenant context is required for this operation');
     }
 
@@ -70,14 +101,9 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(`Tenant organization access is restricted (Status: ${tenant.status})`);
     }
 
-    // If user is super admin, access is granted across all subdomains/tenants
-    if (user.isSuperAdmin) {
-      request.resolvedTenantId = tenant.id;
-      request.resolvedTenant = tenant;
-      return true;
-    }
-
-    // 3. Verify user is an active member of this specific tenant
+    // 3. Verify user is an active member of this specific tenant (Requirements 9, 10).
+    // Super Admins remain platform-level and do NOT accidentally inherit tenant access.
+    // To access a tenant workspace, an explicit membership is strictly required.
     const membership = await this.prisma.tenantMembership.findUnique({
       where: {
         uq_membership_tenant_user: {
@@ -100,11 +126,19 @@ export class TenantGuard implements CanActivate {
 
     if (!membership) {
       if (subdomainTenant) {
-        throw new ForbiddenException(
-          `You do not belong to organization "${subdomainTenant.name}" (${subdomainTenant.slug})`
-        );
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'FORBIDDEN_CROSS_TENANT',
+          message: `You do not belong to organization "${subdomainTenant.name}" (${subdomainTenant.slug})`,
+        });
       }
-      throw new ForbiddenException('You do not belong to the requested tenant organization');
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'FORBIDDEN_NOT_MEMBER',
+        message: 'You do not belong to the requested tenant organization',
+      });
     }
 
     // Attach verified tenant membership details and resolved tenant ID to request

@@ -20,6 +20,10 @@ export function middleware(request: NextRequest) {
   } else if (cleanHost.endsWith('.lvh.me')) {
     const parts = cleanHost.replace(/\.lvh\.me$/, '').split('.');
     candidate = parts[parts.length - 1] || null;
+  } else if (cleanHost.endsWith('.kalpaksolutions.com')) {
+    const prefix = cleanHost.slice(0, -'.kalpaksolutions.com'.length);
+    const parts = prefix.split('.');
+    candidate = parts[parts.length - 1] || null;
   } else if (cleanHost.endsWith('.onrender.com')) {
     const parts = cleanHost.replace(/\.onrender\.com$/, '').split('.');
     candidate = parts.length > 1 ? (parts[0] ?? null) : null;
@@ -33,7 +37,13 @@ export function middleware(request: NextRequest) {
   // Clone headers so downstream server components can inspect tenant context
   const requestHeaders = new Headers(request.headers);
 
-  if (candidate && !RESERVED_SUBDOMAINS.includes(candidate as any) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) {
+  if (
+    candidate &&
+    candidate.length >= 2 &&
+    candidate.length <= 63 &&
+    !RESERVED_SUBDOMAINS.includes(candidate as any) &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)
+  ) {
     requestHeaders.set('x-tenant-slug', candidate);
   }
 

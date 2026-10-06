@@ -18,6 +18,7 @@ import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
 import { KalpakLogo } from '@/components/KalpakLogo';
+import { buildTenantSubdomainUrl } from '@/lib/subdomain';
 
 export function LoginForm() {
   const { refetchSession, subdomainSlug, subdomainTenant } = useAuth();
@@ -94,7 +95,13 @@ export function LoginForm() {
         const dest =
           searchParams?.get('returnUrl') ||
           (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
-        window.location.href = dest;
+
+        const targetTenantSlug = freshSession?.activeTenant?.slug;
+        if (targetTenantSlug && !dest.startsWith('/checkout')) {
+          window.location.href = buildTenantSubdomainUrl(targetTenantSlug, dest);
+        } else {
+          window.location.href = dest;
+        }
       }
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -130,7 +137,13 @@ export function LoginForm() {
         const dest =
           searchParams?.get('returnUrl') ||
           (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
-        window.location.href = dest;
+
+        const targetTenantSlug = freshSession?.activeTenant?.slug;
+        if (targetTenantSlug && !dest.startsWith('/checkout')) {
+          window.location.href = buildTenantSubdomainUrl(targetTenantSlug, dest);
+        } else {
+          window.location.href = dest;
+        }
       }
     } catch (err) {
       if (err instanceof ApiClientError) {

@@ -30,6 +30,10 @@ export function getTenantSubdomain(hostname?: string): string | null {
   } else if (cleanHost.endsWith('.lvh.me')) {
     const parts = cleanHost.replace(/\.lvh\.me$/, '').split('.');
     candidate = parts[parts.length - 1] || null;
+  } else if (cleanHost.endsWith('.kalpaksolutions.com')) {
+    const prefix = cleanHost.slice(0, -'.kalpaksolutions.com'.length);
+    const parts = prefix.split('.');
+    candidate = parts[parts.length - 1] || null;
   } else if (cleanHost.endsWith('.onrender.com')) {
     const parts = cleanHost.replace(/\.onrender\.com$/, '').split('.');
     candidate = parts.length > 1 ? (parts[0] ?? null) : null;
@@ -50,8 +54,8 @@ export function getTenantSubdomain(hostname?: string): string | null {
     return null;
   }
 
-  // Check slug structure
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) {
+  // Check slug structure and RFC 1123 length
+  if (candidate.length < 2 || candidate.length > 63 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) {
     return null;
   }
 
@@ -70,12 +74,13 @@ export function buildTenantSubdomainUrl(subdomain: string, path = '/'): string {
   const hostParts = host.split(':');
   const hostname = hostParts[0] || '';
 
-
   let targetHost = '';
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
     targetHost = `${subdomain}.localhost${port ? `:${port}` : ''}`;
   } else if (hostname.endsWith('.lvh.me')) {
     targetHost = `${subdomain}.lvh.me${port ? `:${port}` : ''}`;
+  } else if (hostname.endsWith('kalpaksolutions.com')) {
+    targetHost = `${subdomain}.kalpaksolutions.com${port ? `:${port}` : ''}`;
   } else {
     const parts = hostname.split('.');
     if (parts.length >= 3) {

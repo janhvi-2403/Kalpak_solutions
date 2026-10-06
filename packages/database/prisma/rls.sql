@@ -104,4 +104,61 @@ CREATE POLICY tenant_isolation_support_emails ON support_emails
     USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
     WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
 
+-- 8. Enable RLS and Policies for Core Business Entities
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_customers ON customers;
+CREATE POLICY tenant_isolation_customers ON customers
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE service_tickets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_service_tickets ON service_tickets;
+CREATE POLICY tenant_isolation_service_tickets ON service_tickets
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE work_orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_work_orders ON work_orders;
+CREATE POLICY tenant_isolation_work_orders ON work_orders
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_products ON products;
+CREATE POLICY tenant_isolation_products ON products
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_departments ON departments;
+CREATE POLICY tenant_isolation_departments ON departments
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_notifications ON notifications;
+CREATE POLICY tenant_isolation_notifications ON notifications
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_subscriptions ON subscriptions;
+CREATE POLICY tenant_isolation_subscriptions ON subscriptions
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE payment_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_payment_transactions ON payment_transactions;
+CREATE POLICY tenant_isolation_payment_transactions ON payment_transactions
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
 
