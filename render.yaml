@@ -52,7 +52,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/web run build
+    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/web run build
     startCommand: pnpm --filter @kalpak/web run start
     autoDeploy: true
     envVars:
