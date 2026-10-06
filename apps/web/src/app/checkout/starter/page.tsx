@@ -241,15 +241,9 @@ export default function StarterCheckoutPage() {
         });
         rzp.open();
       } else {
-        // Mock Gateway Simulation for Local Development/Testing
-        const mockPaymentId = `pay_mock_${Date.now().toString().slice(-8)}`;
-        const mockSignature = `sig_mock_${orderResponse.orderId}_${mockPaymentId}`;
-
-        await verifyPaymentWithBackend({
-          razorpay_order_id: orderResponse.orderId,
-          razorpay_payment_id: mockPaymentId,
-          razorpay_signature: mockSignature,
-        });
+        // Open the Interactive Payment Gateway Simulation Modal so payment is NEVER silently bypassed!
+        setIsProcessing(false);
+        setShowSimulatorModal(true);
       }
     } catch (err: unknown) {
       setIsProcessing(false);
@@ -427,32 +421,34 @@ export default function StarterCheckoutPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setCompanyName(activeTenant?.name || '');
-                  setCompanyPhone((activeTenant?.settings as any)?.companyProfile?.phone || '');
-                  setCompanyWebsite((activeTenant?.settings as any)?.companyProfile?.website || '');
-                  setCompanySupportEmail((activeTenant?.settings as any)?.companyProfile?.supportEmail || user?.email || '');
-                  setCompanyAddress((activeTenant?.settings as any)?.companyProfile?.address || '');
-                  setPaymentSuccessData({
-                    success: true,
-                    message: 'Subscription active',
-                    subscriptionId: sub.id,
-                    plan: 'STARTER',
-                    billingCycle: sub.billingCycle as BillingCycle,
-                    status: 'ACTIVE',
-                    startsAt: new Date().toISOString(),
-                    endsAt: sub.endsAt,
-                    redirectUrl: '/dashboard',
-                  });
-                  setSetupStep('COMPANY_SETUP');
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center px-5 py-3 rounded-xl font-bold text-slate-700 text-sm bg-white border border-slate-300 hover:bg-slate-50 transition-all"
+                onClick={() => setShowSimulatorModal(true)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl font-bold text-orange-700 text-sm bg-orange-50 border border-orange-200 hover:bg-orange-100 transition-all"
               >
-                Update Company Branding
+                <Zap className="w-4 h-4 text-orange-600 fill-orange-600" />
+                <span>Simulate Payment Gateway Again</span>
               </button>
             </div>
           </div>
         </main>
+
+        {showSimulatorModal && (
+          <PaymentGatewayModal
+            isOpen={showSimulatorModal}
+            onClose={() => setShowSimulatorModal(false)}
+            plan="STARTER"
+            billingCycle={billingCycle}
+            tenantName={activeTenant?.name}
+            tenantSlug={activeTenant?.slug}
+            userEmail={user?.email}
+            userFullName={user?.fullName}
+            onPaymentSuccess={(verifyRes) => {
+              setShowSimulatorModal(false);
+              setPaymentSuccessData(verifyRes);
+              setCompanyName(activeTenant?.name || '');
+              setSetupStep('COMPANY_SETUP');
+            }}
+          />
+        )}
 
         <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
           &copy; {new Date().getFullYear()} Kalpak Solutions Inc. All rights reserved.

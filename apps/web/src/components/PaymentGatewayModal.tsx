@@ -99,7 +99,10 @@ export function PaymentGatewayModal({
         }),
       });
 
-      const orderId = orderRes.orderId;
+      const orderId = orderRes?.orderId || (orderRes as any)?.data?.orderId;
+      if (!orderId) {
+        throw new Error('Could not generate Order ID from payment service.');
+      }
 
       await new Promise((resolve) => setTimeout(resolve, 800));
       setSimulationState('AUTHORIZING');
