@@ -74,6 +74,13 @@ export function buildTenantSubdomainUrl(subdomain: string, path = '/'): string {
   const hostParts = host.split(':');
   const hostname = hostParts[0] || '';
 
+  // Render's shared staging domain (*.onrender.com) does not support wildcard customer subdomains
+  // (e.g. dfjkerf.onrender.com will fail with 404 Not Found from Render's edge router).
+  // When browsing on kalpak-web.onrender.com, stay on kalpak-web.onrender.com.
+  if (hostname.endsWith('.onrender.com')) {
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+
   let targetHost = '';
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
     targetHost = `${subdomain}.localhost${port ? `:${port}` : ''}`;
