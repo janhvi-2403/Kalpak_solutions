@@ -273,60 +273,6 @@ export function LoginForm() {
               <span>Sign In to Workspace</span>
               <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
-
-            {/* Quick Demo & Test Presets */}
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Quick Test Accounts (Click to Fill)
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('tech@acme.com');
-                    setPassword('DeptHead123!');
-                    setTenantSlug('acme-corp');
-                    setError(null);
-                  }}
-                  className="px-2 py-1.5 rounded-lg border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 text-blue-900 text-left transition-all"
-                >
-                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
-                    <span>🔧 Field Tech</span>
-                  </div>
-                  <div className="text-[10px] text-blue-600 truncate mt-0.5">tech@acme.com</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('depthead@acme.com');
-                    setPassword('DeptHead123!');
-                    setTenantSlug('acme-corp');
-                    setError(null);
-                  }}
-                  className="px-2 py-1.5 rounded-lg border border-purple-200 bg-purple-50/50 hover:bg-purple-100/60 text-purple-900 text-left transition-all"
-                >
-                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
-                    <span>⚡ Dept Head</span>
-                  </div>
-                  <div className="text-[10px] text-purple-600 truncate mt-0.5">depthead@acme.com</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('clientadmin@acme.com');
-                    setPassword('AcmeAdmin123!');
-                    setTenantSlug('acme-corp');
-                    setError(null);
-                  }}
-                  className="px-2 py-1.5 rounded-lg border border-orange-200 bg-orange-50/50 hover:bg-orange-100/60 text-orange-900 text-left transition-all"
-                >
-                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
-                    <span>🏢 Client Admin</span>
-                  </div>
-                  <div className="text-[10px] text-orange-600 truncate mt-0.5">clientadmin@acme.com</div>
-                </button>
-              </div>
-            </div>
           </form>
         ) : (
           /* Step 2: Inline MFA Verification Challenge */
