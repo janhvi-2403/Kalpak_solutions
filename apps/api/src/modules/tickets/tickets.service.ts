@@ -258,7 +258,7 @@ export class TicketsService {
 
     await this.notificationsService.dispatchTicketCreated({
       tenantId,
-      ticket,
+      ticket: ticket as any,
       actorUserId,
       customerEmail,
       customerPhone,
@@ -272,7 +272,7 @@ export class TicketsService {
       if (tech) {
         await this.notificationsService.dispatchTicketAssigned({
           tenantId,
-          ticket,
+          ticket: ticket as any,
           technician: {
             id: tech.id,
             fullName: tech.fullName,
@@ -401,7 +401,7 @@ export class TicketsService {
     });
     if (!ticket) throw new NotFoundException(`Ticket not found`);
 
-    const allowed = VALID_TRANSITIONS[ticket.status];
+    const allowed = VALID_TRANSITIONS[ticket.status] ?? [];
     if (!allowed.includes(dto.status as TicketStatus)) {
       throw new BadRequestException(
         `Cannot transition ticket from ${ticket.status} to ${dto.status}. Allowed: [${allowed.join(', ')}]`,

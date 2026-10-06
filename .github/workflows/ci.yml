@@ -44,6 +44,9 @@ jobs:
       - name: Run unit & integration tests
         run: pnpm run test
 
+      - name: Build internal packages
+        run: pnpm --filter "./packages/*" run build
+
       - name: Build API backend
         run: pnpm --filter @kalpak/api run build
 
