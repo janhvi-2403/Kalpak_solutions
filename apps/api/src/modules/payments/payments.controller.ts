@@ -82,6 +82,28 @@ export class PaymentsController {
     return this.paymentsService.getCurrentSubscription(resolvedTenantId);
   }
 
+  @Get('my-subscription')
+  @ApiCookieAuth('kalpak_session')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get active subscription summary for current tenant' })
+  @ApiResponse({ status: 200, description: 'Current subscription details' })
+  async getMySubscription(@CurrentTenant('id') tenantId: any) {
+    const resolvedTenantId = typeof tenantId === 'object' && tenantId !== null ? tenantId.tenantId || tenantId.id : String(tenantId || '');
+    const current = await this.paymentsService.getCurrentSubscription(resolvedTenantId);
+    return {
+      ...current,
+      subscription: current.currentPlan
+        ? {
+            id: current.currentPlan.plan,
+            plan: current.currentPlan.plan,
+            billingCycle: 'ANNUAL',
+            status: current.currentPlan.status,
+            endsAt: current.currentPlan.startsAt || new Date(Date.now() + 365 * 86400000).toISOString(),
+          }
+        : null,
+    };
+  }
+
   @Get('invoices/:id')
   @ApiCookieAuth('kalpak_session')
   @ApiBearerAuth()

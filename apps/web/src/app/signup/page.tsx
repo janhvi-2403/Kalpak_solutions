@@ -2,16 +2,19 @@
 
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { Button, Input, PasswordInput, Alert } from '@/components/ui';
 import { ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
+import { PaymentGatewayModal } from '@/components/PaymentGatewayModal';
 
 function SignupContent() {
-  const searchParams = useSearchParams();
   const { refetchSession } = useAuth();
+
+  // Registration Flow Stages: FORM -> PAYMENT_GATEWAY -> DASHBOARD
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [registeredOrg, setRegisteredOrg] = useState<{ name: string; slug: string; adminEmail: string; adminName: string } | null>(null);
 
   // Organization Fields
   const [companyName, setCompanyName] = useState('');
@@ -146,10 +149,14 @@ function SignupContent() {
       // Refresh auth state with newly issued session
       await refetchSession();
 
-      // Route new administrator to the subscription checkout flow
-      const returnUrl = searchParams.get('returnUrl') || '/checkout/starter';
-      
-      window.location.href = returnUrl;
+      // Trigger Payment Gateway Simulation Stage immediately on user registration
+      setRegisteredOrg({
+        name: companyName.trim(),
+        slug: slug.trim().toLowerCase(),
+        adminEmail: email.trim().toLowerCase(),
+        adminName: fullName.trim(),
+      });
+      setShowPaymentModal(true);
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         const res = err.errorResponse;
@@ -445,6 +452,26 @@ function SignupContent() {
           </div>
         </div>
       </div>
+
+      {/* Interactive Payment Gateway Simulation Stage Modal */}
+      {showPaymentModal && registeredOrg && (
+        <PaymentGatewayModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            window.location.href = '/dashboard';
+          }}
+          plan="STARTER"
+          billingCycle="MONTHLY"
+          tenantName={registeredOrg.name}
+          tenantSlug={registeredOrg.slug}
+          userEmail={registeredOrg.adminEmail}
+          userFullName={registeredOrg.adminName}
+          onPaymentSuccess={() => {
+            window.location.href = '/dashboard';
+          }}
+        />
+      )}
     </main>
   );
 }

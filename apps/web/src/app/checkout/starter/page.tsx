@@ -29,6 +29,7 @@ import {
   BillingCycle,
 } from '@kalpak/types';
 import { KALPAK_LOGO_DATA_URL } from '@/lib/kalpak-logo-base64';
+import { PaymentGatewayModal } from '@/components/PaymentGatewayModal';
 
 declare global {
   interface Window {
@@ -51,6 +52,7 @@ export default function StarterCheckoutPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentSuccessData, setPaymentSuccessData] = useState<VerifyPaymentResponse | null>(null);
+  const [showSimulatorModal, setShowSimulatorModal] = useState(false);
 
   // Basic Company Setup State
   const [setupStep, setSetupStep] = useState<'CHECKOUT' | 'COMPANY_SETUP'>('CHECKOUT');
@@ -696,6 +698,33 @@ export default function StarterCheckoutPage() {
           </div>
         )}
 
+        {/* Instant Interactive Payment Gateway Simulator Banner */}
+        <div className="mb-8 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-orange-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-white text-orange-600">
+                Live Test & Sandbox Mode
+              </span>
+              <span className="text-xs font-bold text-white/90">Zero Real Money Deducted</span>
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-white">
+              Instant Payment Gateway Simulation
+            </h3>
+            <p className="text-xs text-white/80 max-w-xl">
+              Experience the complete NPCI UPI QR / Card authorization, cryptographic signature verification, and instant Starter plan activation.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowSimulatorModal(true)}
+            className="w-full sm:w-auto px-6 py-3 bg-white text-slate-950 hover:bg-slate-50 font-black text-xs rounded-xl shadow-md transition-all shrink-0 flex items-center justify-center gap-2 hover:scale-105 active:scale-95"
+          >
+            <Zap className="w-4 h-4 text-orange-600 fill-orange-600" />
+            <span>Launch Live Simulator Now</span>
+          </button>
+        </div>
+
         <form onSubmit={handleProceedToPayment} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Plan Details & Billing Form (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
@@ -970,7 +999,7 @@ export default function StarterCheckoutPage() {
               </div>
 
               {/* Proceed to Payment Button */}
-              <div className="mt-6">
+              <div className="mt-6 space-y-2.5">
                 <Button
                   type="submit"
                   variant="primary"
@@ -989,6 +1018,16 @@ export default function StarterCheckoutPage() {
                       Proceed to Payment (₹{totalPayable.toLocaleString('en-IN')})
                     </span>
                   )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowSimulatorModal(true)}
+                  className="w-full justify-center py-3 font-black text-xs border-orange-200 text-orange-700 bg-orange-50/60 hover:bg-orange-100/80 shadow-xs flex items-center gap-2"
+                >
+                  <Zap className="w-3.5 h-3.5 text-orange-600 fill-orange-600" />
+                  <span>⚡ Instant Gateway Simulator (Test Mode)</span>
                 </Button>
               </div>
 
@@ -1019,6 +1058,26 @@ export default function StarterCheckoutPage() {
           </div>
         </form>
       </main>
+
+      {/* Payment Gateway Simulator Modal */}
+      {showSimulatorModal && (
+        <PaymentGatewayModal
+          isOpen={showSimulatorModal}
+          onClose={() => setShowSimulatorModal(false)}
+          plan="STARTER"
+          billingCycle={billingCycle}
+          tenantName={activeTenant?.name}
+          tenantSlug={activeTenant?.slug}
+          userEmail={user?.email}
+          userFullName={user?.fullName}
+          onPaymentSuccess={(verifyRes) => {
+            setShowSimulatorModal(false);
+            setPaymentSuccessData(verifyRes);
+            setCompanyName(activeTenant?.name || '');
+            setSetupStep('COMPANY_SETUP');
+          }}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
