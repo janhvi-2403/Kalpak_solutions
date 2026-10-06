@@ -10,11 +10,13 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter @kalpak/api run build
-    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && node apps/api/dist/main
+    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter @kalpak/api run build
+    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && pnpm --filter @kalpak/api run start
     healthCheckPath: /health
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: 22
       - key: NODE_ENV
         value: production
       - key: APP_NAME
@@ -50,10 +52,12 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: pnpm install && pnpm --filter @kalpak/web run build
+    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/web run build
     startCommand: pnpm --filter @kalpak/web run start
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: 22
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_APP_ENV
