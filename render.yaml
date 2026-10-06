@@ -50,7 +50,7 @@ services:
       - key: WEB_BASE_URL
         value: https://kalpaksolutions.com
       - key: API_BASE_URL
-        value: https://api.kalpaksolutions.com
+        value: https://kalpak-api.onrender.com
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
@@ -79,7 +79,7 @@ services:
       - key: APP_BASE_DOMAIN
         value: kalpaksolutions.com
       - key: API_BASE_URL
-        value: https://api.kalpaksolutions.com
+        value: https://kalpak-api.onrender.com
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PostgreSQL Managed Database
