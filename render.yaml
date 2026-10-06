@@ -1,0 +1,76 @@
+# Render Blueprint for Kalpak Solutions SaaS Platform
+# Learn more: https://render.com/docs/blueprint-spec
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # NestJS Backend API Service
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: kalpak-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter @kalpak/api run build
+    startCommand: npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma && node apps/api/dist/main
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_NAME
+        value: kalpak-saas-platform
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kalpak-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRY
+        value: 7d
+      - key: APP_BASE_DOMAIN
+        value: onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: "*"
+      - key: SUPPORT_EMAIL
+        value: support@kalpak.solutions
+      - key: EMAIL_INBOUND_PROVIDER
+        value: cloudmailin
+      - key: EMAIL_OUTBOUND_PROVIDER
+        value: smtp
+      - key: CLOUDMAILIN_FORWARD_TARGET
+        value: support@kalpak.solutions
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Next.js 15 Frontend Web Service
+  # ─────────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: kalpak-web
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install && pnpm --filter @kalpak/web run build
+    startCommand: pnpm --filter @kalpak/web run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_APP_ENV
+        value: production
+      - key: API_BASE_URL
+        fromService:
+          type: web
+          name: kalpak-api
+          property: host
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PostgreSQL Managed Database
+# ─────────────────────────────────────────────────────────────────────────────
+databases:
+  - name: kalpak-db
+    databaseName: kalpak_saas
+    user: kalpak_user
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"

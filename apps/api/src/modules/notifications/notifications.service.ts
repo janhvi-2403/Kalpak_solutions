@@ -161,7 +161,7 @@ export class NotificationsService {
       priority: string;
       raisedForCustomer?: { id: string; companyName: string } | null;
     };
-    actorUserId: string;
+    actorUserId?: string | null;
     customerEmail?: string | null;
     customerPhone?: string | null;
   }) {
@@ -169,17 +169,19 @@ export class NotificationsService {
     const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
     const ticketLink = `${webBase}/dashboard/tickets/${ticket.id}`;
 
-    // 1. In-App Notification to ticket creator
-    await this.createNotification({
-      tenantId,
-      userId: actorUserId,
-      type: NotificationType.TICKET_CREATED,
-      channel: NotificationDeliveryChannel.IN_APP,
-      title: `Ticket Created: ${ticket.ticketNumber}`,
-      message: `Your ticket "${ticket.title}" (${ticket.priority} priority) has been successfully logged.`,
-      link: ticketLink,
-      metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, priority: ticket.priority },
-    });
+    // 1. In-App Notification to ticket creator (if registered user)
+    if (actorUserId) {
+      await this.createNotification({
+        tenantId,
+        userId: actorUserId,
+        type: NotificationType.TICKET_CREATED,
+        channel: NotificationDeliveryChannel.IN_APP,
+        title: `Ticket Created: ${ticket.ticketNumber}`,
+        message: `Your ticket "${ticket.title}" (${ticket.priority} priority) has been successfully logged.`,
+        link: ticketLink,
+        metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, priority: ticket.priority },
+      });
+    }
 
     // 2. Tenant Policy check for outbound channels
     const policy = await this.prisma.tenantPolicy.findUnique({ where: { tenantId } });
@@ -188,6 +190,8 @@ export class NotificationsService {
     // 3. Outbound Email
     if (customerEmail && (notificationChannels === 'EMAIL' || notificationChannels === 'BOTH')) {
       await this.emailAdapter.send({
+        tenantId,
+        ticketId: ticket.id,
         to: customerEmail,
         subject: `[${ticket.ticketNumber}] Service Request Acknowledged: ${ticket.title}`,
         template: 'TICKET_CREATED',
@@ -261,6 +265,8 @@ export class NotificationsService {
     // 3. Outbound Email to Technician
     if (technician.email && (notificationChannels === 'EMAIL' || notificationChannels === 'BOTH')) {
       await this.emailAdapter.send({
+        tenantId,
+        ticketId: ticket.id,
         to: technician.email,
         recipientName: technician.fullName,
         subject: `Assignment: [${ticket.ticketNumber}] ${ticket.title}`,
@@ -349,6 +355,8 @@ export class NotificationsService {
     // 3. Email dispatch to customer if applicable
     if (customerEmail && (notificationChannels === 'EMAIL' || notificationChannels === 'BOTH')) {
       await this.emailAdapter.send({
+        tenantId,
+        ticketId: ticket.id,
         to: customerEmail,
         subject: `Update on [${ticket.ticketNumber}]: Status is now ${newStatus}`,
         template: 'STATUS_CHANGED',
@@ -423,6 +431,8 @@ export class NotificationsService {
 
     if (ticket.assignedTo?.email && (notificationChannels === 'EMAIL' || notificationChannels === 'BOTH')) {
       await this.emailAdapter.send({
+        tenantId,
+        ticketId: ticket.id,
         to: ticket.assignedTo.email,
         recipientName: ticket.assignedTo.fullName,
         subject: `URGENT: SLA Overdue Breach on [${ticket.ticketNumber}]`,

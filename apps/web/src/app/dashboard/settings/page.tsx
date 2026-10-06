@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import {
   ShieldCheck,
@@ -10,6 +11,7 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  Mail,
 } from 'lucide-react';
 import {
   Button,
@@ -138,6 +140,24 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500 mt-1">
           Configure business scope, assignment strategy, tolerable open period thresholds, and ticket closure permissions.
         </p>
+      </div>
+
+      {/* Settings Sub-Navigation Tabs */}
+      <div className="flex border-b border-slate-200 text-sm font-semibold">
+        <Link
+          href="/dashboard/settings"
+          className="px-4 py-2.5 text-orange-600 border-b-2 border-orange-600 transition-colors flex items-center gap-2"
+        >
+          <Settings className="w-4 h-4" />
+          Policy & SLAs
+        </Link>
+        <Link
+          href="/dashboard/settings/email-configuration"
+          className="px-4 py-2.5 text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition-colors flex items-center gap-2"
+        >
+          <Mail className="w-4 h-4" />
+          Email Configuration
+        </Link>
       </div>
 
       {/* Feedback Alert */}

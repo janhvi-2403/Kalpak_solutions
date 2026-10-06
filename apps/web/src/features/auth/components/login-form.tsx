@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import {
   Button,
@@ -19,15 +20,24 @@ import { useAuth } from '@/lib/auth-context';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
 export function LoginForm() {
-  const { refetchSession } = useAuth();
+  const { refetchSession, subdomainSlug, subdomainTenant } = useAuth();
+  const searchParams = useSearchParams();
 
   // Login form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantSlug, setTenantSlug] = useState('');
+  const [tenantSlug, setTenantSlug] = useState(subdomainSlug || '');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sync subdomain slug if loaded asynchronously
+  React.useEffect(() => {
+    if (subdomainSlug && !tenantSlug) {
+      setTenantSlug(subdomainSlug);
+    }
+  }, [subdomainSlug, tenantSlug]);
+
 
   // Inline MFA Challenge state
   const [isMfaStep, setIsMfaStep] = useState(false);
@@ -73,11 +83,18 @@ export function LoginForm() {
       }
 
       // Refresh session state and route according to role
-      await refetchSession();
+      const freshSession = await refetchSession();
+      const userRole = freshSession?.activeRole;
       if (response.user?.isSuperAdmin) {
         window.location.href = '/super-admin/dashboard';
       } else {
-        window.location.href = '/dashboard';
+        let defaultDest = '/dashboard';
+        if (userRole === 'DEPARTMENT_ADMIN') defaultDest = '/dashboard/department';
+        if (userRole === 'SUPPORT_EMPLOYEE') defaultDest = '/dashboard/employee';
+        const dest =
+          searchParams?.get('returnUrl') ||
+          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
+        window.location.href = dest;
       }
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -106,7 +123,10 @@ export function LoginForm() {
       if (cachedUser?.isSuperAdmin) {
         window.location.href = '/super-admin/dashboard';
       } else {
-        window.location.href = '/dashboard';
+        const dest =
+          searchParams?.get('returnUrl') ||
+          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : '/dashboard');
+        window.location.href = dest;
       }
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -149,9 +169,19 @@ export function LoginForm() {
 
           {!isMfaStep ? (
             <>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Sign In to Platform</h1>
+              {subdomainSlug ? (
+                <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-800 border border-orange-200 text-xs font-bold tracking-wide">
+                  <Building2 className="w-3.5 h-3.5 text-orange-600" />
+                  <span>Signing in to {subdomainTenant?.name || subdomainSlug}</span>
+                </div>
+              ) : null}
+              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                {subdomainTenant ? `${subdomainTenant.name} Portal` : 'Sign In to Platform'}
+              </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Enter your credentials to access your service management workspace.
+                {subdomainTenant
+                  ? 'Enter your credentials to access your organization workspace.'
+                  : 'Enter your credentials to access your service management workspace.'}
               </p>
             </>
           ) : (
@@ -201,17 +231,20 @@ export function LoginForm() {
               placeholder="••••••••••••"
             />
 
-            <div className="pt-1">
-              <Input
-                id="login-tenant"
-                type="text"
-                label="Organization Slug (Optional)"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                placeholder="e.g. acme-corp"
-                helperText="Leave empty for Super Admin or default workspace"
-              />
-            </div>
+            {!subdomainSlug ? (
+              <div className="pt-1">
+                <Input
+                  id="login-tenant"
+                  type="text"
+                  label="Organization Slug (Optional)"
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  placeholder="e.g. acme-corp"
+                  helperText="Leave empty for Super Admin or default workspace"
+                />
+              </div>
+            ) : null}
+
 
             <div className="flex items-center justify-between pt-1 text-sm">
               <Checkbox
@@ -236,6 +269,60 @@ export function LoginForm() {
               <span>Sign In to Workspace</span>
               <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
+
+            {/* Quick Demo & Test Presets */}
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Quick Test Accounts (Click to Fill)
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('tech@acme.com');
+                    setPassword('DeptHead123!');
+                    setTenantSlug('acme-corp');
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 rounded-lg border border-blue-200 bg-blue-50/50 hover:bg-blue-100/60 text-blue-900 text-left transition-all"
+                >
+                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                    <span>🔧 Field Tech</span>
+                  </div>
+                  <div className="text-[10px] text-blue-600 truncate mt-0.5">tech@acme.com</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('depthead@acme.com');
+                    setPassword('DeptHead123!');
+                    setTenantSlug('acme-corp');
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 rounded-lg border border-purple-200 bg-purple-50/50 hover:bg-purple-100/60 text-purple-900 text-left transition-all"
+                >
+                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                    <span>⚡ Dept Head</span>
+                  </div>
+                  <div className="text-[10px] text-purple-600 truncate mt-0.5">depthead@acme.com</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('clientadmin@acme.com');
+                    setPassword('AcmeAdmin123!');
+                    setTenantSlug('acme-corp');
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 rounded-lg border border-orange-200 bg-orange-50/50 hover:bg-orange-100/60 text-orange-900 text-left transition-all"
+                >
+                  <div className="text-xs font-bold leading-tight flex items-center gap-1">
+                    <span>🏢 Client Admin</span>
+                  </div>
+                  <div className="text-[10px] text-orange-600 truncate mt-0.5">clientadmin@acme.com</div>
+                </button>
+              </div>
+            </div>
           </form>
         ) : (
           /* Step 2: Inline MFA Verification Challenge */

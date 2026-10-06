@@ -25,13 +25,18 @@ import {
   BarChart3,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 import { RotatingAnnouncementBar } from '@/components/RotatingAnnouncementBar';
+import { useAuth } from '@/lib/auth-context';
 
 export default function HomePage() {
+  const { user, logout } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const starterCheckoutUrl = '/signup?plan=starter&returnUrl=/checkout/starter';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-orange-500 selection:text-white">
@@ -79,20 +84,42 @@ export default function HomePage() {
             </nav>
 
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-              <Link
-                href="/login"
-                className="hidden sm:inline-block whitespace-nowrap text-xs sm:text-sm font-bold text-slate-800 hover:text-orange-600 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg hover:bg-orange-50 transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/signup"
-                className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-700 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-500/25 hover:shadow-lg hover:shadow-orange-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all border border-orange-400/40 shrink-0"
-              >
-                <span className="hidden sm:inline">Start 14-Day Free Trial</span>
-                <span className="sm:hidden">Free Trial</span>
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all"
+                  >
+                    <span>Dashboard</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition-all"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Log Out</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="hidden sm:inline-block whitespace-nowrap text-xs sm:text-sm font-bold text-slate-800 hover:text-orange-600 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg hover:bg-orange-50 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href={starterCheckoutUrl}
+                    className="whitespace-nowrap inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-700 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl shadow-md shadow-orange-500/25 hover:shadow-lg hover:shadow-orange-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all border border-orange-400/40 shrink-0"
+                  >
+                    <span className="hidden sm:inline">Start 14-Day Free Trial</span>
+                    <span className="sm:hidden">Free Trial</span>
+                    <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 
@@ -150,20 +177,44 @@ export default function HomePage() {
                 </a>
               </nav>
               <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-                <Link
-                  href="/signup"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-full text-center py-2.5 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 shadow-md"
-                >
-                  Start 14-Day Free Trial
-                </Link>
-                <Link
-                  href="/login"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="w-full text-center py-2 text-sm font-semibold text-slate-700 hover:text-orange-600"
-                >
-                  Sign In
-                </Link>
+                {user ? (
+                  <>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full text-center py-2.5 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 shadow-md"
+                    >
+                      Open Organization Dashboard &rarr;
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-center py-2 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl"
+                    >
+                      Log Out ({user.email})
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href={starterCheckoutUrl}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full text-center py-2.5 rounded-xl font-extrabold text-sm text-white bg-gradient-to-r from-orange-500 to-amber-600 shadow-md"
+                    >
+                      Start 14-Day Free Trial
+                    </Link>
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full text-center py-2 text-sm font-semibold text-slate-700 hover:text-orange-600"
+                    >
+                      Sign In
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -195,7 +246,7 @@ export default function HomePage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
             <Link
-              href="/signup"
+              href={starterCheckoutUrl}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold text-white text-base bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md hover:shadow-lg transition-all"
             >
               <span>Start 14-Day Free Trial</span>
@@ -599,22 +650,20 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setBillingCycle('monthly')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                  billingCycle === 'monthly'
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${billingCycle === 'monthly'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
+                  }`}
               >
                 Monthly Billing
               </button>
               <button
                 type="button"
                 onClick={() => setBillingCycle('annual')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center gap-1.5 sm:gap-2 ${
-                  billingCycle === 'annual'
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center gap-1.5 sm:gap-2 ${billingCycle === 'annual'
                     ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
+                  }`}
               >
                 <span>Annual Billing</span>
                 <span className="text-[10px] sm:text-[11px] bg-white/20 text-white font-bold px-1.5 sm:px-2 py-0.5 rounded-full">
@@ -669,8 +718,8 @@ export default function HomePage() {
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     {billingCycle === 'annual'
-                      ? 'Billed annually (₹28,788/yr) • 14-Day Free Trial'
-                      : 'Billed monthly • 14-Day Free Trial'}
+                      ? 'Billed annually (₹28,788/yr)'
+                      : 'Billed monthly'}
                   </p>
                 </div>
 
@@ -713,14 +762,14 @@ export default function HomePage() {
 
               <div className="mt-8 pt-4">
                 <Link
-                  href="/signup?plan=starter"
-                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 hover:border-slate-400 transition-colors shadow-xs"
+                  href={starterCheckoutUrl}
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-slate-900 bg-white border border-slate-300 hover:bg-slate-100 hover:border-orange-400 hover:text-orange-600 transition-all shadow-xs"
                 >
-                  <span>Start 14-Day Free Trial</span>
+                  <span>Buy Now</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <p className="text-[11px] text-center text-slate-500 mt-2">
-                  No credit card required for 14 days
+                  Instant activation • Get started in minutes
                 </p>
               </div>
             </div>
@@ -826,7 +875,7 @@ export default function HomePage() {
                   href="/signup?plan=professional"
                   className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-bold text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md hover:shadow-lg transition-all"
                 >
-                  <span>Start 14-Day Free Trial</span>
+                  <span>Start Trial</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <p className="text-[11px] text-center text-slate-500 mt-2">
@@ -926,14 +975,15 @@ export default function HomePage() {
 
               <div className="mt-8 pt-4">
                 <Link
-                  href="/signup?plan=enterprise"
-                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 hover:border-slate-400 transition-colors shadow-xs"
+                  href="#contact"
+                  className="w-full inline-flex items-center justify-center gap-2.5 py-3.5 px-5 rounded-xl font-bold text-white bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-orange-600 hover:to-amber-600 border border-slate-700/80 hover:border-orange-500 shadow-md hover:shadow-xl hover:shadow-orange-500/20 transition-all duration-300 group"
                 >
-                  <span>Start 14-Day Free Trial</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <Mail className="w-4 h-4 text-orange-400 group-hover:text-white transition-colors shrink-0" />
+                  <span>Contact Us</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
                 </Link>
                 <p className="text-[11px] text-center text-slate-500 mt-2">
-                  Includes custom proof-of-concept setup
+                  Talk to our solutions team • Custom deployment
                 </p>
               </div>
             </div>

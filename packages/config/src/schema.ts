@@ -7,6 +7,7 @@ export const envSchema = z.object({
   WEB_PORT: z.coerce.number().int().positive().default(3000),
   API_BASE_URL: z.string().url().default('http://localhost:4000'),
   WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
+  APP_BASE_DOMAIN: z.string().default('localhost'),
 
   // PostgreSQL Connection
   DATABASE_URL: z
@@ -71,6 +72,30 @@ export const envSchema = z.object({
     .string()
     .default('http://localhost:3000,http://127.0.0.1:3000')
     .transform((val) => val.split(',').map((origin) => origin.trim())),
+
+  // Razorpay Gateway Configuration
+  RAZORPAY_KEY_ID: z.string().default('rzp_test_kalpak_mock_key_id'),
+  RAZORPAY_KEY_SECRET: z.string().default('dev_razorpay_mock_secret_key_12345'),
+  RAZORPAY_WEBHOOK_SECRET: z.string().default('dev_razorpay_mock_webhook_secret_12345'),
+
+  // Inbound Email Integration Configuration
+  EMAIL_PROVIDER: z.enum(['gmail', 'resend', 'mailgun', 'postmark', 'sendgrid', 'generic', 'cloudmailin']).default('gmail'),
+  EMAIL_PROVIDER_API_KEY: z.string().optional().default(''),
+  EMAIL_WEBHOOK_SECRET: z.string().default('dev_inbound_email_webhook_secret_key_2026'),
+  EMAIL_INBOUND_DOMAIN: z.string().default('inbound.kalpak.com'),
+  EMAIL_WEBHOOK_BASE_URL: z.string().default('http://localhost:4000'),
+
+  // CloudMailin Inbound Integration Configuration
+  CLOUDMAILIN_USERNAME: z.string().optional().default(''),
+  CLOUDMAILIN_PASSWORD: z.string().optional().default(''),
+  CLOUDMAILIN_SECRET: z.string().optional().default(''),
+  CLOUDMAILIN_DEFAULT_TENANT_SLUG: z.string().optional().default(''),
+
+  // Google OAuth 2.0 & Gmail Integration
+  GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+  GOOGLE_REDIRECT_URI: z.string().optional().default('http://localhost:4000/api/v1/email-integration/gmail/oauth/callback'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
+

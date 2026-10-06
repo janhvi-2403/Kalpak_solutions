@@ -21,19 +21,27 @@ model Tenant {
   assets                  CustomerAsset[]
   customers               Customer[]
   departments             Department[]
+  emailConfiguration      EmailConfiguration?
+  emailConnection         EmailConnection?
+  emailMessages           EmailMessage[]
   employees               EmployeeProfile[]
+  inboundEmails           InboundEmail[]
   inventoryTransactions   InventoryTransaction[]
   invitations             Invitation[]
   notifications           Notification[]
   partInventory           PartInventory[]
+  paymentTransactions     PaymentTransaction[]
   pmSchedules             PreventiveMaintenanceSchedule[]
   products                Product[]
   roles                   Role[]
+  serviceCatalogs         ServiceCatalog[]
   serviceContracts        ServiceContract[]
   tickets                 ServiceTicket[]
   sessions                Session[]
   spareParts              SparePart[]
   storageLocations        StorageLocation[]
+  subscriptions           Subscription[]
+  supportEmails           SupportEmail[]
   memberships             TenantMembership[]
   policy                  TenantPolicy?
   ticketAssignments       TicketAssignment[]
@@ -64,19 +72,22 @@ model User {
   deletedAt             DateTime?                @map("deleted_at") @db.Timestamptz(6)
   emailVerified         Boolean                  @default(false) @map("email_verified")
   emailVerifiedAt       DateTime?                @map("email_verified_at") @db.Timestamptz(6)
-  bootstrapRecord       SystemBootstrap?         @relation("SuperAdminBootstrap")
   auditEvents           AuditEvent[]
   customerAccount       Customer?                @relation("CustomerUser")
   headedDepartments     Department[]             @relation("DepartmentHead")
+  pocDepartments        Department[]             @relation("DepartmentPoc")
   verificationTokens    EmailVerificationToken[]
   employeeProfile       EmployeeProfile?
   inventoryTransactions InventoryTransaction[]   @relation("InventoryTransactionUser")
   sentInvitations       Invitation[]             @relation("InvitedByUser")
   notifications         Notification[]
   resetTokens           PasswordResetToken[]
+  paymentTransactions   PaymentTransaction[]     @relation("UserPaymentTransactions")
   assignedTickets       ServiceTicket[]          @relation("TicketAssignedTo")
+  closedTickets         ServiceTicket[]          @relation("TicketClosedBy")
   raisedTickets         ServiceTicket[]          @relation("TicketRaisedBy")
   sessions              Session[]
+  bootstrapRecord       SystemBootstrap?         @relation("SuperAdminBootstrap")
   memberships           TenantMembership[]
   assignmentsGiven      TicketAssignment[]       @relation("AssignmentActor")
   assignmentsReceived   TicketAssignment[]       @relation("AssignmentTarget")
@@ -167,6 +178,8 @@ model Invitation {
   acceptedAt      DateTime? @map("accepted_at") @db.Timestamptz(6)
   revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  fullName        String?   @map("full_name") @db.VarChar(150)
+  phone           String?   @map("phone") @db.VarChar(30)
   invitedBy       User?     @relation("InvitedByUser", fields: [invitedByUserId], references: [id])
   role            Role      @relation(fields: [roleId], references: [id])
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -278,7 +291,13 @@ model Department {
   createdAt         DateTime                        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime                        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt         DateTime?                       @map("deleted_at") @db.Timestamptz(6)
+  isActive          Boolean                         @default(true) @map("is_active")
+  pocName           String?                         @map("poc_name") @db.VarChar(100)
+  pocEmail          String?                         @map("poc_email") @db.VarChar(255)
+  pocPhone          String?                         @map("poc_phone") @db.VarChar(30)
+  pocUserId         String?                         @map("poc_user_id") @db.Uuid
   headUser          User?                           @relation("DepartmentHead", fields: [headUserId], references: [id])
+  pocUser           User?                           @relation("DepartmentPoc", fields: [pocUserId], references: [id])
   tenant            Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employeeProfiles  EmployeeProfile[]
   pmSchedules       PreventiveMaintenanceSchedule[]
@@ -340,12 +359,32 @@ model Product {
   assets               CustomerAsset[]
   department           Department?     @relation(fields: [departmentId], references: [id])
   tenant               Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tickets              ServiceTicket[]
 
   @@unique([tenantId, modelNumber], name: "uq_product_tenant_model")
   @@index([tenantId], map: "idx_products_tenant_id")
   @@index([category], map: "idx_products_category")
   @@index([deletedAt], map: "idx_products_deleted_at")
   @@map("products")
+}
+
+model ServiceCatalog {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String          @map("tenant_id") @db.Uuid
+  name        String          @db.VarChar(150)
+  code        String          @db.VarChar(50)
+  description String?
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tickets     ServiceTicket[]
+
+  @@unique([tenantId, code], name: "uq_service_catalog_tenant_code")
+  @@index([tenantId], map: "idx_service_catalog_tenant_id")
+  @@index([deletedAt], map: "idx_service_catalog_deleted_at")
+  @@map("service_catalogs")
 }
 
 model CustomerAsset {
@@ -416,7 +455,7 @@ model ServiceTicket {
   departmentId        String?                        @map("department_id") @db.Uuid
   customerAssetId     String?                        @map("customer_asset_id") @db.Uuid
   isOverdue           Boolean                        @default(false) @map("is_overdue")
-  tolerableOpenDays   Int                            @default(3) @map("tolerable_open_days")
+  tolerableOpenDays   Int                            @default(5) @map("tolerable_open_days")
   dueAt               DateTime?                      @map("due_at") @db.Timestamptz(6)
   resolvedAt          DateTime?                      @map("resolved_at") @db.Timestamptz(6)
   closedAt            DateTime?                      @map("closed_at") @db.Timestamptz(6)
@@ -426,13 +465,23 @@ model ServiceTicket {
   contractId          String?                        @map("contract_id") @db.Uuid
   pmScheduleId        String?                        @map("pm_schedule_id") @db.Uuid
   serviceType         String                         @default("BREAKDOWN") @map("service_type") @db.VarChar(50)
+  closedByUserId      String?                        @map("closed_by_user_id") @db.Uuid
+  closureRemarks      String?                        @map("closure_remarks")
+  productId           String?                        @map("product_id") @db.Uuid
+  serviceCatalogId    String?                        @map("service_catalog_id") @db.Uuid
+  source              String                         @default("PORTAL") @map("source") @db.VarChar(30)
+  emailMessages       EmailMessage[]
+  inboundEmails       InboundEmail[]
   assignedTo          User?                          @relation("TicketAssignedTo", fields: [assignedToUserId], references: [id])
+  closedByUser        User?                          @relation("TicketClosedBy", fields: [closedByUserId], references: [id])
   contract            ServiceContract?               @relation(fields: [contractId], references: [id])
   customerAsset       CustomerAsset?                 @relation(fields: [customerAssetId], references: [id])
   department          Department?                    @relation(fields: [departmentId], references: [id])
   pmSchedule          PreventiveMaintenanceSchedule? @relation(fields: [pmScheduleId], references: [id])
+  product             Product?                       @relation(fields: [productId], references: [id])
   raisedByUser        User?                          @relation("TicketRaisedBy", fields: [raisedByUserId], references: [id])
   raisedForCustomer   Customer?                      @relation(fields: [raisedForCustomerId], references: [id])
+  serviceCatalog      ServiceCatalog?                @relation(fields: [serviceCatalogId], references: [id])
   tenant              Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments         TicketAssignment[]
   partConsumptions    TicketPartConsumption[]
@@ -794,6 +843,231 @@ model PreventiveMaintenanceSchedule {
   @@map("preventive_maintenance_schedules")
 }
 
+model SystemBootstrap {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  isCompleted   Boolean   @default(false) @map("is_completed")
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+  superAdminId  String?   @unique @map("super_admin_id") @db.Uuid
+  initializedIp String?   @map("initialized_ip") @db.VarChar(45)
+  bootstrapHash String?   @map("bootstrap_hash") @db.VarChar(64)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  superAdmin    User?     @relation("SuperAdminBootstrap", fields: [superAdminId], references: [id])
+
+  @@map("system_bootstrap")
+}
+
+model Subscription {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String             @map("tenant_id") @db.Uuid
+  plan             PlanTier           @default(STARTER)
+  billingCycle     BillingCycle       @default(ANNUAL) @map("billing_cycle")
+  status           SubscriptionStatus @default(PENDING_PAYMENT)
+  amount           Decimal            @db.Decimal(12, 2)
+  taxAmount        Decimal            @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  currency         String             @default("INR") @db.VarChar(10)
+  startsAt         DateTime           @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime           @map("ends_at") @db.Timestamptz(6)
+  gatewayOrderId   String?            @map("gateway_order_id") @db.VarChar(100)
+  gatewayPaymentId String?            @map("gateway_payment_id") @db.VarChar(100)
+  metadata         Json               @default("{}")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId], map: "idx_subscriptions_tenant_id")
+  @@index([status], map: "idx_subscriptions_status")
+  @@index([endsAt], map: "idx_subscriptions_ends_at")
+  @@map("subscriptions")
+}
+
+model PaymentTransaction {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String        @map("tenant_id") @db.Uuid
+  userId             String?       @map("user_id") @db.Uuid
+  orderId            String        @unique @map("order_id") @db.VarChar(100)
+  paymentId          String?       @unique @map("payment_id") @db.VarChar(100)
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("INR") @db.VarChar(10)
+  status             PaymentStatus @default(CREATED)
+  paymentMethod      String?       @map("payment_method") @db.VarChar(50)
+  plan               PlanTier      @default(STARTER)
+  billingCycle       BillingCycle  @default(ANNUAL) @map("billing_cycle")
+  signature          String?       @db.VarChar(255)
+  errorMessage       String?       @map("error_message")
+  rawGatewayResponse Json          @default("{}") @map("raw_gateway_response")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant             Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user               User?         @relation("UserPaymentTransactions", fields: [userId], references: [id])
+
+  @@index([tenantId], map: "idx_payments_tenant_id")
+  @@index([userId], map: "idx_payments_user_id")
+  @@index([status], map: "idx_payments_status")
+  @@index([orderId], map: "idx_payments_order_id")
+  @@map("payment_transactions")
+}
+
+model WebhookEvent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId   String   @unique @map("event_id") @db.VarChar(100)
+  event     String   @db.VarChar(100)
+  payload   Json     @default("{}")
+  status    String   @default("PROCESSED") @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([eventId], map: "idx_webhook_events_event_id")
+  @@index([createdAt], map: "idx_webhook_events_created_at")
+  @@map("webhook_events")
+}
+
+model EmailConfiguration {
+  id                        String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                  String                  @unique @map("tenant_id") @db.Uuid
+  supportEmail              String                  @map("support_email") @db.VarChar(255)
+  provider                  String                  @default("GMAIL") @db.VarChar(50)
+  providerAddress           String?                 @map("provider_address") @db.VarChar(255)
+  enabled                   Boolean                 @default(true)
+  autoCreateTicket          Boolean                 @default(true) @map("auto_create_ticket")
+  autoRoute                 Boolean                 @default(true) @map("auto_route")
+  status                    String                  @default("ACTIVE") @db.VarChar(50)
+  verificationToken         String?                 @map("verification_token") @db.VarChar(100)
+  verifiedAt                DateTime?               @map("verified_at") @db.Timestamptz(6)
+  createdAt                 DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customerRepliesEnabled    Boolean                 @default(true) @map("customer_replies_enabled")
+  defaultDepartmentId       String?                 @map("default_department_id") @db.Uuid
+  defaultPriority           TicketPriority          @default(MEDIUM) @map("default_priority")
+  notifyCustomerReply       Boolean                 @default(true) @map("notify_customer_reply")
+  notifyLongOpenTicket      Boolean                 @default(true) @map("notify_long_open_ticket")
+  notifyTicketAssigned      Boolean                 @default(true) @map("notify_ticket_assigned")
+  notifyTicketClosed        Boolean                 @default(true) @map("notify_ticket_closed")
+  notifyTicketCreated       Boolean                 @default(true) @map("notify_ticket_created")
+  notifyTicketResolved      Boolean                 @default(true) @map("notify_ticket_resolved")
+  notifyTicketStatusChanged Boolean                 @default(true) @map("notify_ticket_status_changed")
+  unknownCustomerPolicy     String                  @default("AUTO_CREATE") @map("unknown_customer_policy") @db.VarChar(50)
+  forwardingMethod          String                  @default("EMAIL_FORWARDING") @map("forwarding_method") @db.VarChar(50)
+  forwardingStatus          InboundForwardingStatus @default(WAITING_FOR_SETUP) @map("forwarding_status")
+  inboundAddress            String?                 @map("inbound_address") @db.VarChar(255)
+  lastTestedAt              DateTime?               @map("last_tested_at") @db.Timestamptz(6)
+  lastTestedMessage         String?                 @map("last_tested_message") @db.VarChar(500)
+  fromEmail                 String?                 @map("from_email") @db.VarChar(255)
+  lastOutboundTestedAt      DateTime?               @map("last_outbound_tested_at") @db.Timestamptz(6)
+  lastOutboundTestedMessage String?                 @map("last_outbound_tested_message") @db.VarChar(500)
+  outboundStatus            OutboundEmailStatus     @default(NOT_CONFIGURED) @map("outbound_status")
+  replyToEmail              String?                 @map("reply_to_email") @db.VarChar(255)
+  senderName                String?                 @map("sender_name") @db.VarChar(150)
+  tenant                    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId], map: "idx_email_configs_tenant_id")
+  @@index([supportEmail], map: "idx_email_configs_support_email")
+  @@index([providerAddress], map: "idx_email_configs_provider_address")
+  @@map("email_configurations")
+}
+
+model EmailConnection {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String                @unique @map("tenant_id") @db.Uuid
+  provider           String                @default("GMAIL") @db.VarChar(50)
+  emailAddress       String                @map("email_address") @db.VarChar(255)
+  encryptedTokenData String                @map("encrypted_token_data")
+  status             EmailConnectionStatus @default(DISCONNECTED)
+  lastSyncAt         DateTime?             @map("last_sync_at") @db.Timestamptz(6)
+  lastHistoryId      String?               @map("last_history_id") @db.VarChar(100)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant             Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId], map: "idx_email_connections_tenant_id")
+  @@index([emailAddress], map: "idx_email_connections_email_address")
+  @@index([status], map: "idx_email_connections_status")
+  @@map("email_connections")
+}
+
+model EmailMessage {
+  id                String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String                @map("tenant_id") @db.Uuid
+  ticketId          String?               @map("ticket_id") @db.Uuid
+  provider          String                @default("GMAIL") @db.VarChar(50)
+  providerMessageId String                @map("provider_message_id") @db.VarChar(255)
+  messageId         String?               @map("message_id") @db.VarChar(255)
+  inReplyTo         String?               @map("in_reply_to") @db.VarChar(255)
+  references        String?
+  fromEmail         String                @map("from_email") @db.VarChar(255)
+  toEmail           String                @map("to_email") @db.VarChar(255)
+  ccEmail           String?               @map("cc_email") @db.VarChar(255)
+  subject           String                @db.VarChar(500)
+  bodyText          String?               @map("body_text")
+  bodyHtml          String?               @map("body_html")
+  direction         EmailDirection        @default(INBOUND)
+  processingStatus  EmailProcessingStatus @default(PROCESSED) @map("processing_status")
+  receivedAt        DateTime              @default(now()) @map("received_at") @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket            ServiceTicket?        @relation(fields: [ticketId], references: [id])
+
+  @@unique([tenantId, providerMessageId], name: "uq_email_message_tenant_provider_msg")
+  @@index([tenantId], map: "idx_email_messages_tenant_id")
+  @@index([ticketId], map: "idx_email_messages_ticket_id")
+  @@index([providerMessageId], map: "idx_email_messages_provider_msg_id")
+  @@index([messageId], map: "idx_email_messages_message_id")
+  @@index([fromEmail], map: "idx_email_messages_from_email")
+  @@index([toEmail], map: "idx_email_messages_to_email")
+  @@index([direction], map: "idx_email_messages_direction")
+  @@index([processingStatus], map: "idx_email_messages_processing_status")
+  @@map("email_messages")
+}
+
+model InboundEmail {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String         @map("tenant_id") @db.Uuid
+  ticketId        String?        @map("ticket_id") @db.Uuid
+  provider        String         @db.VarChar(50)
+  providerEventId String?        @map("provider_event_id") @db.VarChar(255)
+  messageId       String         @map("message_id") @db.VarChar(255)
+  fromEmail       String         @map("from_email") @db.VarChar(255)
+  fromName        String?        @map("from_name") @db.VarChar(150)
+  toEmail         String         @map("to_email") @db.VarChar(255)
+  subject         String         @db.VarChar(500)
+  bodyText        String         @map("body_text")
+  bodyHtml        String?        @map("body_html")
+  inReplyTo       String?        @map("in_reply_to") @db.VarChar(255)
+  threadId        String?        @map("thread_id") @db.VarChar(255)
+  rawPayload      Json           @default("{}") @map("raw_payload")
+  receivedAt      DateTime       @default(now()) @map("received_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket          ServiceTicket? @relation(fields: [ticketId], references: [id])
+
+  @@unique([tenantId, messageId], name: "uq_inbound_email_tenant_message")
+  @@index([tenantId], map: "idx_inbound_emails_tenant_id")
+  @@index([ticketId], map: "idx_inbound_emails_ticket_id")
+  @@index([messageId], map: "idx_inbound_emails_message_id")
+  @@index([providerEventId], map: "idx_inbound_emails_provider_event_id")
+  @@index([fromEmail], map: "idx_inbound_emails_from_email")
+  @@map("inbound_emails")
+}
+
+model SupportEmail {
+  id                 String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String                         @map("tenant_id") @db.Uuid
+  email              String                         @db.VarChar(255)
+  displayName        String                         @map("display_name") @db.VarChar(150)
+  isDefault          Boolean                        @default(false) @map("is_default")
+  isActive           Boolean                        @default(true) @map("is_active")
+  verificationStatus SupportEmailVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?                      @map("verified_at") @db.Timestamptz(6)
+  createdAt          DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant             Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email], name: "uq_support_emails_tenant_email")
+  @@index([tenantId], map: "idx_support_emails_tenant_id")
+  @@index([email], map: "idx_support_emails_email")
+  @@map("support_emails")
+}
+
 enum TenantStatus {
   ACTIVE
   SUSPENDED
@@ -935,17 +1209,68 @@ enum PmFrequency {
   ANNUAL
 }
 
-model SystemBootstrap {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  isCompleted   Boolean   @default(false) @map("is_completed")
-  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
-  superAdminId  String?   @unique @map("super_admin_id") @db.Uuid
-  initializedIp String?   @map("initialized_ip") @db.VarChar(45)
-  bootstrapHash String?   @map("bootstrap_hash") @db.VarChar(64)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  superAdmin    User?     @relation("SuperAdminBootstrap", fields: [superAdminId], references: [id])
-
-  @@map("system_bootstrap")
+enum PlanTier {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
 }
 
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  TRIAL
+  PAST_DUE
+  PENDING_PAYMENT
+  FAILED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum InboundForwardingStatus {
+  WAITING_FOR_SETUP
+  CONNECTED
+  FAILED
+}
+
+enum OutboundEmailStatus {
+  NOT_CONFIGURED
+  CONNECTED
+  FAILED
+}
+
+enum EmailConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  EXPIRED
+}
+
+enum EmailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum EmailProcessingStatus {
+  PROCESSED
+  PENDING
+  FAILED
+  IGNORED
+}
+
+enum SupportEmailVerificationStatus {
+  PENDING
+  VERIFIED
+  UNVERIFIED
+}

@@ -6,13 +6,19 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DepartmentsService } from './departments.service';
-import { CreateDepartmentDto, UpdateDepartmentDto } from './dto/department.dto';
+import {
+  CreateDepartmentDto,
+  UpdateDepartmentDto,
+  DepartmentQueryDto,
+  ToggleDepartmentStatusDto,
+} from './dto/department.dto';
 import { CurrentUser } from '../../core/auth/current-user.decorator';
 import { CurrentTenant } from '../../core/tenant/current-tenant.decorator';
 import { UserPrincipal, TenantContext, PermissionCode } from '@kalpak/types';
@@ -29,14 +35,24 @@ export class DepartmentsController {
 
   @Get()
   @RequirePermissions(PermissionCode.TENANT_READ)
-  @ApiOperation({ summary: 'List all active departments for the current organization' })
-  async listDepartments(@CurrentTenant() tenantCtx: TenantContext) {
-    return this.departmentsService.listDepartments(tenantCtx.tenantId);
+  @ApiOperation({ summary: 'List all departments for the current organization with filters' })
+  async listDepartments(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Query() query: DepartmentQueryDto
+  ) {
+    return this.departmentsService.listDepartments(tenantCtx.tenantId, query);
+  }
+
+  @Get('eligible-users')
+  @RequirePermissions(PermissionCode.TENANT_READ)
+  @ApiOperation({ summary: 'List eligible organization members for Department Head and POC assignment' })
+  async getEligibleUsers(@CurrentTenant() tenantCtx: TenantContext) {
+    return this.departmentsService.getEligibleUsers(tenantCtx.tenantId);
   }
 
   @Get(':id')
   @RequirePermissions(PermissionCode.TENANT_READ)
-  @ApiOperation({ summary: 'Get department details by ID' })
+  @ApiOperation({ summary: 'Get department details, ticket metrics, customers served, and recent activity' })
   async getDepartment(
     @CurrentTenant() tenantCtx: TenantContext,
     @Param('id') id: string
@@ -65,6 +81,23 @@ export class DepartmentsController {
     @Body() dto: UpdateDepartmentDto
   ) {
     return this.departmentsService.updateDepartment(tenantCtx.tenantId, id, user.id, dto);
+  }
+
+  @Patch(':id/status')
+  @RequirePermissions(PermissionCode.TENANT_UPDATE)
+  @ApiOperation({ summary: 'Activate or deactivate a department' })
+  async toggleDepartmentStatus(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Param('id') id: string,
+    @Body() dto: ToggleDepartmentStatusDto
+  ) {
+    return this.departmentsService.toggleDepartmentStatus(
+      tenantCtx.tenantId,
+      id,
+      user.id,
+      dto.isActive
+    );
   }
 
   @Delete(':id')

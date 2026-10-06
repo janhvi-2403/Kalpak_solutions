@@ -51,6 +51,15 @@ export class AuditService {
       }),
       this.prisma.auditEvent.findMany({
         where: { tenantId },
+        include: {
+          actor: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, Length, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, Length, Matches, IsBoolean, IsIn, IsEmail } from 'class-validator';
 
 export class CreateDepartmentDto {
   @IsString()
@@ -21,7 +21,29 @@ export class CreateDepartmentDto {
 
   @IsUUID()
   @IsOptional()
-  headUserId?: string;
+  headUserId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 100)
+  pocName?: string;
+
+  @IsEmail()
+  @IsOptional()
+  pocEmail?: string;
+
+  @IsString()
+  @IsOptional()
+  @Length(3, 30)
+  pocPhone?: string;
+
+  @IsUUID()
+  @IsOptional()
+  pocUserId?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }
 
 export class UpdateDepartmentDto {
@@ -46,4 +68,44 @@ export class UpdateDepartmentDto {
   @IsUUID()
   @IsOptional()
   headUserId?: string | null;
+
+  @IsString()
+  @IsOptional()
+  @Length(1, 100)
+  pocName?: string | null;
+
+  @IsEmail()
+  @IsOptional()
+  pocEmail?: string | null;
+
+  @IsString()
+  @IsOptional()
+  @Length(3, 30)
+  pocPhone?: string | null;
+
+  @IsUUID()
+  @IsOptional()
+  pocUserId?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }
+
+export class DepartmentQueryDto {
+  @IsString()
+  @IsOptional()
+  search?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['ALL', 'ACTIVE', 'INACTIVE'])
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE';
+}
+
+export class ToggleDepartmentStatusDto {
+  @IsBoolean()
+  @IsNotEmpty()
+  isActive!: boolean;
+}
+

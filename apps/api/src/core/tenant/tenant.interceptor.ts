@@ -17,7 +17,7 @@ export class TenantInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
     const session = request.session;
-    const tenantId = session?.activeTenantId || request.headers['x-tenant-id'];
+    const tenantId = request.resolvedTenantId || session?.activeTenantId || request.headers['x-tenant-id'];
 
     const tenantContext: TenantContext = {
       tenantId: tenantId || '',

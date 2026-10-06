@@ -4,21 +4,22 @@ import {
   ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { TenantStatus } from '@kalpak/types';
 import { PrismaService } from '../database/prisma.service';
+import { SubdomainResolverService } from './subdomain-resolver.service';
 
 export const IS_TENANT_OPTIONAL_KEY = 'isTenantOptional';
 export const OptionalTenant = () => SetMetadata(IS_TENANT_OPTIONAL_KEY, true);
-
-import { SetMetadata } from '@nestjs/common';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly subdomainResolver: SubdomainResolverService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -29,7 +30,16 @@ export class TenantGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const tenantId = request.session?.activeTenantId || request.headers['x-tenant-id'];
+
+    // 1. Check for subdomain tenant
+    const { subdomain, tenant: subdomainTenant } = await this.subdomainResolver.resolveFromRequest(request);
+    
+    if (subdomain && !subdomainTenant) {
+      throw new ForbiddenException(`Organization subdomain "${subdomain}" does not exist or has been cancelled`);
+    }
+
+    // Determine target tenant ID (subdomain takes priority if present)
+    let tenantId = subdomainTenant?.id || request.session?.activeTenantId || request.headers['x-tenant-id'];
 
     if (isOptional && !tenantId) {
       return true;
@@ -46,11 +56,11 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException('Active tenant context is required for this operation');
     }
 
-    // Verify tenant exists and is active
-    const tenant = await this.prisma.tenant.findUnique({
+    // 2. Verify tenant exists and is active
+    const tenant = subdomainTenant || (await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true, status: true, deletedAt: true },
-    });
+      select: { id: true, name: true, slug: true, status: true, deletedAt: true },
+    }));
 
     if (!tenant || tenant.deletedAt !== null) {
       throw new ForbiddenException('Requested tenant organization does not exist or has been deleted');
@@ -60,16 +70,18 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(`Tenant organization access is restricted (Status: ${tenant.status})`);
     }
 
-    // If user is super admin, access is granted
+    // If user is super admin, access is granted across all subdomains/tenants
     if (user.isSuperAdmin) {
+      request.resolvedTenantId = tenant.id;
+      request.resolvedTenant = tenant;
       return true;
     }
 
-    // Verify user is an active member of this tenant
+    // 3. Verify user is an active member of this specific tenant
     const membership = await this.prisma.tenantMembership.findUnique({
       where: {
         uq_membership_tenant_user: {
-          tenantId,
+          tenantId: tenant.id,
           userId: user.id,
         },
       },
@@ -87,10 +99,17 @@ export class TenantGuard implements CanActivate {
     });
 
     if (!membership) {
+      if (subdomainTenant) {
+        throw new ForbiddenException(
+          `You do not belong to organization "${subdomainTenant.name}" (${subdomainTenant.slug})`
+        );
+      }
       throw new ForbiddenException('You do not belong to the requested tenant organization');
     }
 
-    // Attach verified tenant membership details to request
+    // Attach verified tenant membership details and resolved tenant ID to request
+    request.resolvedTenantId = tenant.id;
+    request.resolvedTenant = tenant;
     request.tenantMembership = membership;
     request.tenantPermissions = membership.role.permissions.map((rp) => rp.permission.code);
 

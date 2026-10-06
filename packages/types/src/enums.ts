@@ -163,3 +163,20 @@ export enum PlatformAccess {
   BOTH = 'BOTH',
 }
 
+export enum SupportEmailVerificationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  UNVERIFIED = 'UNVERIFIED',
+}
+
+export enum InboundForwardingStatus {
+  WAITING_FOR_SETUP = 'WAITING_FOR_SETUP',
+  CONNECTED = 'CONNECTED',
+  FAILED = 'FAILED',
+}
+
+export enum OutboundEmailStatus {
+  NOT_CONFIGURED = 'NOT_CONFIGURED',
+  CONNECTED = 'CONNECTED',
+  FAILED = 'FAILED',
+}

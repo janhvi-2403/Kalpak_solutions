@@ -42,6 +42,11 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   assignedToUserId?: string;
+
+  @ApiPropertyOptional({ example: 'EMAIL', default: 'PORTAL' })
+  @IsOptional()
+  @IsString()
+  source?: string = 'PORTAL';
 }
 
 export class UpdateTicketStatusDto {
@@ -91,4 +96,46 @@ export class UpdateTicketPriorityDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+export class TicketStatsQueryDto {
+  @ApiPropertyOptional({ description: 'Filter tickets starting from date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets ending at date (ISO string)' })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Department ID' })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Assigned Employee / Technician ID' })
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Customer ID' })
+  @IsOptional()
+  @IsString()
+  customerId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Product ID' })
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Service Catalog ID' })
+  @IsOptional()
+  @IsString()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter tickets by Status' })
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

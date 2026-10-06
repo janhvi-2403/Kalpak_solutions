@@ -75,6 +75,10 @@ export interface AcceptInvitationDto {
   token: string;
   fullName: string;
   password: string;
+  phone?: string;
+  totpCode?: string;
+  totpSecret?: string;
+  backupCodes?: string[];
 }
 
 export interface PublicInvitationInfo {
@@ -84,6 +88,13 @@ export interface PublicInvitationInfo {
   tenantName: string;
   tenantSlug: string;
   isExpired: boolean;
+  fullName?: string | null;
+  phone?: string | null;
+  mfaSetup?: {
+    secret: string;
+    qrCode: string;
+    backupCodes: string[];
+  };
 }
 
 export interface OnboardingState {

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { LoginForm } from '@/features/auth/components/login-form';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
@@ -29,7 +30,9 @@ export default function LoginPage() {
 
       {/* Right Column: Authentication Card */}
       <div className="lg:col-span-7 flex items-center justify-center p-6 sm:p-12 lg:p-16">
-        <LoginForm />
+        <Suspense fallback={<div className="text-sm text-slate-500">Loading sign in form...</div>}>
+          <LoginForm />
+        </Suspense>
       </div>
     </main>
   );

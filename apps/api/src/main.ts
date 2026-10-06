@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { getConfig } from '@kalpak/config';
 import { logger } from '@kalpak/logger';
@@ -12,6 +13,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    rawBody: true,
   });
 
   // Enable graceful shutdown hooks
@@ -28,9 +30,36 @@ async function bootstrap() {
   // Cookie Parser for HttpOnly session cookies
   app.use(cookieParser());
 
-  // CORS Configuration
+  // Body Parser Limits for Webhook Attachments (25MB)
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ limit: '25mb', extended: true }));
+
+  // CORS Configuration supporting Multi-Tenant Subdomains
   app.enableCors({
-    origin: config.CORS_ALLOWED_ORIGINS,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void
+    ) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (config.CORS_ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+      // Allow localhost and lvh.me subdomains (e.g. http://acme.localhost:3000)
+      if (/^https?:\/\/([a-z0-9-]+)\.(localhost|lvh\.me)(:\d+)?$/i.test(origin)) {
+        return callback(null, true);
+      }
+      // Allow production/staging base domain subdomains (e.g. https://acme.kalpak.com)
+      if (config.APP_BASE_DOMAIN && config.APP_BASE_DOMAIN !== 'localhost') {
+        const escapedDomain = config.APP_BASE_DOMAIN.replace(/\./g, '\\.');
+        const subdomainRegex = new RegExp(`^https?:\\/\\/([a-z0-9-]+\\.)*${escapedDomain}(:\\d+)?$`, 'i');
+        if (subdomainRegex.test(origin)) {
+          return callback(null, true);
+        }
+      }
+      return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
@@ -39,12 +68,35 @@ async function bootstrap() {
       'X-Requested-With',
       'x-correlation-id',
       'x-tenant-id',
+      'x-tenant-slug',
       'x-csrf-token',
+      'x-razorpay-signature',
+      'x-razorpay-event-id',
+      'x-mailgun-signature',
+      'x-mailgun-timestamp',
+      'x-mailgun-token',
+      'svix-id',
+      'svix-timestamp',
+      'svix-signature',
+      'x-webhook-signature',
+      'x-webhook-secret',
     ],
   });
 
-  // Global Prefix
-  app.setGlobalPrefix('api/v1');
+  // Global Prefix (exclude webhooks and health endpoints for direct root-level access)
+  app.setGlobalPrefix('api/v1', {
+    exclude: [
+      'health',
+      'api/health',
+      'webhooks/razorpay',
+      'webhooks/email/inbound',
+      'api/webhooks/email/inbound',
+      'api/v1/webhooks/email/inbound',
+      'webhooks/cloudmailin',
+      'api/webhooks/cloudmailin',
+      'api/v1/webhooks/cloudmailin',
+    ],
+  });
 
   // Strict Server-side Input Validation
   app.useGlobalPipes(

@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Query,
   Req,
   Res,
   HttpCode,
@@ -26,13 +27,32 @@ import { CurrentUser } from '../../core/auth/current-user.decorator';
 import { UserPrincipal } from '@kalpak/types';
 import { getConfig } from '@kalpak/config';
 import { generateCsrfToken } from '@kalpak/auth';
+import { SubdomainResolverService } from '../../core/tenant/subdomain-resolver.service';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   private readonly config = getConfig();
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly subdomainResolver: SubdomainResolverService
+  ) {}
+
+  @Public()
+  @Get('resolve-subdomain')
+  @ApiOperation({ summary: 'Resolve tenant metadata and branding from host subdomain or parameters' })
+  async resolveSubdomain(
+    @Req() req: Request,
+    @Query('subdomain') querySubdomain?: string
+  ) {
+    const host = req.get('host');
+    const forwardedHost = req.get('x-forwarded-host');
+    const tenantSlugHeader = querySubdomain || req.get('x-tenant-slug');
+    const origin = req.get('origin');
+
+    return this.authService.resolveSubdomainInfo(host, forwardedHost, tenantSlugHeader, origin);
+  }
 
   @Public()
   @Post('login')
@@ -48,7 +68,13 @@ export class AuthController {
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.get('user-agent');
 
-    const result = await this.authService.login(dto, ipAddress, userAgent);
+    const host = req.get('host');
+    const forwardedHost = req.get('x-forwarded-host');
+    const tenantSlugHeader = req.get('x-tenant-slug');
+    const origin = req.get('origin');
+    const subdomain = this.subdomainResolver.extractSubdomain(host, forwardedHost, tenantSlugHeader, origin) || undefined;
+
+    const result = await this.authService.login(dto, ipAddress, userAgent, subdomain);
 
     // Set secure HttpOnly cookie for browser clients
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
@@ -71,18 +97,32 @@ export class AuthController {
     };
   }
 
+
   @Public()
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new B2B tenant organization and first client administrator' })
   async signup(
     @Body() dto: SignupDto,
-    @Req() req: Request
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
   ) {
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.get('user-agent');
 
-    return this.authService.signup(dto, ipAddress, userAgent);
+    const result = await this.authService.signup(dto, ipAddress, userAgent);
+
+    // Set secure HttpOnly session cookie for browser clients
+    const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+    res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
+      httpOnly: true,
+      secure: this.config.COOKIE_SECURE,
+      sameSite: 'lax',
+      maxAge: maxAgeMs,
+      path: '/',
+    });
+
+    return result;
   }
 
   @Public()

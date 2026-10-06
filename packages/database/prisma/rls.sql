@@ -67,3 +67,41 @@ CREATE POLICY audit_events_isolation_policy ON audit_events
         is_rls_bypassed() = true
         OR tenant_id = current_tenant_id()
     );
+
+-- 7. Enable RLS and Policies for Email Tables
+ALTER TABLE email_configurations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_email_configurations ON email_configurations;
+CREATE POLICY tenant_isolation_email_configurations ON email_configurations
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE inbound_emails ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_inbound_emails ON inbound_emails;
+CREATE POLICY tenant_isolation_inbound_emails ON inbound_emails
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE email_connections ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_email_connections ON email_connections;
+CREATE POLICY tenant_isolation_email_connections ON email_connections
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE email_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_email_messages ON email_messages;
+CREATE POLICY tenant_isolation_email_messages ON email_messages
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE support_emails ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_support_emails ON support_emails;
+CREATE POLICY tenant_isolation_support_emails ON support_emails
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+

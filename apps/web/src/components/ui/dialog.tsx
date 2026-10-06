@@ -37,11 +37,11 @@ export function Dialog({ isOpen, onClose, title, description, children, classNam
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200',
+          'relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl z-10 overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200',
           className
         )}
       >
-        <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100">
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100 shrink-0">
           <div>
             {title && <h3 className="text-lg font-bold text-slate-900 tracking-tight">{title}</h3>}
             {description && <p className="text-sm text-slate-500 mt-1">{description}</p>}
@@ -54,7 +54,7 @@ export function Dialog({ isOpen, onClose, title, description, children, classNam
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

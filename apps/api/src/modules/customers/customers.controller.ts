@@ -32,16 +32,25 @@ export class CustomersController {
   @RequirePermissions(PermissionCode.CUSTOMER_READ)
   @ApiOperation({ summary: 'List all client customers with search support' })
   @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: ['ALL', 'ACTIVE', 'INACTIVE'] })
   async listCustomers(
     @CurrentTenant() tenantCtx: TenantContext,
-    @Query('search') search?: string
+    @Query('search') search?: string,
+    @Query('status') status?: string
   ) {
-    return this.customersService.listCustomers(tenantCtx.tenantId, search);
+    return this.customersService.listCustomers(tenantCtx.tenantId, search, status);
+  }
+
+  @Get('stats')
+  @RequirePermissions(PermissionCode.CUSTOMER_READ)
+  @ApiOperation({ summary: 'Get customer summary statistics (total, active, inactive, open tickets)' })
+  async getCustomerStats(@CurrentTenant() tenantCtx: TenantContext) {
+    return this.customersService.getStats(tenantCtx.tenantId);
   }
 
   @Get(':id')
   @RequirePermissions(PermissionCode.CUSTOMER_READ)
-  @ApiOperation({ summary: 'Get customer details including installed equipment' })
+  @ApiOperation({ summary: 'Get customer details including installed equipment and ticket history' })
   async getCustomer(
     @CurrentTenant() tenantCtx: TenantContext,
     @Param('id') id: string
@@ -82,6 +91,29 @@ export class CustomersController {
     @Param('id') id: string
   ) {
     return this.customersService.deleteCustomer(tenantCtx.tenantId, id, user.id);
+  }
+
+  @Patch(':id/status')
+  @RequirePermissions(PermissionCode.CUSTOMER_UPDATE)
+  @ApiOperation({ summary: 'Update customer active/inactive status' })
+  async updateStatus(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Param('id') id: string,
+    @Body('status') status: string
+  ) {
+    return this.customersService.updateCustomerStatus(tenantCtx.tenantId, id, user.id, status);
+  }
+
+  @Post(':id/invite')
+  @RequirePermissions(PermissionCode.CUSTOMER_UPDATE)
+  @ApiOperation({ summary: 'Dispatch portal invitation email to customer' })
+  async inviteCustomer(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Param('id') id: string
+  ) {
+    return this.customersService.inviteCustomer(tenantCtx.tenantId, id, user.id);
   }
 
   @Post(':id/enable-portal')

@@ -18,6 +18,7 @@ import {
   AssignTicketDto,
   AddTicketNoteDto,
   UpdateTicketPriorityDto,
+  TicketStatsQueryDto,
 } from './dto/ticket.dto';
 import { CurrentUser } from '../../core/auth/current-user.decorator';
 import { CurrentTenant } from '../../core/tenant/current-tenant.decorator';
@@ -37,17 +38,20 @@ export class TicketsController {
   // GET /api/v1/tickets/stats — Dashboard statistics
   // ─────────────────────────────────────────────────────────────────────────
   @Get('stats')
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_READ)
   @ApiOperation({ summary: 'Get ticket dashboard statistics for the current tenant' })
-  async getStats(@CurrentTenant() tenantCtx: TenantContext) {
-    return this.ticketsService.getStats(tenantCtx.tenantId);
+  async getStats(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Query() query: TicketStatsQueryDto,
+  ) {
+    return this.ticketsService.getStats(tenantCtx.tenantId, query);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // GET /api/v1/tickets — List with full filtering and pagination
   // ─────────────────────────────────────────────────────────────────────────
   @Get()
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_READ)
   @ApiOperation({ summary: 'List tickets with filters, search, and pagination' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
@@ -93,7 +97,7 @@ export class TicketsController {
   // POST /api/v1/tickets — Create a new ticket
   // ─────────────────────────────────────────────────────────────────────────
   @Post()
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_CREATE)
   @ApiOperation({ summary: 'Create a new service ticket (policy-aware intake)' })
   async createTicket(
     @CurrentTenant() tenantCtx: TenantContext,
@@ -111,7 +115,7 @@ export class TicketsController {
   // GET /api/v1/tickets/:id — Single ticket with full timeline
   // ─────────────────────────────────────────────────────────────────────────
   @Get(':id')
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_READ)
   @ApiOperation({ summary: 'Get ticket detail with full timeline and assignment history' })
   async getTicket(
     @CurrentTenant() tenantCtx: TenantContext,
@@ -124,7 +128,7 @@ export class TicketsController {
   // PATCH /api/v1/tickets/:id/status — Status state machine transition
   // ─────────────────────────────────────────────────────────────────────────
   @Patch(':id/status')
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_UPDATE)
   @ApiOperation({ summary: 'Transition ticket status (state machine enforced)' })
   async updateStatus(
     @CurrentTenant() tenantCtx: TenantContext,
@@ -144,7 +148,7 @@ export class TicketsController {
   // PATCH /api/v1/tickets/:id/assign — Manual assignment
   // ─────────────────────────────────────────────────────────────────────────
   @Patch(':id/assign')
-  @RequirePermissions(PermissionCode.TENANT_UPDATE)
+  @RequirePermissions(PermissionCode.TICKET_ASSIGN)
   @ApiOperation({ summary: 'Assign or re-assign ticket to a team member' })
   async assignTicket(
     @CurrentTenant() tenantCtx: TenantContext,
@@ -165,7 +169,7 @@ export class TicketsController {
   // ─────────────────────────────────────────────────────────────────────────
   @Post(':id/notes')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(PermissionCode.TENANT_READ)
+  @RequirePermissions(PermissionCode.TICKET_UPDATE)
   @ApiOperation({ summary: 'Add a note or comment to the ticket timeline' })
   async addNote(
     @CurrentTenant() tenantCtx: TenantContext,
@@ -180,7 +184,7 @@ export class TicketsController {
   // PATCH /api/v1/tickets/:id/priority — Change priority
   // ─────────────────────────────────────────────────────────────────────────
   @Patch(':id/priority')
-  @RequirePermissions(PermissionCode.TENANT_UPDATE)
+  @RequirePermissions(PermissionCode.TICKET_UPDATE)
   @ApiOperation({ summary: 'Update ticket priority with timeline entry' })
   async updatePriority(
     @CurrentTenant() tenantCtx: TenantContext,

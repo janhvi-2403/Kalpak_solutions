@@ -82,6 +82,7 @@ const ROLE_PERMISSIONS_MAPPING: Record<SystemRole, PermissionCode[]> = {
   ],
 
   [SystemRole.DEPARTMENT_ADMIN]: [
+    PermissionCode.TENANT_READ,
     PermissionCode.USER_READ,
     PermissionCode.TICKET_CREATE,
     PermissionCode.TICKET_READ,

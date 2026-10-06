@@ -1,14 +1,12 @@
 import { hashPassword, verifyPassword } from '../src/password';
 
 describe('Password Hashing & Verification', () => {
-  it('should hash a password into a valid scrypt format with 6 parts', async () => {
+  it('should hash a password into a valid OWASP Argon2id format', async () => {
     const password = 'SecurePassword123!';
     const hash = await hashPassword(password);
 
     expect(hash).toBeDefined();
-    const parts = hash.split(':');
-    expect(parts[0]).toBe('scrypt');
-    expect(parts).toHaveLength(6);
+    expect(hash.startsWith('$argon2id$')).toBe(true);
   });
 
   it('should successfully verify a correct password against its hash', async () => {

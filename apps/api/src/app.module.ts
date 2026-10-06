@@ -25,6 +25,9 @@ import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { EmailIntegrationModule } from './modules/email-integration/email-integration.module';
 
 @Module({
   imports: [
@@ -47,6 +50,9 @@ import { ContractsModule } from './modules/contracts/contracts.module';
     InventoryModule,
     PortalModule,
     ContractsModule,
+    PaymentsModule,
+    ReportsModule,
+    EmailIntegrationModule,
   ],
   providers: [
     // 1. Global Exception Filter (standardizes all API error responses)

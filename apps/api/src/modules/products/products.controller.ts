@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { ProductsService } from './products.service';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
 import { CreateCustomerAssetDto, UpdateCustomerAssetDto } from './dto/customer-asset.dto';
+import { CreateServiceCatalogDto, UpdateServiceCatalogDto } from './dto/service-catalog.dto';
 import { CurrentUser } from '../../core/auth/current-user.decorator';
 import { CurrentTenant } from '../../core/tenant/current-tenant.decorator';
 import { UserPrincipal, TenantContext, PermissionCode } from '@kalpak/types';
@@ -145,5 +146,61 @@ export class ProductsController {
     @Param('id') id: string
   ) {
     return this.productsService.deleteAsset(tenantCtx.tenantId, id, user.id);
+  }
+
+  // --------------------------------------------------------------------------
+  // Services Master Catalog Endpoints
+  // --------------------------------------------------------------------------
+
+  @Get('services')
+  @RequirePermissions(PermissionCode.PRODUCT_READ)
+  @ApiOperation({ summary: 'List all service catalog items (Installation, Repair, Maintenance, etc.)' })
+  async listServices(@CurrentTenant() tenantCtx: TenantContext) {
+    return this.productsService.listServices(tenantCtx.tenantId);
+  }
+
+  @Get('services/:id')
+  @RequirePermissions(PermissionCode.PRODUCT_READ)
+  @ApiOperation({ summary: 'Get service catalog entry by ID' })
+  async getService(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Param('id') id: string
+  ) {
+    return this.productsService.getService(tenantCtx.tenantId, id);
+  }
+
+  @Post('services')
+  @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
+  @ApiOperation({ summary: 'Create a new service catalog item' })
+  async createService(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Body() dto: CreateServiceCatalogDto
+  ) {
+    return this.productsService.createService(tenantCtx.tenantId, user.id, dto);
+  }
+
+  @Patch('services/:id')
+  @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
+  @ApiOperation({ summary: 'Update a service catalog item' })
+  async updateService(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceCatalogDto
+  ) {
+    return this.productsService.updateService(tenantCtx.tenantId, id, user.id, dto);
+  }
+
+  @Delete('services/:id')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PermissionCode.PRODUCT_MANAGE)
+  @ApiOperation({ summary: 'Soft-delete a service catalog item' })
+  async deleteService(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @CurrentUser() user: UserPrincipal,
+    @Param('id') id: string
+  ) {
+    return this.productsService.deleteService(tenantCtx.tenantId, id, user.id);
   }
 }

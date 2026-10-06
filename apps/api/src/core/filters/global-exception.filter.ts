@@ -17,7 +17,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request & { correlationId?: string }>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'An unexpected internal server error occurred';
+    let message = 'An unexpected server error occurred. Please try again.';
     let error = 'Internal Server Error';
     let details: ApiErrorResponse['details'] = undefined;
 
@@ -42,10 +42,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      // Unhandled system exceptions
-      if (process.env.NODE_ENV === 'development') {
-        message = exception.message;
-      }
+      // Internal or unhandled exceptions
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      error = 'Internal Server Error';
+      message = 'An unexpected server error occurred. Please try again.';
+    }
+
+    // Security Sanitization: Never leak Prisma syntax, internal file paths or stack traces
+    if (
+      message.includes('prisma') ||
+      message.includes('Prisma') ||
+      message.includes('invocation') ||
+      message.includes('findFirst') ||
+      message.includes('findUnique') ||
+      message.includes('findFirstOrThrow') ||
+      message.includes('C:\\') ||
+      message.includes('/dist/') ||
+      message.includes('node_modules') ||
+      message.includes('Require stack')
+    ) {
+      message = 'An error occurred while processing your request. Please try again.';
     }
 
     const correlationId = request.correlationId || (request.headers['x-correlation-id'] as string);
@@ -61,7 +77,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       correlationId,
     };
 
-    // Log the error
+    // Log the error internally with full diagnostic context (server-side only)
     if (status >= 500) {
       logger.error(
         {

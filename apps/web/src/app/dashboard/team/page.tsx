@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import {
   Wrench,
@@ -10,6 +11,7 @@ import {
   Edit2,
   CheckCircle2,
   AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   Button,
@@ -141,6 +143,13 @@ export default function TeamPage() {
             Manage field service engineers, skill competencies, and department assignments for automated ticket dispatch.
           </p>
         </div>
+
+        <Link href="/dashboard/admins">
+          <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50 shrink-0 shadow-xs">
+            <ShieldCheck className="w-4 h-4 mr-2 text-orange-600" />
+            <span>Manage Client Admins</span>
+          </Button>
+        </Link>
       </div>
 
       {/* Feedback Alert */}

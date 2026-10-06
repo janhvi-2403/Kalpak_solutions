@@ -1,4 +1,5 @@
 import { ApiErrorResponse, StandardApiResponse } from '@kalpak/types';
+import { getTenantSubdomain } from './subdomain';
 
 export class ApiClientError extends Error {
   constructor(
@@ -51,11 +52,35 @@ export async function apiClient<T>(
   }
   requestHeaders.set('x-correlation-id', correlationId);
 
-  const response = await fetch(fullUrl, {
-    ...restOptions,
-    headers: requestHeaders,
-    credentials: 'include', // Ensure HttpOnly session cookies are transmitted
-  });
+  // Automatically attach tenant slug header if running on a tenant subdomain
+  const subdomain = getTenantSubdomain();
+  if (subdomain && !requestHeaders.has('x-tenant-slug')) {
+    requestHeaders.set('x-tenant-slug', subdomain);
+  }
+
+
+  // Setup safety timeout to avoid hanging network calls
+  let timeoutId: NodeJS.Timeout | undefined;
+  let signal = restOptions.signal;
+  if (!signal) {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 6000);
+    signal = controller.signal;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(fullUrl, {
+      ...restOptions,
+      headers: requestHeaders,
+      credentials: 'include', // Ensure HttpOnly session cookies are transmitted
+      signal,
+    });
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');

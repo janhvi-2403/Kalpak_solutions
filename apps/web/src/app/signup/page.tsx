@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth-context';
 import { Button, Input, PasswordInput, Alert } from '@/components/ui';
 import { ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
-export default function SignupPage() {
-  const router = useRouter();
+function SignupContent() {
+  const searchParams = useSearchParams();
+  const { refetchSession } = useAuth();
 
   // Organization Fields
   const [companyName, setCompanyName] = useState('');
@@ -141,8 +143,13 @@ export default function SignupPage() {
         }),
       });
 
-      // Redirect directly to dashboard or onboarding
-      router.push('/dashboard');
+      // Refresh auth state with newly issued session
+      await refetchSession();
+
+      // Route new administrator to the subscription checkout flow
+      const returnUrl = searchParams.get('returnUrl') || '/checkout/starter';
+      
+      window.location.href = returnUrl;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         const res = err.errorResponse;
@@ -439,5 +446,13 @@ export default function SignupPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Loading signup...</div>}>
+      <SignupContent />
+    </Suspense>
   );
 }

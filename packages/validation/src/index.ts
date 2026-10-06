@@ -8,3 +8,5 @@ export * from './work-order';
 export * from './inventory';
 export * from './portal';
 export * from './contract';
+export * from './payment';
+

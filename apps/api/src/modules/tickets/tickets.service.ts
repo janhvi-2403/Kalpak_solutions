@@ -12,6 +12,7 @@ import {
   AssignTicketDto,
   AddTicketNoteDto,
   UpdateTicketPriorityDto,
+  TicketStatsQueryDto,
 } from './dto/ticket.dto';
 import { AuditEventType } from '@kalpak/types';
 import { TicketStatus, TicketEventType, Prisma } from '@kalpak/database';
@@ -23,8 +24,8 @@ const VALID_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   ASSIGNED: ['IN_PROGRESS', 'OPEN', 'CANCELLED'],
   IN_PROGRESS: ['AWAITING_CUSTOMER', 'RESOLVED', 'CANCELLED'],
   AWAITING_CUSTOMER: ['IN_PROGRESS', 'RESOLVED', 'CANCELLED'],
-  RESOLVED: ['CLOSED', 'IN_PROGRESS'],
-  CLOSED: [],
+  RESOLVED: ['CLOSED', 'IN_PROGRESS', 'OPEN'],
+  CLOSED: ['OPEN', 'IN_PROGRESS'],
   CANCELLED: ['OPEN'],
 };
 
@@ -44,6 +45,7 @@ const TICKET_SELECT = {
   status: true,
   priority: true,
   raisedBy: true,
+  source: true,
   isOverdue: true,
   tolerableOpenDays: true,
   dueAt: true,
@@ -78,21 +80,50 @@ export class TicketsService {
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Generate ticket number: KAL-2026-0001 per tenant
+  // Generate ticket number: KAL-2026-0001 per tenant (Collision-free)
   // ─────────────────────────────────────────────────────────────────────────
   private async generateTicketNumber(tenantId: string): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.prisma.serviceTicket.count({
-      where: { tenantId },
+    const prefix = `KAL-${year}-`;
+
+    const lastTicket = await this.prisma.serviceTicket.findFirst({
+      where: {
+        tenantId,
+        ticketNumber: { startsWith: prefix },
+      },
+      orderBy: { ticketNumber: 'desc' },
+      select: { ticketNumber: true },
     });
-    const seq = String(count + 1).padStart(4, '0');
-    return `KAL-${year}-${seq}`;
+
+    let nextNum = 1;
+    if (lastTicket?.ticketNumber) {
+      const match = lastTicket.ticketNumber.match(/KAL-\d{4}-(\d+)/);
+      if (match && match[1]) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    // Double check that the candidate ticketNumber is truly unique in this tenant
+    while (true) {
+      const candidate = `KAL-${year}-${String(nextNum).padStart(4, '0')}`;
+      const existing = await this.prisma.serviceTicket.findFirst({
+        where: {
+          tenantId,
+          ticketNumber: candidate,
+        },
+        select: { id: true },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      nextNum++;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Create ticket with policy-aware intake validation
   // ─────────────────────────────────────────────────────────────────────────
-  async createTicket(tenantId: string, actorUserId: string, dto: CreateTicketDto) {
+  async createTicket(tenantId: string, actorUserId: string | null | undefined, dto: CreateTicketDto) {
     // Load policy for intake permission checks
     const policy = await this.prisma.tenantPolicy.findUnique({ where: { tenantId } });
 
@@ -144,7 +175,8 @@ export class TicketsService {
           status: initialStatus,
           priority: (dto.priority ?? 'MEDIUM') as any,
           raisedBy: (dto.raisedBy ?? 'EMPLOYEE') as any,
-          raisedByUserId: actorUserId,
+          source: dto.source || 'PORTAL',
+          raisedByUserId: (actorUserId && actorUserId.length > 0) ? actorUserId : null,
           raisedForCustomerId: dto.raisedForCustomerId,
           departmentId: dto.departmentId,
           customerAssetId: dto.customerAssetId,
@@ -161,9 +193,9 @@ export class TicketsService {
           tenantId,
           ticketId: created.id,
           eventType: TicketEventType.CREATED,
-          actorUserId,
+          actorUserId: (actorUserId && actorUserId.length > 0) ? actorUserId : null,
           newStatus: 'OPEN',
-          metadata: { ticketNumber, title: dto.title, priority: dto.priority ?? 'MEDIUM' },
+          metadata: { ticketNumber, title: dto.title, priority: dto.priority ?? 'MEDIUM', source: dto.source || 'PORTAL' },
         },
       });
 
@@ -247,7 +279,7 @@ export class TicketsService {
             email: tech.email,
             phone: tech.phoneNumber,
           },
-          assignedByUserId: actorUserId,
+          assignedByUserId: actorUserId || undefined,
         });
       }
     }
@@ -578,7 +610,7 @@ export class TicketsService {
   // ─────────────────────────────────────────────────────────────────────────
   // Add a note to ticket timeline
   // ─────────────────────────────────────────────────────────────────────────
-  async addNote(tenantId: string, ticketId: string, actorUserId: string, dto: AddTicketNoteDto) {
+  async addNote(tenantId: string, ticketId: string, actorUserId: string | null | undefined, dto: AddTicketNoteDto) {
     const ticket = await this.prisma.serviceTicket.findFirst({
       where: { id: ticketId, tenantId, deletedAt: null },
     });
@@ -592,7 +624,7 @@ export class TicketsService {
         tenantId,
         ticketId,
         eventType: TicketEventType.NOTE_ADDED,
-        actorUserId,
+        actorUserId: (actorUserId && actorUserId.length > 0) ? actorUserId : null,
         note: dto.note,
         metadata: {},
       },
@@ -635,59 +667,379 @@ export class TicketsService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Dashboard stats
+  // Dashboard stats — Overall Company View for Client Admin
   // ─────────────────────────────────────────────────────────────────────────
-  async getStats(tenantId: string) {
+  async getStats(tenantId: string, query?: TicketStatsQueryDto) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const tenantFilter = tenantId ? { tenantId } : {};
-
-    const [counts, resolvedToday, createdToday] = await Promise.all([
-      this.prisma.serviceTicket.groupBy({
-        by: ['status', 'isOverdue'],
-        where: { ...tenantFilter, deletedAt: null },
-        _count: { id: true },
-      }),
-      this.prisma.serviceTicket.count({
-        where: { ...tenantFilter, deletedAt: null, resolvedAt: { gte: todayStart } },
-      }),
-      this.prisma.serviceTicket.count({
-        where: { ...tenantFilter, deletedAt: null, createdAt: { gte: todayStart } },
-      }),
-    ]);
-
-    const stats = {
-      total: 0,
-      open: 0,
-      assigned: 0,
-      inProgress: 0,
-      awaitingCustomer: 0,
-      resolved: 0,
-      closed: 0,
-      cancelled: 0,
-      overdue: 0,
-      resolvedToday,
-      createdToday,
+    const baseWhere: Prisma.ServiceTicketWhereInput = {
+      tenantId,
+      deletedAt: null,
     };
 
-    for (const row of counts) {
-      const count = row._count.id;
-      stats.total += count;
-      if (row.isOverdue) stats.overdue += count;
-
-      switch (row.status) {
-        case 'OPEN': stats.open += count; break;
-        case 'ASSIGNED': stats.assigned += count; break;
-        case 'IN_PROGRESS': stats.inProgress += count; break;
-        case 'AWAITING_CUSTOMER': stats.awaitingCustomer += count; break;
-        case 'RESOLVED': stats.resolved += count; break;
-        case 'CLOSED': stats.closed += count; break;
-        case 'CANCELLED': stats.cancelled += count; break;
+    // Filter: Date Range
+    if (query?.startDate || query?.endDate) {
+      baseWhere.createdAt = {};
+      if (query.startDate) baseWhere.createdAt.gte = new Date(query.startDate);
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        baseWhere.createdAt.lte = end;
       }
     }
 
-    return stats;
+    // Filter: Department
+    if (query?.departmentId && query.departmentId !== 'ALL') {
+      baseWhere.departmentId = query.departmentId;
+    }
+
+    // Filter: Employee
+    if (query?.employeeId && query.employeeId !== 'ALL') {
+      baseWhere.assignedToUserId = query.employeeId;
+    }
+
+    // Filter: Customer
+    if (query?.customerId && query.customerId !== 'ALL') {
+      baseWhere.raisedForCustomerId = query.customerId;
+    }
+
+    // Filter: Product
+    if (query?.productId && query.productId !== 'ALL') {
+      baseWhere.productId = query.productId;
+    }
+
+    // Filter: Service
+    if (query?.serviceId && query.serviceId !== 'ALL') {
+      baseWhere.serviceCatalogId = query.serviceId;
+    }
+
+    // Filter: Status
+    if (query?.status && query.status !== 'ALL') {
+      baseWhere.status = query.status as TicketStatus;
+    }
+
+    const policy = await this.prisma.tenantPolicy.findUnique({ where: { tenantId } });
+    const tolerableDays = policy?.tolerableOpenDays ?? 5;
+    const agingThreshold = new Date(Date.now() - tolerableDays * 24 * 60 * 60 * 1000);
+
+    const [
+      totalCount,
+      openCount,
+      assignedCount,
+      inProgressCount,
+      awaitingCustomerCount,
+      resolvedCount,
+      closedCount,
+      cancelledCount,
+      overdueCount,
+      agingCount,
+      createdTodayCount,
+      closedTodayCount,
+      allMatchingTickets,
+      departments,
+      recentActivity,
+      unreadNotifications,
+      totalCustomers,
+      totalEmployees,
+    ] = await Promise.all([
+      this.prisma.serviceTicket.count({ where: baseWhere }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'OPEN' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'ASSIGNED' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'IN_PROGRESS' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'AWAITING_CUSTOMER' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'RESOLVED' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'CLOSED' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, status: 'CANCELLED' } }),
+      this.prisma.serviceTicket.count({ where: { ...baseWhere, isOverdue: true } }),
+      this.prisma.serviceTicket.count({
+        where: {
+          ...baseWhere,
+          status: { in: ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'AWAITING_CUSTOMER'] },
+          createdAt: { lte: agingThreshold },
+        },
+      }),
+      this.prisma.serviceTicket.count({
+        where: { ...baseWhere, createdAt: { gte: todayStart } },
+      }),
+      this.prisma.serviceTicket.count({
+        where: {
+          ...baseWhere,
+          OR: [
+            { closedAt: { gte: todayStart } },
+            { resolvedAt: { gte: todayStart } },
+            { status: 'CLOSED', updatedAt: { gte: todayStart } },
+          ],
+        },
+      }),
+      this.prisma.serviceTicket.findMany({
+        where: baseWhere,
+        select: {
+          id: true,
+          ticketNumber: true,
+          title: true,
+          status: true,
+          priority: true,
+          isOverdue: true,
+          createdAt: true,
+          departmentId: true,
+          department: { select: { id: true, name: true } },
+          raisedForCustomerId: true,
+          raisedForCustomer: { select: { id: true, companyName: true } },
+          productId: true,
+          product: { select: { id: true, name: true } },
+          serviceCatalogId: true,
+          serviceCatalog: { select: { id: true, name: true } },
+          serviceType: true,
+          assignedTo: { select: { fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.department.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, name: true },
+      }),
+      this.prisma.ticketTimeline.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+        include: {
+          actor: { select: { fullName: true, email: true } },
+          ticket: { select: { ticketNumber: true, title: true, status: true, priority: true } },
+        },
+      }),
+      this.prisma.notification.findMany({
+        where: { tenantId, isRead: false },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      }),
+      this.prisma.customer.count({ where: { tenantId, deletedAt: null } }),
+      this.prisma.employeeProfile.count({ where: { tenantId, user: { deletedAt: null } } }),
+    ]);
+
+    // 1. Group Breakdown: Tickets by Department
+    const deptCountMap: Record<string, { id: string; name: string; count: number }> = {};
+    for (const d of departments) {
+      deptCountMap[d.id] = { id: d.id, name: d.name, count: 0 };
+    }
+    let unassignedDeptCount = 0;
+    for (const t of allMatchingTickets) {
+      const dept = t.departmentId ? deptCountMap[t.departmentId] : undefined;
+      if (dept) {
+        dept.count += 1;
+      } else {
+        unassignedDeptCount += 1;
+      }
+    }
+    const ticketsByDepartment = Object.values(deptCountMap).map((d) => ({
+      id: d.id,
+      name: d.name,
+      count: d.count,
+      percentage: totalCount > 0 ? Math.round((d.count / totalCount) * 100) : 0,
+    }));
+    if (unassignedDeptCount > 0) {
+      ticketsByDepartment.push({
+        id: 'unassigned',
+        name: 'General / No Dept',
+        count: unassignedDeptCount,
+        percentage: totalCount > 0 ? Math.round((unassignedDeptCount / totalCount) * 100) : 0,
+      });
+    }
+    ticketsByDepartment.sort((a, b) => b.count - a.count);
+
+    // 2. Group Breakdown: Tickets by Status
+    const statusOrder: { status: TicketStatus; label: string; color: string }[] = [
+      { status: 'OPEN', label: 'Open', color: 'bg-sky-500' },
+      { status: 'ASSIGNED', label: 'Assigned', color: 'bg-blue-500' },
+      { status: 'IN_PROGRESS', label: 'In Progress', color: 'bg-indigo-500' },
+      { status: 'AWAITING_CUSTOMER', label: 'Awaiting Customer', color: 'bg-amber-500' },
+      { status: 'RESOLVED', label: 'Resolved', color: 'bg-teal-500' },
+      { status: 'CLOSED', label: 'Closed', color: 'bg-emerald-500' },
+      { status: 'CANCELLED', label: 'Cancelled', color: 'bg-slate-400' },
+    ];
+    const statusCounts: Record<string, number> = {
+      OPEN: openCount,
+      ASSIGNED: assignedCount,
+      IN_PROGRESS: inProgressCount,
+      AWAITING_CUSTOMER: awaitingCustomerCount,
+      RESOLVED: resolvedCount,
+      CLOSED: closedCount,
+      CANCELLED: cancelledCount,
+    };
+    const ticketsByStatus = statusOrder.map((s) => {
+      const c = statusCounts[s.status] || 0;
+      return {
+        status: s.status,
+        label: s.label,
+        color: s.color,
+        count: c,
+        percentage: totalCount > 0 ? Math.round((c / totalCount) * 100) : 0,
+      };
+    });
+
+    // 3. Group Breakdown: Tickets by Customer
+    const customerCountMap: Record<string, { id: string; name: string; count: number }> = {};
+    for (const t of allMatchingTickets) {
+      const cid = t.raisedForCustomerId || 'walkin';
+      const cname = t.raisedForCustomer?.companyName || 'Direct / Walk-in';
+      let entry = customerCountMap[cid];
+      if (!entry) {
+        entry = { id: cid, name: cname, count: 0 };
+        customerCountMap[cid] = entry;
+      }
+      entry.count += 1;
+    }
+    const ticketsByCustomer = Object.values(customerCountMap)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        count: c.count,
+        percentage: totalCount > 0 ? Math.round((c.count / totalCount) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    // 4. Group Breakdown: Tickets by Product / Service
+    const productServiceMap: Record<string, { id: string; name: string; type: 'PRODUCT' | 'SERVICE'; count: number }> = {};
+    for (const t of allMatchingTickets) {
+      if (t.productId && t.product) {
+        const key = `prod_${t.productId}`;
+        let entry = productServiceMap[key];
+        if (!entry) {
+          entry = { id: t.productId, name: t.product.name, type: 'PRODUCT', count: 0 };
+          productServiceMap[key] = entry;
+        }
+        entry.count += 1;
+      }
+      if (t.serviceCatalogId && t.serviceCatalog) {
+        const key = `serv_${t.serviceCatalogId}`;
+        let entry = productServiceMap[key];
+        if (!entry) {
+          entry = { id: t.serviceCatalogId, name: t.serviceCatalog.name, type: 'SERVICE', count: 0 };
+          productServiceMap[key] = entry;
+        }
+        entry.count += 1;
+      } else if (!t.productId && !t.serviceCatalogId) {
+        const key = `type_${t.serviceType || 'General'}`;
+        let entry = productServiceMap[key];
+        if (!entry) {
+          entry = { id: key, name: t.serviceType || 'General Service', type: 'SERVICE', count: 0 };
+          productServiceMap[key] = entry;
+        }
+        entry.count += 1;
+      }
+    }
+    const ticketsByProductService = Object.values(productServiceMap)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        count: item.count,
+        percentage: totalCount > 0 ? Math.round((item.count / totalCount) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    // 5. Compute Long-open / Overdue
+    const overdueOrAgingSet = new Set<string>();
+    for (const t of allMatchingTickets) {
+      if (t.isOverdue) {
+        overdueOrAgingSet.add(t.id);
+      } else if (
+        ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'AWAITING_CUSTOMER'].includes(t.status) &&
+        new Date(t.createdAt) <= agingThreshold
+      ) {
+        overdueOrAgingSet.add(t.id);
+      }
+    }
+    const longOpenOverdue = overdueOrAgingSet.size;
+
+    // 6. Important Notifications & Alerts
+    const importantNotifications: Array<{
+      id: string;
+      title: string;
+      message: string;
+      type: 'CRITICAL_TICKET' | 'OVERDUE_SLA' | 'SYSTEM' | 'INFO';
+      severity: 'critical' | 'warning' | 'info';
+      createdAt: string;
+      ticketId?: string;
+      ticketNumber?: string;
+    }> = [];
+
+    // Critical Open Tickets Alert
+    const criticalTickets = allMatchingTickets.filter(
+      (t) => t.priority === 'CRITICAL' && !['RESOLVED', 'CLOSED', 'CANCELLED'].includes(t.status)
+    );
+    if (criticalTickets.length > 0) {
+      importantNotifications.push({
+        id: 'alert-critical',
+        title: `${criticalTickets.length} Critical Ticket${criticalTickets.length > 1 ? 's' : ''} Require Immediate Attention`,
+        message: `Highest priority tickets currently active: ${criticalTickets.slice(0, 3).map((t) => t.ticketNumber).join(', ')}`,
+        type: 'CRITICAL_TICKET',
+        severity: 'critical',
+        createdAt: new Date().toISOString(),
+        ticketId: criticalTickets[0]?.id,
+        ticketNumber: criticalTickets[0]?.ticketNumber,
+      });
+    }
+
+    // Overdue SLA Alert
+    if (overdueCount > 0) {
+      importantNotifications.push({
+        id: 'alert-overdue',
+        title: `${overdueCount} Ticket${overdueCount > 1 ? 's' : ''} Exceeded SLA Resolution Window`,
+        message: `Response or resolution time limits breached. Review tickets flagged as overdue.`,
+        type: 'OVERDUE_SLA',
+        severity: 'warning',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Append Database Notifications
+    for (const n of unreadNotifications) {
+      importantNotifications.push({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: 'SYSTEM',
+        severity: 'info',
+        createdAt: n.createdAt.toISOString(),
+      });
+    }
+
+    return {
+      total: totalCount,
+      open: openCount,
+      inProgress: inProgressCount + assignedCount,
+      closed: closedCount + resolvedCount,
+      longOpenOverdue,
+      createdToday: createdTodayCount,
+      closedToday: closedTodayCount,
+
+      // Extra statuses & counters
+      assigned: assignedCount,
+      inProgressOnly: inProgressCount,
+      awaitingCustomer: awaitingCustomerCount,
+      resolved: resolvedCount,
+      closedOnly: closedCount,
+      cancelled: cancelledCount,
+      overdue: overdueCount,
+      aging: agingCount,
+      totalCustomers,
+      totalEmployees,
+      maxUsersQuota: policy?.maxUsersQuota ?? 5,
+
+      // Group Breakdowns
+      ticketsByDepartment,
+      ticketsByStatus,
+      ticketsByCustomer,
+      ticketsByProductService,
+
+      // Streams
+      recentActivity,
+      importantNotifications,
+      recentTickets: allMatchingTickets.slice(0, 6),
+    };
   }
 
   // ─────────────────────────────────────────────────────────────────────────

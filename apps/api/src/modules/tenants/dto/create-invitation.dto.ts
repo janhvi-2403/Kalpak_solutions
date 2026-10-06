@@ -21,4 +21,22 @@ export class CreateInvitationDto {
   @IsOptional()
   @MaxLength(100)
   department?: string;
+
+  @ApiPropertyOptional({ example: 'Rahul Sharma', description: 'Full name of the invited employee / department head' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  fullName?: string;
+
+  @ApiPropertyOptional({ example: '+91 98765 43210', description: 'Phone number of the invited member' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: 'Head of Maintenance', description: 'Designation / job title' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  designation?: string;
 }

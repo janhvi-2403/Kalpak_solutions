@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Generate Prisma client
+        run: pnpm --filter @kalpak/database run db:generate
+
+      - name: Typecheck monorepo
+        run: pnpm run typecheck
+
+      - name: Run unit & integration tests
+        run: pnpm run test
+
+      - name: Build API backend
+        run: pnpm --filter @kalpak/api run build
+
+      - name: Build Web frontend
+        run: pnpm --filter @kalpak/web run build
+        env:
+          NEXT_PUBLIC_APP_ENV: production

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RESERVED_SUBDOMAINS } from '@kalpak/types';
 
 export const uuidSchema = z
   .string()
@@ -9,6 +10,11 @@ export const slugSchema = z
   .min(3, 'Slug must be at least 3 characters')
   .max(60, 'Slug must be at most 60 characters')
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must contain only lowercase alphanumeric characters and hyphens');
+
+export const tenantSubdomainSchema = slugSchema.refine(
+  (slug) => !RESERVED_SUBDOMAINS.includes(slug as any),
+  { message: 'This subdomain name is reserved and cannot be registered' }
+);
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

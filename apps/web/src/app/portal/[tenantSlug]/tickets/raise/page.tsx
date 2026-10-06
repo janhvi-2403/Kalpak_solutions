@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -12,7 +12,7 @@ import {
 import { apiClient } from '@/lib/api-client';
 import { PortalAsset, TicketPriorityEnum } from '@kalpak/types';
 
-export default function RaisePortalTicketPage() {
+function RaisePortalTicketContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -196,5 +196,13 @@ export default function RaisePortalTicketPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function RaisePortalTicketPage() {
+  return (
+    <Suspense fallback={<div className="max-w-3xl mx-auto text-xs text-slate-400 py-10">Loading form...</div>}>
+      <RaisePortalTicketContent />
+    </Suspense>
   );
 }

@@ -10,7 +10,6 @@ import {
   ChevronDown,
   Building2,
   Check,
-  ShieldCheck,
   Sparkles,
   Loader2,
 } from 'lucide-react';
@@ -54,8 +53,13 @@ export function Header() {
     await logout();
   };
 
+  const companyProfile = (activeTenant?.settings as Record<string, any>)?.companyProfile;
+  const companyLogo = companyProfile?.logoUrl || (activeTenant?.settings as Record<string, any>)?.logoUrl;
+  const isSetupDone = (activeTenant?.settings as Record<string, any>)?.basicSetupCompleted || !!companyProfile?.logoUrl || !!companyProfile?.address;
+
   const isOnboardingPending =
     activeRole === 'CLIENT_ADMIN' &&
+    !isSetupDone &&
     (!activeTenant?.settings?.onboardingCompleted ||
       activeTenant?.settings?.onboardingStep < 9);
 
@@ -128,17 +132,12 @@ export function Header() {
           </div>
         ) : (
           <TenantBadge
-            tenantName={activeTenant?.name || 'Kalpak Solutions'}
+            tenantName={activeTenant?.name || 'Company Portal'}
             role={activeRole || (user?.isSuperAdmin ? 'SUPER_ADMIN' : 'User')}
             isSuperAdmin={user?.isSuperAdmin}
+            logoUrl={companyLogo}
           />
         )}
-
-        {/* Security context indicator */}
-        <div className="hidden lg:flex items-center space-x-1.5 text-[11px] text-slate-400 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-md">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>PostgreSQL RLS Active</span>
-        </div>
       </div>
 
       {/* Right side: Onboarding quick action, notifications, user avatar, logout */}

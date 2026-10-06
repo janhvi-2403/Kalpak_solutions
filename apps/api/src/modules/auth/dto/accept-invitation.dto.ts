@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsArray, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AcceptInvitationDto {
   @ApiProperty({ description: 'Secure employee invitation token received via email' })
@@ -23,4 +23,26 @@ export class AcceptInvitationDto {
   @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
   @Matches(/[^A-Za-z0-9]/, { message: 'Password must contain at least one special character' })
   password!: string;
+
+  @ApiPropertyOptional({ example: '+91 98765 43210', description: 'Phone number of the employee' })
+  @IsString()
+  @IsOptional()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: '123456', description: '6-digit TOTP verification code for 2-step authentication' })
+  @IsString()
+  @IsOptional()
+  totpCode?: string;
+
+  @ApiPropertyOptional({ description: 'Raw TOTP secret key for setup' })
+  @IsString()
+  @IsOptional()
+  totpSecret?: string;
+
+  @ApiPropertyOptional({ description: 'Emergency backup recovery codes' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  backupCodes?: string[];
 }

@@ -58,6 +58,10 @@ export class ProductsService {
   }
 
   async getProduct(tenantId: string, productId: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId)) {
+      throw new NotFoundException('Product not found');
+    }
+
     const product = await this.prisma.product.findFirst({
       where: {
         id: productId,
@@ -405,5 +409,155 @@ export class ProductsService {
     });
 
     return { success: true, message: 'Equipment asset deleted successfully' };
+  }
+
+  // --------------------------------------------------------------------------
+  // Services Master Catalog (Installation, Repair, Maintenance, Warranty, etc.)
+  // --------------------------------------------------------------------------
+
+  async listServices(tenantId: string) {
+    const services = await this.prisma.serviceCatalog.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+      },
+      include: {
+        _count: {
+          select: { tickets: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return services.map((s) => ({
+      id: s.id,
+      tenantId: s.tenantId,
+      name: s.name,
+      code: s.code,
+      description: s.description,
+      isActive: s.isActive,
+      ticketCount: s._count.tickets,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }));
+  }
+
+  async getService(tenantId: string, serviceId: string) {
+    const service = await this.prisma.serviceCatalog.findFirst({
+      where: {
+        id: serviceId,
+        tenantId,
+        deletedAt: null,
+      },
+    });
+
+    if (!service) {
+      throw new NotFoundException('Service entry not found');
+    }
+
+    return service;
+  }
+
+  async createService(
+    tenantId: string,
+    actorId: string,
+    dto: { name: string; code: string; description?: string; isActive?: boolean }
+  ) {
+    const existing = await this.prisma.serviceCatalog.findFirst({
+      where: {
+        tenantId,
+        code: dto.code.trim().toUpperCase(),
+        deletedAt: null,
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException(`Service with code "${dto.code}" already exists in your organization`);
+    }
+
+    const service = await this.prisma.serviceCatalog.create({
+      data: {
+        tenantId,
+        name: dto.name.trim(),
+        code: dto.code.trim().toUpperCase(),
+        description: dto.description?.trim(),
+        isActive: dto.isActive ?? true,
+      },
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorId,
+      eventType: AuditEventType.PRODUCT_CREATED,
+      resourceType: 'SERVICE_CATALOG',
+      resourceId: service.id,
+      action: 'CREATE_SERVICE',
+      metadata: { name: service.name, code: service.code },
+    });
+
+    return service;
+  }
+
+  async updateService(
+    tenantId: string,
+    serviceId: string,
+    actorId: string,
+    dto: { name?: string; description?: string; isActive?: boolean }
+  ) {
+    const existing = await this.prisma.serviceCatalog.findFirst({
+      where: { id: serviceId, tenantId, deletedAt: null },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Service entry not found');
+    }
+
+    const updated = await this.prisma.serviceCatalog.update({
+      where: { id: serviceId },
+      data: {
+        name: dto.name !== undefined ? dto.name.trim() : undefined,
+        description: dto.description !== undefined ? dto.description?.trim() : undefined,
+        isActive: dto.isActive !== undefined ? dto.isActive : undefined,
+      },
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorId,
+      eventType: AuditEventType.PRODUCT_UPDATED,
+      resourceType: 'SERVICE_CATALOG',
+      resourceId: updated.id,
+      action: 'UPDATE_SERVICE',
+      metadata: { ...dto },
+    });
+
+    return updated;
+  }
+
+  async deleteService(tenantId: string, serviceId: string, actorId: string) {
+    const existing = await this.prisma.serviceCatalog.findFirst({
+      where: { id: serviceId, tenantId, deletedAt: null },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Service entry not found');
+    }
+
+    await this.prisma.serviceCatalog.update({
+      where: { id: serviceId },
+      data: { deletedAt: new Date() },
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorId,
+      eventType: AuditEventType.PRODUCT_DELETED,
+      resourceType: 'SERVICE_CATALOG',
+      resourceId: serviceId,
+      action: 'DELETE_SERVICE',
+      metadata: { code: existing.code },
+    });
+
+    return { success: true, message: 'Service catalog item deleted successfully' };
   }
 }
