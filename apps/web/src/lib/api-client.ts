@@ -67,12 +67,12 @@ export async function apiClient<T>(
     }
   }
 
-  // Setup safety timeout to avoid hanging network calls
+  // Setup safety timeout to accommodate cloud cold starts (30s)
   let timeoutId: NodeJS.Timeout | undefined;
   let signal = restOptions.signal;
   if (!signal) {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 6000);
+    timeoutId = setTimeout(() => controller.abort(), 30000);
     signal = controller.signal;
   }
 

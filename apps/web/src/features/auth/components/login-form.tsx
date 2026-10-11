@@ -106,6 +106,8 @@ export function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid email or password. Please try again.');
+      } else if (err instanceof Error && err.name === 'AbortError') {
+        setError('The server is taking longer than usual to respond (waking up). Please try again in a moment.');
       } else {
         setError('Unable to communicate with the authentication service. Please check your connection.');
       }

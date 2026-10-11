@@ -43,7 +43,7 @@ async function bootstrap() {
       if (!origin) {
         return callback(null, true);
       }
-      if (config.CORS_ALLOWED_ORIGINS.includes(origin)) {
+      if (config.CORS_ALLOWED_ORIGINS.includes('*') || config.CORS_ALLOWED_ORIGINS.includes(origin)) {
         return callback(null, true);
       }
       // Allow localhost and lvh.me subdomains (e.g. http://acme.localhost:3000)

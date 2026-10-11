@@ -35,11 +35,11 @@ export default function DashboardLayout({
     }
   }, [isLoading, isAuthenticated, router]);
 
-  // Safety watchdog: if verification takes more than 2 seconds, show options or redirect
+  // Safety watchdog: if verification takes more than 3 seconds, show fallback, redirect after 8s
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowLoginFallback(true);
-    }, 1000);
+    }, 3000);
 
     const watchdog = setTimeout(() => {
       if (isLoading && !isAuthenticated) {
@@ -49,7 +49,7 @@ export default function DashboardLayout({
         const target = returnUrl ? `/login?returnUrl=${returnUrl}` : '/login';
         router.replace(target);
       }
-    }, 2200);
+    }, 8000);
 
     return () => {
       clearTimeout(timer);
