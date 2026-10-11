@@ -1056,11 +1056,15 @@ model SupportEmail {
   displayName        String                         @map("display_name") @db.VarChar(150)
   isDefault          Boolean                        @default(false) @map("is_default")
   isActive           Boolean                        @default(true) @map("is_active")
-  verificationStatus SupportEmailVerificationStatus @default(PENDING) @map("verification_status")
-  verifiedAt         DateTime?                      @map("verified_at") @db.Timestamptz(6)
-  createdAt          DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime                       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  tenant             Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  verificationStatus     SupportEmailVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt             DateTime?                      @map("verified_at") @db.Timestamptz(6)
+  verificationTokenHash  String?                        @map("verification_token_hash") @db.VarChar(255)
+  verificationCodeHash   String?                        @map("verification_code_hash") @db.VarChar(255)
+  verificationExpiresAt  DateTime?                      @map("verification_expires_at") @db.Timestamptz(6)
+  lastVerificationSentAt DateTime?                      @map("last_verification_sent_at") @db.Timestamptz(6)
+  createdAt              DateTime                       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant                 Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, email], name: "uq_support_emails_tenant_email")
   @@index([tenantId], map: "idx_support_emails_tenant_id")
@@ -1272,5 +1276,7 @@ enum EmailProcessingStatus {
 enum SupportEmailVerificationStatus {
   PENDING
   VERIFIED
+  EXPIRED
+  FAILED
   UNVERIFIED
 }

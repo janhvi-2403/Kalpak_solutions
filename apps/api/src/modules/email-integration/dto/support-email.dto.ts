@@ -53,3 +53,17 @@ export class UpdateSupportEmailDto {
   @IsBoolean({ message: 'isActive must be a boolean' })
   isActive?: boolean;
 }
+
+export class ConfirmSupportEmailCodeDto {
+  @ApiProperty({ example: '123456', description: '6-digit verification code sent to the email address' })
+  @IsNotEmpty({ message: 'Verification code is required' })
+  @IsString({ message: 'Verification code must be a string' })
+  code!: string;
+}
+
+export class VerifySupportEmailTokenDto {
+  @ApiProperty({ example: 'a1b2c3d4...', description: 'Single-use verification token from email link' })
+  @IsNotEmpty({ message: 'Verification token is required' })
+  @IsString({ message: 'Verification token must be a string' })
+  token!: string;
+}

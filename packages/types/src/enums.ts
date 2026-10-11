@@ -166,6 +166,8 @@ export enum PlatformAccess {
 export enum SupportEmailVerificationStatus {
   PENDING = 'PENDING',
   VERIFIED = 'VERIFIED',
+  EXPIRED = 'EXPIRED',
+  FAILED = 'FAILED',
   UNVERIFIED = 'UNVERIFIED',
 }
 

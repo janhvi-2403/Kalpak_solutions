@@ -90,10 +90,11 @@ export class AuthController {
     // Set secure HttpOnly cookie for browser clients (shared across tenant subdomains)
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
     const cookieDomain = this.getCookieDomain();
+    const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
-      secure: this.config.COOKIE_SECURE,
-      sameSite: 'lax',
+      secure: isSecure,
+      sameSite: isSecure ? 'none' : 'lax',
       maxAge: maxAgeMs,
       path: '/',
       domain: cookieDomain,
@@ -128,10 +129,11 @@ export class AuthController {
     // Set secure HttpOnly session cookie for browser clients
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
     const cookieDomain = this.getCookieDomain();
+    const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
-      secure: this.config.COOKIE_SECURE,
-      sameSite: 'lax',
+      secure: isSecure,
+      sameSite: isSecure ? 'none' : 'lax',
       maxAge: maxAgeMs,
       path: '/',
       domain: cookieDomain,
@@ -285,10 +287,11 @@ export class AuthController {
     }
 
     const cookieDomain = this.getCookieDomain();
+    const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.clearCookie(this.config.SESSION_COOKIE_NAME, {
       httpOnly: true,
-      secure: this.config.COOKIE_SECURE,
-      sameSite: 'lax',
+      secure: isSecure,
+      sameSite: isSecure ? 'none' : 'lax',
       path: '/',
       domain: cookieDomain,
     });

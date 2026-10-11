@@ -59,6 +59,14 @@ export async function apiClient<T>(
   }
 
 
+  // Attach Bearer token from localStorage for resilience against cross-domain/Render cookie restrictions
+  if (typeof window !== 'undefined') {
+    const sessionToken = localStorage.getItem('kalpak_session_token');
+    if (sessionToken && !requestHeaders.has('Authorization')) {
+      requestHeaders.set('Authorization', `Bearer ${sessionToken}`);
+    }
+  }
+
   // Setup safety timeout to avoid hanging network calls
   let timeoutId: NodeJS.Timeout | undefined;
   let signal = restOptions.signal;
@@ -86,6 +94,11 @@ export async function apiClient<T>(
   const isJson = contentType.includes('application/json');
 
   if (!response.ok) {
+    // If unauthorized, clear local token so state doesn't stay in an invalid loop
+    if (response.status === 401 && typeof window !== 'undefined' && !url.includes('/auth/login')) {
+      localStorage.removeItem('kalpak_session_token');
+    }
+
     let errorData: ApiErrorResponse;
     if (isJson) {
       errorData = await response.json();
@@ -109,9 +122,42 @@ export async function apiClient<T>(
 
   if (isJson) {
     const result: StandardApiResponse<T> = await response.json();
-    // Return extracted data payload if formatted as StandardApiResponse
-    return result.data !== undefined ? result.data : (result as unknown as T);
+    const data = result.data !== undefined ? result.data : (result as unknown as T);
+
+    // Automatically persist session token if returned by authentication response
+    if (typeof window !== 'undefined' && data && typeof data === 'object' && 'token' in (data as any)) {
+      const returnedToken = (data as any).token;
+      if (typeof returnedToken === 'string' && returnedToken) {
+        localStorage.setItem('kalpak_session_token', returnedToken);
+      }
+    }
+
+    // Clear local token on logout
+    if (typeof window !== 'undefined' && url.includes('/auth/logout')) {
+      localStorage.removeItem('kalpak_session_token');
+    }
+
+    return data;
   }
 
   return (await response.text()) as unknown as T;
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window !== 'undefined' && token) {
+    localStorage.setItem('kalpak_session_token', token);
+  }
+}
+
+export function clearAuthToken(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('kalpak_session_token');
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('kalpak_session_token');
+  }
+  return null;
 }

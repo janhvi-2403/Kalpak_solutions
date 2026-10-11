@@ -9,6 +9,8 @@ export interface SupportEmailDto {
   isActive: boolean;
   verificationStatus: SupportEmailVerificationStatus;
   verifiedAt?: string | null;
+  verificationExpiresAt?: string | null;
+  lastVerificationSentAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,4 +27,12 @@ export interface UpdateSupportEmailInput {
   displayName?: string;
   isDefault?: boolean;
   isActive?: boolean;
+}
+
+export interface ConfirmSupportEmailCodeInput {
+  code: string;
+}
+
+export interface VerifySupportEmailTokenInput {
+  token: string;
 }

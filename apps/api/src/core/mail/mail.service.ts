@@ -77,6 +77,49 @@ export class MailService {
 
   async sendVerificationEmail(email: string, token: string, organizationName?: string): Promise<void> {
     const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
+    const subject = `Verify your email address - ${organizationName || 'Kalpak Solutions'}`;
+    const textContent = `Please verify your email by clicking: ${verificationUrl}`;
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 24px; color: #ffffff;">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Kalpak Solutions</h1>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Email Address Verification</p>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 15px; margin-top: 0;">Hello,</p>
+      <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+        Please confirm your email address to complete your registration${organizationName ? ` with <strong>${organizationName}</strong>` : ''}.
+      </p>
+      <div style="margin: 24px 0; text-align: center;">
+        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
+          Verify Email Address
+        </a>
+      </div>
+      <p style="font-size: 11px; word-break: break-all; color: #64748b; font-family: monospace;">${verificationUrl}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const transporter = this.getTransporter();
+    if (transporter) {
+      try {
+        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || `noreply@${this.config.APP_BASE_DOMAIN}`;
+        await transporter.sendMail({
+          from: `"Kalpak Solutions" <${fromAddress}>`,
+          to: email,
+          subject,
+          text: textContent,
+          html: htmlContent,
+        });
+        logger.info({ to: email, subject }, '[MailService] Verification email sent via SMTP');
+      } catch (err: any) {
+        logger.error({ error: err.message, to: email }, '[MailService] Failed to send verification email via SMTP');
+      }
+    }
 
     logger.info(
       {
@@ -92,6 +135,128 @@ export class MailService {
     console.log(`[TRANSACTIONAL EMAIL] Verify Your Email Address`);
     console.log(`Recipient: ${email}`);
     if (organizationName) console.log(`Organization: ${organizationName}`);
+    console.log(`Verification URL: ${verificationUrl}`);
+    console.log('======================================================\n');
+  }
+
+  async sendSupportEmailVerification(options: {
+    email: string;
+    code: string;
+    token: string;
+    organizationName: string;
+    tenantSlug?: string;
+  }): Promise<void> {
+    const { email, code, token, organizationName, tenantSlug } = options;
+    const verificationUrl = `${this.getWebBaseUrl()}/verify-support-email?token=${token}${
+      tenantSlug ? `&tenant=${tenantSlug}` : ''
+    }`;
+
+    const subject = `Verify support email for ${organizationName}: ${code}`;
+
+    const textContent = `
+Hello,
+
+A request was made to verify "${email}" as an official support email address for ${organizationName}.
+
+Your 6-Digit Verification Code: ${code}
+
+Or verify immediately with this secure link:
+${verificationUrl}
+
+This code and link will expire in 24 hours.
+
+Best regards,
+Kalpak Solutions Platform Team
+`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);">
+    <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 32px 28px; color: #ffffff;">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;">Kalpak Solutions</h1>
+      <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.95;">Support Email Verification for <strong>${organizationName}</strong></p>
+    </div>
+    <div style="padding: 28px;">
+      <p style="font-size: 15px; margin-top: 0; color: #334155; line-height: 1.5;">
+        You are receiving this email because <strong>${organizationName}</strong> configured <strong>${email}</strong> as their support channel for service calls and ticket management.
+      </p>
+
+      <div style="background-color: #fff7ed; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #fed7aa; text-align: center;">
+        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #c2410c;">Your Verification Code</span>
+        <div style="font-size: 32px; font-weight: 900; letter-spacing: 0.25em; color: #ea580c; font-family: monospace; margin: 8px 0;">
+          ${code}
+        </div>
+        <p style="margin: 0; font-size: 12px; color: #9a3412;">Enter this 6-digit code in your email settings dialog.</p>
+      </div>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 13px 32px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.25);">
+          Confirm & Verify Support Email
+        </a>
+      </div>
+
+      <div style="background-color: #f8fafc; border-radius: 8px; padding: 12px; margin-top: 24px; border: 1px dashed #cbd5e1;">
+        <p style="margin: 0 0 4px 0; font-size: 11px; color: #64748b; font-weight: 600;">Or copy this secure link into your browser:</p>
+        <p style="margin: 0; font-size: 11px; word-break: break-all; font-family: monospace; color: #ea580c;">
+          ${verificationUrl}
+        </p>
+      </div>
+
+      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+        ⏱️ <strong>Time-limited:</strong> This code and single-use verification link will expire in <strong>24 hours</strong>.<br/>
+        🔒 Only verified email addresses can be activated for email-to-ticket ingestion and outbound customer replies.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+    const transporter = this.getTransporter();
+    if (transporter) {
+      try {
+        const fromAddress =
+          process.env.SMTP_FROM ||
+          process.env.SMTP_USER ||
+          process.env.GMAIL_USER ||
+          `noreply@${this.config.APP_BASE_DOMAIN}`;
+        await transporter.sendMail({
+          from: `"${organizationName} Support" <${fromAddress}>`,
+          to: email,
+          subject,
+          text: textContent,
+          html: htmlContent,
+        });
+
+        logger.info(
+          { to: email, subject, organizationName },
+          `[MailService] Support email verification successfully dispatched via SMTP`
+        );
+      } catch (err: any) {
+        logger.error(
+          { error: err.message, to: email },
+          `[MailService] Failed to dispatch support email verification via SMTP: ${err.message}`
+        );
+      }
+    }
+
+    logger.info(
+      {
+        to: email,
+        organizationName,
+        code,
+        actionUrl: verificationUrl,
+      },
+      `[MailService] SUPPORT EMAIL VERIFICATION CODE: ${code} | LINK: ${verificationUrl}`
+    );
+
+    console.log('\n======================================================');
+    console.log(`📧 [REAL SUPPORT EMAIL VERIFICATION DISPATCHED]`);
+    console.log(`Recipient: ${email}`);
+    console.log(`Organization: ${organizationName}`);
+    console.log(`6-Digit Verification Code: ${code}`);
     console.log(`Verification URL: ${verificationUrl}`);
     console.log('======================================================\n');
   }

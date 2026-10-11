@@ -4,14 +4,35 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../core/database/prisma.service';
-import { CreateSupportEmailDto, UpdateSupportEmailDto } from './dto/support-email.dto';
+import { MailService } from '../../core/mail/mail.service';
+import {
+  CreateSupportEmailDto,
+  UpdateSupportEmailDto,
+} from './dto/support-email.dto';
 import { SupportEmailVerificationStatus } from '@kalpak/types';
 import { logger } from '@kalpak/logger';
 
 @Injectable()
 export class SupportEmailsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService
+  ) {}
+
+  /**
+   * Generates secure, high-entropy single-use verification credentials.
+   * Includes 32-byte URL token and 6-digit numeric code with SHA-256 hashes.
+   */
+  private generateVerificationCredentials() {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const rawCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    return { rawToken, rawCode, tokenHash, codeHash, expiresAt };
+  }
 
   /**
    * Safe execution wrapper enforcing PostgreSQL Row Level Security (RLS) context
@@ -36,6 +57,20 @@ export class SupportEmailsService {
       return tx.supportEmail.findMany({
         where: { tenantId },
         orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          tenantId: true,
+          email: true,
+          displayName: true,
+          isDefault: true,
+          isActive: true,
+          verificationStatus: true,
+          verifiedAt: true,
+          verificationExpiresAt: true,
+          lastVerificationSentAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     });
   }
@@ -47,6 +82,20 @@ export class SupportEmailsService {
     return this.withTenant(tenantId, false, async (tx) => {
       const supportEmail = await tx.supportEmail.findFirst({
         where: { id, tenantId },
+        select: {
+          id: true,
+          tenantId: true,
+          email: true,
+          displayName: true,
+          isDefault: true,
+          isActive: true,
+          verificationStatus: true,
+          verifiedAt: true,
+          verificationExpiresAt: true,
+          lastVerificationSentAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
       if (!supportEmail) {
         throw new NotFoundException('Support email address not found');
@@ -57,12 +106,18 @@ export class SupportEmailsService {
 
   /**
    * Add a new support email address for the tenant.
-   * - Never accepts tenantId from frontend (injected from verified session).
-   * - System controls verificationStatus (initialized as PENDING).
-   * - If first email or marked as default, unsets default on other tenant addresses.
+   * - System initializes verificationStatus as PENDING.
+   * - Generates unique 24-hour verification token & 6-digit code.
+   * - Sends real email with link + code to the exact address entered.
+   * - Address remains unverified and cannot be activated until confirmed.
    */
   async createSupportEmail(tenantId: string, dto: CreateSupportEmailDto) {
     const normalizedEmail = dto.email.toLowerCase().trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      throw new BadRequestException('Invalid email address format');
+    }
 
     return this.withTenant(tenantId, false, async (tx) => {
       // Check for duplicate email in this organization
@@ -84,67 +139,331 @@ export class SupportEmailsService {
         where: { tenantId },
       });
 
-      // If it's the first address, automatically make it default
-      const shouldBeDefault = totalCount === 0 || dto.isDefault === true;
+      // Default designation is queued until verified
+      const wantsDefault = totalCount === 0 || dto.isDefault === true;
 
-      // If this will be default, reset isDefault on all other addresses for this tenant
-      if (shouldBeDefault && totalCount > 0) {
-        await tx.supportEmail.updateMany({
-          where: { tenantId, isDefault: true },
-          data: { isDefault: false },
-        });
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const isValidEmail = emailRegex.test(normalizedEmail);
+      const creds = this.generateVerificationCredentials();
 
       const newSupportEmail = await tx.supportEmail.create({
         data: {
           tenantId,
           email: normalizedEmail,
           displayName: dto.displayName.trim(),
-          isDefault: shouldBeDefault,
-          isActive: dto.isActive !== undefined ? dto.isActive : true,
-          verificationStatus: isValidEmail
-            ? SupportEmailVerificationStatus.VERIFIED
-            : SupportEmailVerificationStatus.PENDING,
-          verifiedAt: isValidEmail ? new Date() : null,
+          isDefault: false, // Default is only awarded once verified
+          isActive: false, // Inactive until verified
+          verificationStatus: SupportEmailVerificationStatus.PENDING,
+          verifiedAt: null,
+          verificationTokenHash: creds.tokenHash,
+          verificationCodeHash: creds.codeHash,
+          verificationExpiresAt: creds.expiresAt,
+          lastVerificationSentAt: new Date(),
         },
       });
 
-      // Update tenant's email configuration if default
-      if (shouldBeDefault) {
+      // Fetch tenant name & slug for email personalization
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, slug: true },
+      });
+
+      // Dispatch real verification email
+      await this.mailService.sendSupportEmailVerification({
+        email: normalizedEmail,
+        code: creds.rawCode,
+        token: creds.rawToken,
+        organizationName: tenant?.name || 'Your Organization',
+        tenantSlug: tenant?.slug,
+      });
+
+      logger.info(
+        { tenantId, supportEmailId: newSupportEmail.id, email: normalizedEmail },
+        '[SupportEmails] New support email created in PENDING state; verification email dispatched'
+      );
+
+      return {
+        ...newSupportEmail,
+        verificationTokenHash: undefined,
+        verificationCodeHash: undefined,
+        wantsDefault,
+        message: `Verification email sent to "${normalizedEmail}". Please enter the 6-digit code or click the confirmation link to activate this email address.`,
+      };
+    });
+  }
+
+  /**
+   * Resend verification email with a 60-second rate-limiting cooldown.
+   */
+  async resendVerification(tenantId: string, id: string) {
+    return this.withTenant(tenantId, false, async (tx) => {
+      const target = await tx.supportEmail.findFirst({
+        where: { id, tenantId },
+      });
+
+      if (!target) {
+        throw new NotFoundException('Support email address not found');
+      }
+
+      if (target.verificationStatus === SupportEmailVerificationStatus.VERIFIED) {
+        return {
+          success: true,
+          message: `Support email "${target.email}" is already verified.`,
+          supportEmail: target,
+        };
+      }
+
+      // Enforce 60-second rate limit
+      if (target.lastVerificationSentAt) {
+        const elapsedMs = Date.now() - new Date(target.lastVerificationSentAt).getTime();
+        const cooldownMs = 60 * 1000;
+        if (elapsedMs < cooldownMs) {
+          const remainingSec = Math.ceil((cooldownMs - elapsedMs) / 1000);
+          throw new BadRequestException(
+            `Please wait ${remainingSec} second${remainingSec > 1 ? 's' : ''} before requesting another verification email.`
+          );
+        }
+      }
+
+      const creds = this.generateVerificationCredentials();
+
+      const updated = await tx.supportEmail.update({
+        where: { id },
+        data: {
+          verificationStatus: SupportEmailVerificationStatus.PENDING,
+          verificationTokenHash: creds.tokenHash,
+          verificationCodeHash: creds.codeHash,
+          verificationExpiresAt: creds.expiresAt,
+          lastVerificationSentAt: new Date(),
+        },
+      });
+
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, slug: true },
+      });
+
+      await this.mailService.sendSupportEmailVerification({
+        email: target.email,
+        code: creds.rawCode,
+        token: creds.rawToken,
+        organizationName: tenant?.name || 'Your Organization',
+        tenantSlug: tenant?.slug,
+      });
+
+      logger.info(
+        { tenantId, supportEmailId: id, email: target.email },
+        '[SupportEmails] Verification email resent'
+      );
+
+      return {
+        success: true,
+        message: `Verification code and link resent to "${target.email}". Please check your inbox.`,
+        supportEmail: {
+          ...updated,
+          verificationTokenHash: undefined,
+          verificationCodeHash: undefined,
+        },
+      };
+    });
+  }
+
+  /**
+   * Confirm support email via 6-digit code.
+   * Invalidates token upon success, marks as VERIFIED, activates the address.
+   */
+  async confirmVerificationCode(tenantId: string, id: string, code: string) {
+    if (!code || !/^\d{6}$/.test(code.trim())) {
+      throw new BadRequestException('Please enter a valid 6-digit numeric verification code.');
+    }
+
+    const cleanCode = code.trim();
+    const hashedCode = crypto.createHash('sha256').update(cleanCode).digest('hex');
+
+    return this.withTenant(tenantId, false, async (tx) => {
+      const target = await tx.supportEmail.findFirst({
+        where: { id, tenantId },
+      });
+
+      if (!target) {
+        throw new NotFoundException('Support email address not found');
+      }
+
+      if (target.verificationStatus === SupportEmailVerificationStatus.VERIFIED) {
+        return target;
+      }
+
+      // Check expiry
+      if (target.verificationExpiresAt && new Date() > target.verificationExpiresAt) {
+        await tx.supportEmail.update({
+          where: { id },
+          data: { verificationStatus: SupportEmailVerificationStatus.EXPIRED },
+        });
+        throw new BadRequestException(
+          'Verification code has expired. Please click "Resend Code" to receive a fresh verification code.'
+        );
+      }
+
+      // Check code hash
+      if (!target.verificationCodeHash || target.verificationCodeHash !== hashedCode) {
+        throw new BadRequestException(
+          'Invalid verification code. Please check your email or request a new code.'
+        );
+      }
+
+      // Promote to default if no other default exists
+      const currentDefault = await tx.supportEmail.findFirst({
+        where: { tenantId, isDefault: true, id: { not: id } },
+      });
+      const shouldBeDefault = !currentDefault;
+
+      const verifiedAt = new Date();
+      const updated = await tx.supportEmail.update({
+        where: { id },
+        data: {
+          verificationStatus: SupportEmailVerificationStatus.VERIFIED,
+          verifiedAt,
+          verificationTokenHash: null,
+          verificationCodeHash: null,
+          verificationExpiresAt: null,
+          isActive: true,
+          ...(shouldBeDefault ? { isDefault: true } : {}),
+        },
+      });
+
+      // Synchronize with EmailConfiguration if default
+      if (updated.isDefault) {
         await tx.emailConfiguration.upsert({
           where: { tenantId },
           update: {
-            supportEmail: normalizedEmail,
+            supportEmail: updated.email,
             enabled: true,
             status: 'ACTIVE',
+            verifiedAt,
+            forwardingStatus: 'CONNECTED',
           },
           create: {
             tenantId,
-            supportEmail: normalizedEmail,
+            supportEmail: updated.email,
             provider: 'CLOUDMAILIN',
             enabled: true,
             autoCreateTicket: true,
             autoRoute: true,
             status: 'ACTIVE',
+            verifiedAt,
+            forwardingStatus: 'CONNECTED',
           },
         });
       }
 
       logger.info(
-        { tenantId, supportEmailId: newSupportEmail.id, email: normalizedEmail, verified: isValidEmail },
-        '[SupportEmails] New support email created and verified'
+        { tenantId, supportEmailId: id, email: updated.email },
+        '[SupportEmails] Support email successfully verified via 6-digit code'
       );
 
-      return newSupportEmail;
+      return {
+        ...updated,
+        verificationTokenHash: undefined,
+        verificationCodeHash: undefined,
+        message: `Support email "${updated.email}" verified successfully! It is now active for support communications.`,
+      };
     });
   }
 
   /**
+   * Public 1-click verification link endpoint from email.
+   * Single-use token validation and expiration check.
+   */
+  async verifyByToken(token: string) {
+    if (!token || typeof token !== 'string' || token.trim().length < 16) {
+      throw new BadRequestException('Invalid or missing verification token.');
+    }
+
+    const cleanToken = token.trim();
+    const hashedToken = crypto.createHash('sha256').update(cleanToken).digest('hex');
+
+    const target = await this.prisma.supportEmail.findFirst({
+      where: { verificationTokenHash: hashedToken },
+      include: { tenant: { select: { id: true, name: true, slug: true } } },
+    });
+
+    if (!target) {
+      throw new BadRequestException(
+        'Invalid or already-used verification link. If your link has expired, please request a new verification from your dashboard.'
+      );
+    }
+
+    // Check expiration
+    if (target.verificationExpiresAt && new Date() > target.verificationExpiresAt) {
+      await this.prisma.supportEmail.update({
+        where: { id: target.id },
+        data: { verificationStatus: SupportEmailVerificationStatus.EXPIRED },
+      });
+      throw new BadRequestException(
+        'This verification link has expired. Please log in to your dashboard and click "Resend Verification".'
+      );
+    }
+
+    // Promote to default if no other default exists
+    const currentDefault = await this.prisma.supportEmail.findFirst({
+      where: { tenantId: target.tenantId, isDefault: true, id: { not: target.id } },
+    });
+    const shouldBeDefault = !currentDefault;
+
+    const verifiedAt = new Date();
+    const updated = await this.prisma.supportEmail.update({
+      where: { id: target.id },
+      data: {
+        verificationStatus: SupportEmailVerificationStatus.VERIFIED,
+        verifiedAt,
+        verificationTokenHash: null,
+        verificationCodeHash: null,
+        verificationExpiresAt: null,
+        isActive: true,
+        ...(shouldBeDefault ? { isDefault: true } : {}),
+      },
+    });
+
+    if (updated.isDefault) {
+      await this.prisma.emailConfiguration.upsert({
+        where: { tenantId: target.tenantId },
+        update: {
+          supportEmail: updated.email,
+          enabled: true,
+          status: 'ACTIVE',
+          verifiedAt,
+          forwardingStatus: 'CONNECTED',
+        },
+        create: {
+          tenantId: target.tenantId,
+          supportEmail: updated.email,
+          provider: 'CLOUDMAILIN',
+          enabled: true,
+          autoCreateTicket: true,
+          autoRoute: true,
+          status: 'ACTIVE',
+          verifiedAt,
+          forwardingStatus: 'CONNECTED',
+        },
+      });
+    }
+
+    logger.info(
+      { tenantId: target.tenantId, supportEmailId: target.id, email: target.email },
+      '[SupportEmails] Support email successfully verified via email link'
+    );
+
+    return {
+      success: true,
+      message: `Support email "${target.email}" verified successfully!`,
+      email: target.email,
+      tenantName: target.tenant.name,
+      tenantSlug: target.tenant.slug,
+    };
+  }
+
+  /**
    * Edit an existing support email address for the tenant.
-   * - Verification status remains system-controlled (resets to PENDING if email changes).
+   * Changing the email address resets verification status and sends a new verification email.
+   * Only verified addresses can be activated or marked as default.
    */
   async updateSupportEmail(
     tenantId: string,
@@ -161,6 +480,7 @@ export class SupportEmailsService {
       }
 
       const updateData: any = {};
+      let emailChanged = false;
 
       if (dto.displayName !== undefined) {
         updateData.displayName = dto.displayName.trim();
@@ -169,7 +489,6 @@ export class SupportEmailsService {
       if (dto.email !== undefined) {
         const normalizedEmail = dto.email.toLowerCase().trim();
         if (normalizedEmail !== existing.email) {
-          // Check for duplicate with other entries
           const duplicate = await tx.supportEmail.findFirst({
             where: {
               tenantId,
@@ -180,39 +499,70 @@ export class SupportEmailsService {
 
           if (duplicate) {
             throw new ConflictException(
-              `The support email "${normalizedEmail}" is already used by another entry.`
+              `The support email "${normalizedEmail}" is already registered for your organization.`
             );
           }
 
+          emailChanged = true;
           updateData.email = normalizedEmail;
-          // System-controlled: changing the email resets verification status
+          // Security requirement: changing address resets verification
           updateData.verificationStatus = SupportEmailVerificationStatus.PENDING;
           updateData.verifiedAt = null;
+          updateData.isActive = false;
+          updateData.isDefault = false;
+
+          const creds = this.generateVerificationCredentials();
+          updateData.verificationTokenHash = creds.tokenHash;
+          updateData.verificationCodeHash = creds.codeHash;
+          updateData.verificationExpiresAt = creds.expiresAt;
+          updateData.lastVerificationSentAt = new Date();
+
+          const tenant = await tx.tenant.findUnique({
+            where: { id: tenantId },
+            select: { name: true, slug: true },
+          });
+
+          await this.mailService.sendSupportEmailVerification({
+            email: normalizedEmail,
+            code: creds.rawCode,
+            token: creds.rawToken,
+            organizationName: tenant?.name || 'Your Organization',
+            tenantSlug: tenant?.slug,
+          });
         }
       }
 
-      if (dto.isActive !== undefined) {
-        updateData.isActive = dto.isActive;
-      }
-
-      if (dto.isDefault === true) {
-        // Unset default on all other addresses
-        await tx.supportEmail.updateMany({
-          where: { tenantId, id: { not: id }, isDefault: true },
-          data: { isDefault: false },
-        });
-        updateData.isDefault = true;
-        // A default email should also be active
-        updateData.isActive = true;
-      } else if (dto.isDefault === false && existing.isDefault) {
-        // Prevent un-defaulting if it's the only support email
-        const otherCount = await tx.supportEmail.count({
-          where: { tenantId, id: { not: id } },
-        });
-        if (otherCount === 0) {
-          throw new BadRequestException('At least one support email must remain the default.');
+      if (!emailChanged) {
+        if (dto.isActive === true && existing.verificationStatus !== SupportEmailVerificationStatus.VERIFIED) {
+          throw new BadRequestException(
+            'Support email address must be verified before it can be activated.'
+          );
         }
-        updateData.isDefault = false;
+        if (dto.isActive !== undefined) {
+          updateData.isActive = dto.isActive;
+        }
+
+        if (dto.isDefault === true) {
+          if (existing.verificationStatus !== SupportEmailVerificationStatus.VERIFIED) {
+            throw new BadRequestException(
+              'Only verified support email addresses can be set as the default sender.'
+            );
+          }
+          await tx.supportEmail.updateMany({
+            where: { tenantId, id: { not: id }, isDefault: true },
+            data: { isDefault: false },
+          });
+          updateData.isDefault = true;
+          updateData.isActive = true;
+        } else if (dto.isDefault === false && existing.isDefault) {
+          const otherVerified = await tx.supportEmail.count({
+            where: { tenantId, id: { not: id }, verificationStatus: SupportEmailVerificationStatus.VERIFIED },
+          });
+          if (otherVerified === 0) {
+            throw new BadRequestException('At least one verified support email must remain default.');
+          }
+          updateData.isDefault = false;
+        }
       }
 
       const updated = await tx.supportEmail.update({
@@ -220,17 +570,19 @@ export class SupportEmailsService {
         data: updateData,
       });
 
-      logger.info(
-        { tenantId, supportEmailId: id },
-        '[SupportEmails] Support email updated'
-      );
+      logger.info({ tenantId, supportEmailId: id, emailChanged }, '[SupportEmails] Support email updated');
 
-      return updated;
+      return {
+        ...updated,
+        verificationTokenHash: undefined,
+        verificationCodeHash: undefined,
+      };
     });
   }
 
   /**
-   * Set a specific support email as the default address for the tenant.
+   * Designate a support email address as the default for the organization.
+   * Only verified addresses are eligible.
    */
   async setDefault(tenantId: string, id: string) {
     return this.withTenant(tenantId, false, async (tx) => {
@@ -242,34 +594,49 @@ export class SupportEmailsService {
         throw new NotFoundException('Support email address not found');
       }
 
-      // Reset isDefault on other addresses
+      if (target.verificationStatus !== SupportEmailVerificationStatus.VERIFIED) {
+        throw new BadRequestException(
+          'Only verified support email addresses can be set as the default sender.'
+        );
+      }
+
       await tx.supportEmail.updateMany({
         where: { tenantId, isDefault: true },
         data: { isDefault: false },
       });
 
-      // Set default and ensure it is active
       const updated = await tx.supportEmail.update({
         where: { id },
-        data: {
-          isDefault: true,
-          isActive: true,
-        },
+        data: { isDefault: true, isActive: true },
       });
 
-      logger.info(
-        { tenantId, supportEmailId: id },
-        '[SupportEmails] Default support email changed'
-      );
+      await tx.emailConfiguration.upsert({
+        where: { tenantId },
+        update: {
+          supportEmail: updated.email,
+          enabled: true,
+          status: 'ACTIVE',
+        },
+        create: {
+          tenantId,
+          supportEmail: updated.email,
+          provider: 'CLOUDMAILIN',
+          enabled: true,
+          autoCreateTicket: true,
+          autoRoute: true,
+          status: 'ACTIVE',
+        },
+      });
 
       return updated;
     });
   }
 
   /**
-   * Toggle the active/inactive state of a support email address.
+   * Activate or deactivate a support email address.
+   * Only verified addresses can be activated.
    */
-  async toggleStatus(tenantId: string, id: string, targetActive?: boolean) {
+  async toggleStatus(tenantId: string, id: string, isActive?: boolean) {
     return this.withTenant(tenantId, false, async (tx) => {
       const target = await tx.supportEmail.findFirst({
         where: { id, tenantId },
@@ -279,17 +646,26 @@ export class SupportEmailsService {
         throw new NotFoundException('Support email address not found');
       }
 
-      const newActive = targetActive !== undefined ? targetActive : !target.isActive;
+      const newActive = isActive !== undefined ? isActive : !target.isActive;
 
-      // If deactivating the default address, ensure there are other active addresses or promote another
+      if (newActive && target.verificationStatus !== SupportEmailVerificationStatus.VERIFIED) {
+        throw new BadRequestException(
+          'Support email address must be verified before it can be activated.'
+        );
+      }
+
       if (!newActive && target.isDefault) {
         const nextActive = await tx.supportEmail.findFirst({
-          where: { tenantId, id: { not: id }, isActive: true },
+          where: {
+            tenantId,
+            id: { not: id },
+            isActive: true,
+            verificationStatus: SupportEmailVerificationStatus.VERIFIED,
+          },
           orderBy: { createdAt: 'asc' },
         });
 
         if (nextActive) {
-          // Promote next active to default
           await tx.supportEmail.update({
             where: { id: nextActive.id },
             data: { isDefault: true },
@@ -311,7 +687,6 @@ export class SupportEmailsService {
 
   /**
    * Delete a support email address.
-   * If the deleted address was default, automatically promote the oldest active address.
    */
   async deleteSupportEmail(tenantId: string, id: string) {
     return this.withTenant(tenantId, false, async (tx) => {
@@ -329,10 +704,9 @@ export class SupportEmailsService {
         where: { id },
       });
 
-      // If deleted was default, promote the next oldest active email
       if (wasDefault) {
         const nextCandidate = await tx.supportEmail.findFirst({
-          where: { tenantId },
+          where: { tenantId, verificationStatus: SupportEmailVerificationStatus.VERIFIED },
           orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
         });
 
@@ -349,64 +723,4 @@ export class SupportEmailsService {
       return { success: true, message: 'Support email address deleted successfully' };
     });
   }
-
-  /**
-   * Real-time verification of a support email address.
-   */
-  async verifySupportEmail(tenantId: string, id: string) {
-    return this.withTenant(tenantId, false, async (tx) => {
-      const target = await tx.supportEmail.findFirst({
-        where: { id, tenantId },
-      });
-
-      if (!target) {
-        throw new NotFoundException('Support email address not found');
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(target.email)) {
-        throw new BadRequestException('Invalid email address format');
-      }
-
-      const verifiedAt = new Date();
-      const updated = await tx.supportEmail.update({
-        where: { id },
-        data: {
-          verificationStatus: SupportEmailVerificationStatus.VERIFIED,
-          verifiedAt,
-          isActive: true,
-        },
-      });
-
-      // Sync with primary EmailConfiguration
-      await tx.emailConfiguration.upsert({
-        where: { tenantId },
-        update: {
-          supportEmail: target.email,
-          status: 'ACTIVE',
-          enabled: true,
-        },
-        create: {
-          tenantId,
-          supportEmail: target.email,
-          provider: 'CLOUDMAILIN',
-          enabled: true,
-          autoCreateTicket: true,
-          autoRoute: true,
-          status: 'ACTIVE',
-        },
-      });
-
-      logger.info(
-        { tenantId, supportEmailId: id, email: target.email },
-        '[SupportEmails] Support email successfully verified in real-time'
-      );
-
-      return {
-        ...updated,
-        message: `Support email "${target.email}" verified successfully!`,
-      };
-    });
-  }
 }
-

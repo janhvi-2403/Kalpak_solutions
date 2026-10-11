@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from './api-client';
+import { apiClient, clearAuthToken } from './api-client';
 
 import { getTenantSubdomain } from './subdomain';
 import { TenantSubdomainInfo } from '@kalpak/types';
@@ -155,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore error during logout to guarantee client-side cleanup
     } finally {
+      clearAuthToken();
       setSession(null);
       setIsLoading(false);
       router.push('/login');

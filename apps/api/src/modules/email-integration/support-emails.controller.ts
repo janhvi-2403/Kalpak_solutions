@@ -12,13 +12,16 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { SupportEmailsService } from './support-emails.service';
-import { CreateSupportEmailDto, UpdateSupportEmailDto } from './dto/support-email.dto';
+import {
+  CreateSupportEmailDto,
+  UpdateSupportEmailDto,
+  ConfirmSupportEmailCodeDto,
+} from './dto/support-email.dto';
 import { TenantGuard } from '../../core/tenant/tenant.guard';
 import { PermissionsGuard } from '../../core/rbac/permissions.guard';
 import { RequirePermissions } from '../../core/rbac/require-permissions.decorator';
 import { CurrentTenant } from '../../core/tenant/current-tenant.decorator';
 import { TenantContext, PermissionCode } from '@kalpak/types';
-
 
 @ApiTags('Support Email Configuration')
 @ApiBearerAuth()
@@ -104,14 +107,40 @@ export class SupportEmailsController {
     return this.supportEmailsService.deleteSupportEmail(tenantCtx.tenantId, id);
   }
 
-  @Post(':id/verify')
+  @Post(':id/confirm-code')
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions(PermissionCode.TENANT_SETTINGS)
-  @ApiOperation({ summary: 'Verify a support email address in real-time' })
-  @ApiResponse({ status: 200, description: 'Support email verified successfully' })
+  @ApiOperation({ summary: 'Confirm support email verification with 6-digit code' })
+  @ApiResponse({ status: 200, description: 'Support email verified and activated' })
+  async confirmCode(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Param('id') id: string,
+    @Body() dto: ConfirmSupportEmailCodeDto
+  ) {
+    return this.supportEmailsService.confirmVerificationCode(tenantCtx.tenantId, id, dto.code);
+  }
+
+  @Post(':id/resend')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PermissionCode.TENANT_SETTINGS)
+  @ApiOperation({ summary: 'Resend support email verification email (60s rate limit)' })
+  @ApiResponse({ status: 200, description: 'Verification email resent' })
+  async resendVerification(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Param('id') id: string
+  ) {
+    return this.supportEmailsService.resendVerification(tenantCtx.tenantId, id);
+  }
+
+  @Post(':id/verify')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PermissionCode.TENANT_SETTINGS)
+  @ApiOperation({ summary: 'Trigger support email verification process' })
+  @ApiResponse({ status: 200, description: 'Verification process triggered' })
   async verifySupportEmail(
     @CurrentTenant() tenantCtx: TenantContext,
     @Param('id') id: string
   ) {
-    return this.supportEmailsService.verifySupportEmail(tenantCtx.tenantId, id);
+    return this.supportEmailsService.resendVerification(tenantCtx.tenantId, id);
   }
 }
