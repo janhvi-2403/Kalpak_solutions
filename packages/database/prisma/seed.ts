@@ -299,6 +299,44 @@ async function main() {
     },
   });
 
+  // 5b. Seed Department Admin / Head User
+  const deptHeadPasswordHash = await hashPassword('AcmeDept123!');
+  const deptAdminRole = await prisma.role.findFirstOrThrow({
+    where: { name: SystemRole.DEPARTMENT_ADMIN, tenantId: null },
+  });
+  const deptHeadUser = await prisma.user.upsert({
+    where: { email: 'depthead@acme.com' },
+    update: {
+      fullName: 'Rajesh Nair (Dept Head)',
+      passwordHash: deptHeadPasswordHash,
+      isActive: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+    create: {
+      email: 'depthead@acme.com',
+      fullName: 'Rajesh Nair (Dept Head)',
+      passwordHash: deptHeadPasswordHash,
+      isActive: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+  });
+  await prisma.tenantMembership.upsert({
+    where: {
+      uq_membership_tenant_user: {
+        tenantId: acmeTenant.id,
+        userId: deptHeadUser.id,
+      },
+    },
+    update: { roleId: deptAdminRole.id },
+    create: {
+      tenantId: acmeTenant.id,
+      userId: deptHeadUser.id,
+      roleId: deptAdminRole.id,
+    },
+  });
+
   // 6. Seed Acme Departments
   const deptElec = await prisma.department.upsert({
     where: {
@@ -324,12 +362,13 @@ async function main() {
         code: 'MECH',
       },
     },
-    update: { name: 'Mechanical & Hydraulics' },
+    update: { name: 'Mechanical & Hydraulics', headUserId: deptHeadUser.id },
     create: {
       tenantId: acmeTenant.id,
       code: 'MECH',
       name: 'Mechanical & Hydraulics',
       description: 'Heavy machinery, pneumatic valves, and hydraulic powerpacks',
+      headUserId: deptHeadUser.id,
     },
   });
 
@@ -351,6 +390,26 @@ async function main() {
       skills: ['PLC Siemens S7', 'SCADA', 'Allen Bradley Drives', 'VFDs'],
       isAvailable: true,
       phone: '+91 9822001122',
+    },
+  });
+
+  await prisma.employeeProfile.upsert({
+    where: { userId: deptHeadUser.id },
+    update: {
+      departmentId: deptMech.id,
+      designation: 'Head of Mechanical & Hydraulics',
+      skills: ['Hydraulics', 'Pneumatics', 'Heavy Machinery', 'Preventive Maintenance'],
+      isAvailable: true,
+      phone: '+91 9822003344',
+    },
+    create: {
+      tenantId: acmeTenant.id,
+      userId: deptHeadUser.id,
+      departmentId: deptMech.id,
+      designation: 'Head of Mechanical & Hydraulics',
+      skills: ['Hydraulics', 'Pneumatics', 'Heavy Machinery', 'Preventive Maintenance'],
+      isAvailable: true,
+      phone: '+91 9822003344',
     },
   });
 
