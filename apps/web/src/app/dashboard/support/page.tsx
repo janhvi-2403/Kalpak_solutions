@@ -207,6 +207,102 @@ const FAQS = [
   },
 ];
 
+// ── Normalization for backward compatibility and crash prevention ─────────────
+
+const normalizeRequest = (r: any): SupportRequest => {
+  if (!r || typeof r !== 'object') {
+    return {
+      id: 'sr_' + Date.now(),
+      referenceId: 'KALPAK-SR-00000',
+      subject: 'Support Request',
+      category: 'Technical Issue',
+      priority: 'P3',
+      status: 'OPEN',
+      affectedModule: 'Tickets & Work Orders',
+      issueStartTime: new Date().toISOString(),
+      businessImpact: 'MEDIUM',
+      description: '',
+      attachments: [],
+      contactName: 'Client Admin',
+      contactEmail: '',
+      contactPhone: '',
+      organizationName: 'Organization',
+      requesterName: 'Client Admin',
+      assignedTeam: 'Kalpak Core SaaS Engineering',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: [],
+    };
+  }
+
+  // Priority mapping (supports P1, P2, P3, P4 as well as legacy CRITICAL, HIGH, MEDIUM, LOW)
+  let priority: SupportRequest['priority'] = 'P3';
+  const rawP = String(r.priority || '').toUpperCase();
+  if (rawP === 'P1' || rawP === 'CRITICAL') priority = 'P1';
+  else if (rawP === 'P2' || rawP === 'HIGH') priority = 'P2';
+  else if (rawP === 'P3' || rawP === 'MEDIUM') priority = 'P3';
+  else if (rawP === 'P4' || rawP === 'LOW') priority = 'P4';
+
+  // Status mapping (supports OPEN, IN_PROGRESS, AWAITING_KALPAK, RESOLVED, CLOSED, IN_REVIEW)
+  let status: SupportRequest['status'] = 'OPEN';
+  const rawS = String(r.status || '').toUpperCase();
+  if (rawS === 'RESOLVED') status = 'RESOLVED';
+  else if (rawS === 'CLOSED') status = 'CLOSED';
+  else if (rawS === 'IN_PROGRESS' || rawS === 'IN_REVIEW') status = 'IN_PROGRESS';
+  else if (rawS === 'AWAITING_KALPAK') status = 'AWAITING_KALPAK';
+  else status = 'OPEN';
+
+  // Ensure messages array is populated with at least the initial request description
+  let messages: SupportMessage[] = [];
+  if (Array.isArray(r.messages) && r.messages.length > 0) {
+    messages = r.messages.map((m: any) => ({
+      id: m?.id || 'msg_' + Math.random(),
+      senderName: m?.senderName || 'User',
+      senderRole: m?.senderRole || 'CLIENT_ADMIN',
+      message: m?.message || '',
+      attachments: Array.isArray(m?.attachments) ? m.attachments : [],
+      timestamp: m?.timestamp || r.createdAt || new Date().toISOString(),
+      isInternal: Boolean(m?.isInternal),
+    }));
+  } else if (r.description) {
+    messages = [
+      {
+        id: 'msg_desc_' + (r.id || Date.now()),
+        senderName: r.contactName || r.requesterName || 'Client Admin',
+        senderRole: 'CLIENT_ADMIN',
+        message: r.description,
+        attachments: Array.isArray(r.attachments) ? r.attachments : [],
+        timestamp: r.createdAt || new Date().toISOString(),
+      },
+    ];
+  }
+
+  return {
+    id: r.id || 'sr_' + Math.random(),
+    referenceId: r.referenceId || `KALPAK-SR-${Math.floor(10000 + Math.random() * 90000)}`,
+    subject: r.subject || 'Support Request',
+    category: r.category || 'Technical Issue',
+    priority,
+    status,
+    affectedModule: r.affectedModule || 'Tickets & Work Orders',
+    issueStartTime: r.issueStartTime || r.createdAt || new Date().toISOString(),
+    businessImpact: r.businessImpact || (priority === 'P1' ? 'OPERATIONS_BLOCKED' : priority === 'P2' ? 'HIGH' : 'MEDIUM'),
+    description: r.description || '',
+    attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    contactName: r.contactName || r.requesterName || 'Client Admin',
+    contactEmail: r.contactEmail || '',
+    contactPhone: r.contactPhone || '',
+    organizationName: r.organizationName || 'Organization',
+    requesterName: r.requesterName || r.contactName || 'Client Admin',
+    assignedTeam: r.assignedTeam || 'Kalpak Core SaaS Engineering',
+    assignedEngineer: r.assignedEngineer,
+    createdAt: r.createdAt || new Date().toISOString(),
+    updatedAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+    resolvedAt: r.resolvedAt,
+    messages,
+  };
+};
+
 export default function HelpAndSupportPage() {
   const { user, activeTenant } = useAuth();
 
@@ -269,34 +365,40 @@ export default function HelpAndSupportPage() {
       const endTime = performance.now();
       setApiLatency(Math.round(endTime - startTime));
 
-      const savedRequests: SupportRequest[] = tenant?.settings?.supportRequests;
-      if (Array.isArray(savedRequests) && savedRequests.length > 0) {
-        setRequests(savedRequests);
-      } else {
-        // Fallback to local storage or initial sample requests
+      const rawSaved: any[] = tenant?.settings?.supportRequests || [];
+      let listToNormalize = rawSaved;
+
+      if (!Array.isArray(listToNormalize) || listToNormalize.length === 0) {
         const localCached = localStorage.getItem('kalpak_support_requests');
         if (localCached) {
           try {
-            setRequests(JSON.parse(localCached));
+            const parsed = JSON.parse(localCached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              listToNormalize = parsed;
+            }
           } catch {
-            setRequests(INITIAL_SAMPLE_REQUESTS);
+            listToNormalize = INITIAL_SAMPLE_REQUESTS;
           }
         } else {
-          setRequests(INITIAL_SAMPLE_REQUESTS);
+          listToNormalize = INITIAL_SAMPLE_REQUESTS;
         }
       }
+
+      const normalized = listToNormalize.map(normalizeRequest);
+      setRequests(normalized);
     } catch (err: any) {
       console.warn('Failed to load support requests from server, checking local cache:', err);
       const localCached = localStorage.getItem('kalpak_support_requests');
+      let fallbackList = INITIAL_SAMPLE_REQUESTS;
       if (localCached) {
         try {
-          setRequests(JSON.parse(localCached));
-        } catch {
-          setRequests(INITIAL_SAMPLE_REQUESTS);
-        }
-      } else {
-        setRequests(INITIAL_SAMPLE_REQUESTS);
+          const parsed = JSON.parse(localCached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            fallbackList = parsed;
+          }
+        } catch {}
       }
+      setRequests(fallbackList.map(normalizeRequest));
     } finally {
       setIsLoading(false);
     }
@@ -508,7 +610,7 @@ export default function HelpAndSupportPage() {
       ...selectedRequest,
       status: 'AWAITING_KALPAK',
       updatedAt: new Date().toISOString(),
-      messages: [...selectedRequest.messages, newMessage],
+      messages: [...(selectedRequest.messages || []), newMessage],
     };
 
     const updatedList = requests.map((r) => (r.id === selectedRequest.id ? updatedRequest : r));
@@ -527,7 +629,7 @@ export default function HelpAndSupportPage() {
       updatedAt: new Date().toISOString(),
       resolvedAt: newStatus === 'RESOLVED' || newStatus === 'CLOSED' ? new Date().toISOString() : undefined,
       messages: [
-        ...req.messages,
+        ...(req.messages || []),
         {
           id: 'msg_status_' + Date.now(),
           senderName: user?.fullName || 'Client Admin',
@@ -581,61 +683,88 @@ export default function HelpAndSupportPage() {
 
   // ── Priority Badge Helper ────────────────────────────────────────────────────
 
-  const renderPriorityBadge = (priority: SupportRequest['priority']) => {
-    switch (priority) {
-      case 'P1':
-        return (
-          <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 border border-red-200 text-[11px] font-bold px-2 py-0.5 rounded">
-            <AlertTriangle className="w-3 h-3 text-red-600" /> P1 - Critical
-          </span>
-        );
-      case 'P2':
-        return (
-          <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 border border-orange-200 text-[11px] font-bold px-2 py-0.5 rounded">
-            P2 - High
-          </span>
-        );
-      case 'P3':
-        return (
-          <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold px-2 py-0.5 rounded">
-            P3 - Medium
-          </span>
-        );
-      case 'P4':
-        return (
-          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-bold px-2 py-0.5 rounded">
-            P4 - Low
-          </span>
-        );
+  const renderPriorityBadge = (priority?: string) => {
+    const p = String(priority || '').toUpperCase();
+    if (p === 'P1' || p === 'CRITICAL') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-red-100 text-red-800 border border-red-200 text-[11px] font-bold px-2 py-0.5 rounded">
+          <AlertTriangle className="w-3 h-3 text-red-600" /> P1 - Critical
+        </span>
+      );
     }
+    if (p === 'P2' || p === 'HIGH') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 border border-orange-200 text-[11px] font-bold px-2 py-0.5 rounded">
+          P2 - High
+        </span>
+      );
+    }
+    if (p === 'P4' || p === 'LOW') {
+      return (
+        <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-bold px-2 py-0.5 rounded">
+          P4 - Low
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-200 text-[11px] font-bold px-2 py-0.5 rounded">
+        P3 - Medium
+      </span>
+    );
   };
 
-  const renderStatusBadge = (status: SupportRequest['status']) => {
-    switch (status) {
+  const renderStatusBadge = (status?: string) => {
+    const s = String(status || '').toUpperCase();
+    switch (s) {
       case 'OPEN':
         return <Badge className="bg-amber-50 text-amber-800 border-amber-200 text-xs">Open</Badge>;
       case 'AWAITING_KALPAK':
         return <Badge className="bg-blue-50 text-blue-800 border-blue-200 text-xs">Awaiting Kalpak</Badge>;
       case 'IN_PROGRESS':
+      case 'IN_REVIEW':
         return <Badge className="bg-purple-50 text-purple-800 border-purple-200 text-xs">In Progress</Badge>;
       case 'RESOLVED':
         return <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-xs">Resolved</Badge>;
       case 'CLOSED':
         return <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-xs">Closed</Badge>;
+      default:
+        return <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-xs">{status || 'Open'}</Badge>;
     }
   };
 
-  // SLA Target Helper
-  const getExpectedSlaTimes = (priority: SupportRequest['priority']) => {
-    switch (priority) {
-      case 'P1':
-        return { response: '< 15 mins (24/7 on-call dispatch)', resolution: '< 4 hours' };
-      case 'P2':
-        return { response: '< 2 hours (Working hours)', resolution: '< 12 hours' };
-      case 'P3':
-        return { response: '< 8 hours (Working hours)', resolution: '< 24 hours' };
-      case 'P4':
-        return { response: '< 24 hours', resolution: '< 72 hours' };
+  // SLA Target Helper (Never returns undefined)
+  const getExpectedSlaTimes = (priority?: string) => {
+    const p = String(priority || '').toUpperCase();
+    if (p === 'P1' || p === 'CRITICAL') {
+      return { response: '< 15 mins (24/7 on-call dispatch)', resolution: '< 4 hours' };
+    }
+    if (p === 'P2' || p === 'HIGH') {
+      return { response: '< 2 hours (Working hours)', resolution: '< 12 hours' };
+    }
+    if (p === 'P4' || p === 'LOW') {
+      return { response: '< 24 hours', resolution: '< 72 hours' };
+    }
+    return { response: '< 8 hours (Working hours)', resolution: '< 24 hours' };
+  };
+
+  // Safe Date Formatters
+  const formatSafeDate = (d?: string) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString();
+    } catch {
+      return '—';
+    }
+  };
+
+  const formatSafeDateTime = (d?: string) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? '—' : dt.toLocaleString();
+    } catch {
+      return '—';
     }
   };
 
@@ -891,16 +1020,16 @@ export default function HelpAndSupportPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-6 text-slate-500 font-mono text-[11px] whitespace-nowrap">
-                      {new Date(r.createdAt).toLocaleDateString()}
+                      {formatSafeDate(r.createdAt)}
                     </td>
                     <td className="py-3.5 px-6 text-slate-500 font-mono text-[11px] whitespace-nowrap">
-                      {new Date(r.updatedAt).toLocaleDateString()}
+                      {formatSafeDate(r.updatedAt)}
                     </td>
                     <td className="py-3.5 px-6 text-right whitespace-nowrap">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setSelectedRequest(r)}
+                        onClick={() => setSelectedRequest(normalizeRequest(r))}
                         className="h-7 text-xs px-2.5 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 font-semibold"
                       >
                         View Details
@@ -1384,7 +1513,7 @@ export default function HelpAndSupportPage() {
                   {renderStatusBadge(selectedRequest.status)}
                 </div>
                 <div className="text-[11px] text-slate-500">
-                  Lodged on {new Date(selectedRequest.createdAt).toLocaleString()}
+                  Lodged on {formatSafeDateTime(selectedRequest.createdAt)}
                 </div>
               </div>
 
@@ -1419,7 +1548,7 @@ export default function HelpAndSupportPage() {
                 </div>
                 {selectedRequest.resolvedAt && (
                   <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Resolved at {new Date(selectedRequest.resolvedAt).toLocaleTimeString()}
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Resolved at {formatSafeDateTime(selectedRequest.resolvedAt)}
                   </span>
                 )}
               </div>
@@ -1433,8 +1562,8 @@ export default function HelpAndSupportPage() {
               </h4>
 
               <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 min-h-[160px] max-h-[300px] overflow-y-auto">
-                {selectedRequest.messages
-                  .filter((m) => !m.isInternal) // Hide internal engineering notes from Client Admin
+                {(selectedRequest.messages || [])
+                  .filter((m) => m && !m.isInternal) // Hide internal engineering notes from Client Admin
                   .map((msg) => {
                     const isClient = msg.senderRole === 'CLIENT_ADMIN';
                     const isSystem = msg.senderRole === 'SYSTEM';
@@ -1443,7 +1572,7 @@ export default function HelpAndSupportPage() {
                       return (
                         <div key={msg.id} className="text-center my-2">
                           <span className="inline-block text-[10px] font-mono text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                            ⚙️ {msg.message} &bull; {new Date(msg.timestamp).toLocaleTimeString()}
+                            ⚙️ {msg.message} &bull; {formatSafeDateTime(msg.timestamp)}
                           </span>
                         </div>
                       );
@@ -1458,7 +1587,7 @@ export default function HelpAndSupportPage() {
                           <span className="font-semibold text-slate-700">
                             {isClient ? `${msg.senderName} (You)` : `${msg.senderName} (Kalpak Engineering)`}
                           </span>
-                          <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{formatSafeDateTime(msg.timestamp)}</span>
                         </div>
                         <div
                           className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
@@ -1468,9 +1597,9 @@ export default function HelpAndSupportPage() {
                           }`}
                         >
                           {msg.message}
-                          {msg.attachments && msg.attachments.length > 0 && (
+                          {msg.attachments && (msg.attachments || []).length > 0 && (
                             <div className="mt-2 pt-2 border-t border-white/20 flex flex-wrap gap-1.5">
-                              {msg.attachments.map((att, aIdx) => (
+                              {(msg.attachments || []).map((att, aIdx) => (
                                 <span
                                   key={aIdx}
                                   className="inline-flex items-center gap-1 text-[10px] font-mono bg-black/10 px-2 py-0.5 rounded"
