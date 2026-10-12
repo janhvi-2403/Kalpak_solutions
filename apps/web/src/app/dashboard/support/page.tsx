@@ -1066,17 +1066,6 @@ export default function HelpAndSupportPage() {
                 Available <strong className="text-slate-700">Monday &ndash; Friday, 9:00 AM &ndash; 6:00 PM IST</strong>.
               </p>
             </div>
-
-            <div className="border-t border-slate-100 pt-3 bg-red-50/60 p-3 rounded-xl border border-red-100">
-              <span className="text-[10px] uppercase font-bold text-red-800 font-mono flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-red-600" /> P1 Critical Escalation
-              </span>
-              <p className="text-[11px] text-red-700 mt-1 leading-relaxed">
-                For complete system unresponsiveness outside business hours, mark your request as{' '}
-                <strong className="text-red-900 font-bold">P1 Critical</strong> above. Automated on-call pager alerts
-                dispatch infrastructure engineers 24/7.
-              </p>
-            </div>
           </div>
         </Card>
 
