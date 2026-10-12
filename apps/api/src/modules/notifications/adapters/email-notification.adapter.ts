@@ -26,9 +26,16 @@ export class EmailNotificationAdapter {
     private readonly moduleRef: ModuleRef
   ) {}
 
+  private getWebBaseUrl(): string {
+    const configured = this.config.WEB_BASE_URL;
+    if (process.env.NODE_ENV === 'production' && (!configured || configured.includes('localhost'))) {
+      return 'https://kalpak-web.onrender.com';
+    }
+    return configured || 'http://localhost:3000';
+  }
+
   async send(payload: EmailDispatchPayload): Promise<{ success: boolean; messageId: string }> {
-    const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const link = payload.data.link || `${webBase}/dashboard/tickets`;
+    const link = payload.data.link || `${this.getWebBaseUrl()}/dashboard/tickets`;
 
     // ─────────────────────────────────────────────────────────────────────────
     // If tenantId is provided, check for active Gmail connection and settings

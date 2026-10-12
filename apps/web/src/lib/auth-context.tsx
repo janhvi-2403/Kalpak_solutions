@@ -97,7 +97,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return data;
     } catch (err: any) {
       setSession(null);
-      if (!(err?.statusCode === 401 || err?.statusCode === 403 || err?.name === 'AbortError')) {
+      if (
+        !(
+          err?.statusCode === 401 ||
+          err?.statusCode === 403 ||
+          err?.statusCode === 502 ||
+          err?.statusCode === 503 ||
+          err?.statusCode === 504 ||
+          err?.name === 'AbortError'
+        )
+      ) {
         setError(err instanceof Error ? err.message : 'Failed to retrieve active session');
       }
       return null;

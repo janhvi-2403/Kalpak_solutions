@@ -13,13 +13,14 @@ export class ApiClientError extends Error {
 
 export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+  _retryCount?: number;
 }
 
 export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { params, headers, ...restOptions } = options;
+  const { params, headers, _retryCount = 0, ...restOptions } = options;
 
   let url = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
@@ -58,7 +59,6 @@ export async function apiClient<T>(
     requestHeaders.set('x-tenant-slug', subdomain);
   }
 
-
   // Attach Bearer token from localStorage for resilience against cross-domain/Render cookie restrictions
   if (typeof window !== 'undefined') {
     const sessionToken = localStorage.getItem('kalpak_session_token');
@@ -67,12 +67,12 @@ export async function apiClient<T>(
     }
   }
 
-  // Setup safety timeout to accommodate cloud cold starts (30s)
+  // Setup safety timeout to accommodate cloud cold starts (35s)
   let timeoutId: NodeJS.Timeout | undefined;
   let signal = restOptions.signal;
   if (!signal) {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 30000);
+    timeoutId = setTimeout(() => controller.abort(), 35000);
     signal = controller.signal;
   }
 
@@ -84,10 +84,27 @@ export async function apiClient<T>(
       credentials: 'include', // Ensure HttpOnly session cookies are transmitted
       signal,
     });
+  } catch (fetchErr: any) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    // Auto-retry once on network glitch or aborted connection if under max retries
+    if (_retryCount < 2 && (fetchErr?.name === 'TypeError' || fetchErr?.name === 'AbortError')) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return apiClient<T>(endpoint, { ...options, _retryCount: _retryCount + 1 });
+    }
+    throw fetchErr;
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
+  }
+
+  // Handle Render / Cloud cold-start (502 Bad Gateway / 503 / 504) with auto-retry
+  if ([502, 503, 504].includes(response.status) && _retryCount < 2) {
+    const delay = (_retryCount + 1) * 2500;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    return apiClient<T>(endpoint, { ...options, _retryCount: _retryCount + 1 });
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -103,16 +120,36 @@ export async function apiClient<T>(
     if (isJson) {
       errorData = await response.json();
     } else {
+      const rawText = await response.text();
+      let userFriendlyMessage = 'An unexpected server error occurred. Please try again.';
+      if ([502, 503, 504].includes(response.status)) {
+        userFriendlyMessage =
+          'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.';
+      } else if (rawText && !rawText.trim().startsWith('<') && !rawText.includes('<html') && rawText.length < 300) {
+        userFriendlyMessage = rawText;
+      }
       errorData = {
         success: false,
         statusCode: response.status,
-        error: response.statusText,
-        message: await response.text(),
+        error: response.statusText || 'Gateway Error',
+        message: userFriendlyMessage,
         timestamp: new Date().toISOString(),
         path: url,
         correlationId,
       };
     }
+
+    // Safety: ensure no raw HTML ever leaks into the error message
+    if (
+      typeof errorData.message === 'string' &&
+      (errorData.message.trim().startsWith('<') || errorData.message.includes('<html') || errorData.message.includes('<!DOCTYPE'))
+    ) {
+      errorData.message =
+        response.status >= 500
+          ? 'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.'
+          : 'An unexpected response was received from the server. Please try again.';
+    }
+
     throw new ApiClientError(response.status, errorData);
   }
 

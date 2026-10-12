@@ -18,7 +18,11 @@ import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
 import { KalpakLogo } from '@/components/KalpakLogo';
-import { buildTenantSubdomainUrl } from '@/lib/subdomain';
+import {
+  buildTenantSubdomainUrl,
+  sanitizeReturnUrl,
+  getDefaultDashboardForRole,
+} from '@/lib/subdomain';
 
 export function LoginForm() {
   const { refetchSession, subdomainSlug, subdomainTenant } = useAuth();
@@ -39,7 +43,6 @@ export function LoginForm() {
     }
   }, [subdomainSlug, tenantSlug]);
 
-
   // Inline MFA Challenge state
   const [isMfaStep, setIsMfaStep] = useState(false);
   const [totpCode, setTotpCode] = useState('');
@@ -50,6 +53,30 @@ export function LoginForm() {
   const [showOrgPicker, setShowOrgPicker] = useState(false);
   const [availableMemberships, setAvailableMemberships] = useState<TenantMembershipInfo[]>([]);
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
+
+  const navigateAfterAuth = (
+    isSuperAdmin: boolean,
+    userRole: string | null | undefined,
+    tenantSlug: string | null | undefined
+  ) => {
+    if (isSuperAdmin) {
+      const dest = sanitizeReturnUrl(searchParams?.get('returnUrl'), '/super-admin/dashboard');
+      window.location.href = dest;
+      return;
+    }
+
+    const defaultDest = getDefaultDashboardForRole(userRole, false, tenantSlug);
+    const dest =
+      searchParams?.get('plan') === 'starter'
+        ? '/checkout/starter'
+        : sanitizeReturnUrl(searchParams?.get('returnUrl'), defaultDest);
+
+    if (tenantSlug && !dest.startsWith('/checkout') && userRole !== 'CUSTOMER') {
+      window.location.href = buildTenantSubdomainUrl(tenantSlug, dest);
+    } else {
+      window.location.href = dest;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,29 +110,33 @@ export function LoginForm() {
         return;
       }
 
-      // Refresh session state and route according to role
+      // Refresh session state and route according to authoritative role and environment
       const freshSession = await refetchSession();
+      const isSuperAdmin = Boolean(
+        response.user?.isSuperAdmin ||
+        freshSession?.user?.isSuperAdmin ||
+        freshSession?.activeRole === 'SUPER_ADMIN'
+      );
       const userRole = freshSession?.activeRole;
-      if (response.user?.isSuperAdmin) {
-        window.location.href = '/super-admin/dashboard';
-      } else {
-        let defaultDest = '/dashboard';
-        if (userRole === 'DEPARTMENT_ADMIN') defaultDest = '/dashboard/department';
-        if (userRole === 'SUPPORT_EMPLOYEE') defaultDest = '/dashboard/employee';
-        const dest =
-          searchParams?.get('returnUrl') ||
-          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
+      const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-        const targetTenantSlug = freshSession?.activeTenant?.slug;
-        if (targetTenantSlug && !dest.startsWith('/checkout')) {
-          window.location.href = buildTenantSubdomainUrl(targetTenantSlug, dest);
-        } else {
-          window.location.href = dest;
-        }
-      }
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
     } catch (err) {
       if (err instanceof ApiClientError) {
-        setError(err.errorResponse.message || 'Invalid email or password. Please try again.');
+        const rawMsg = err.errorResponse?.message || '';
+        if (
+          !rawMsg ||
+          rawMsg.includes('<html') ||
+          rawMsg.includes('<!DOCTYPE') ||
+          rawMsg.includes('502 Bad Gateway') ||
+          rawMsg.trim().startsWith('<')
+        ) {
+          setError(
+            'The server is waking up from sleep on the Render free tier (cold start). Please wait 10 seconds and try again.'
+          );
+        } else {
+          setError(rawMsg);
+        }
       } else if (err instanceof Error && err.name === 'AbortError') {
         setError('The server is taking longer than usual to respond (waking up). Please try again in a moment.');
       } else {
@@ -128,25 +159,15 @@ export function LoginForm() {
       });
 
       const freshSession = await refetchSession();
+      const isSuperAdmin = Boolean(
+        cachedUser?.isSuperAdmin ||
+        freshSession?.user?.isSuperAdmin ||
+        freshSession?.activeRole === 'SUPER_ADMIN'
+      );
       const userRole = freshSession?.activeRole;
+      const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-      if (cachedUser?.isSuperAdmin) {
-        window.location.href = '/super-admin/dashboard';
-      } else {
-        let defaultDest = '/dashboard';
-        if (userRole === 'DEPARTMENT_ADMIN') defaultDest = '/dashboard/department';
-        if (userRole === 'SUPPORT_EMPLOYEE') defaultDest = '/dashboard/employee';
-        const dest =
-          searchParams?.get('returnUrl') ||
-          (searchParams?.get('plan') === 'starter' ? '/checkout/starter' : defaultDest);
-
-        const targetTenantSlug = freshSession?.activeTenant?.slug;
-        if (targetTenantSlug && !dest.startsWith('/checkout')) {
-          window.location.href = buildTenantSubdomainUrl(targetTenantSlug, dest);
-        } else {
-          window.location.href = dest;
-        }
-      }
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid verification code or backup code');
@@ -167,8 +188,16 @@ export function LoginForm() {
         body: JSON.stringify({ tenantId }),
       });
       setShowOrgPicker(false);
-      await refetchSession();
-      window.location.href = '/dashboard';
+      const freshSession = await refetchSession();
+      const isSuperAdmin = Boolean(
+        cachedUser?.isSuperAdmin ||
+        freshSession?.user?.isSuperAdmin ||
+        freshSession?.activeRole === 'SUPER_ADMIN'
+      );
+      const userRole = freshSession?.activeRole;
+      const targetTenantSlug = freshSession?.activeTenant?.slug;
+
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Failed to select organization');

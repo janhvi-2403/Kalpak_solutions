@@ -42,7 +42,23 @@ export class AuthController {
   /**
    * Resolves top-level domain for cookie sharing across tenant subdomains (*.kalpaksolutions.com).
    */
-  private getCookieDomain(): string | undefined {
+  private getCookieDomain(req?: Request): string | undefined {
+    const host = req?.get('host')?.toLowerCase() || '';
+    const forwardedHost = req?.get('x-forwarded-host')?.toLowerCase() || '';
+    const origin = req?.get('origin')?.toLowerCase() || '';
+
+    // If the request originates from or targets onrender.com staging or localhost, omit domain
+    // (Render's shared public suffix *.onrender.com forbids cross-service domain cookies)
+    if (
+      host.includes('onrender.com') ||
+      forwardedHost.includes('onrender.com') ||
+      origin.includes('onrender.com') ||
+      host.includes('localhost') ||
+      host.includes('127.0.0.1')
+    ) {
+      return undefined;
+    }
+
     const raw = this.config.COOKIE_DOMAIN?.trim();
     if (!raw || raw === 'localhost' || raw.includes('onrender.com')) {
       return undefined;
@@ -89,7 +105,7 @@ export class AuthController {
 
     // Set secure HttpOnly cookie for browser clients (shared across tenant subdomains)
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
-    const cookieDomain = this.getCookieDomain();
+    const cookieDomain = this.getCookieDomain(req);
     const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
@@ -128,7 +144,7 @@ export class AuthController {
 
     // Set secure HttpOnly session cookie for browser clients
     const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
-    const cookieDomain = this.getCookieDomain();
+    const cookieDomain = this.getCookieDomain(req);
     const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
       httpOnly: true,
@@ -286,7 +302,7 @@ export class AuthController {
       await this.authService.logout(sessionId, ipAddress, userAgent);
     }
 
-    const cookieDomain = this.getCookieDomain();
+    const cookieDomain = this.getCookieDomain(req);
     const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
     res.clearCookie(this.config.SESSION_COOKIE_NAME, {
       httpOnly: true,

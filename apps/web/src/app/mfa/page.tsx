@@ -6,6 +6,7 @@ import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button, Input, Alert } from '@/components/ui';
 import { ShieldAlert, ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
+import { getDefaultDashboardForRole, buildTenantSubdomainUrl } from '@/lib/subdomain';
 
 export default function MfaChallengePage() {
   const router = useRouter();
@@ -25,11 +26,20 @@ export default function MfaChallengePage() {
         body: JSON.stringify({ code: code.trim() }),
       });
 
-      const me = await apiClient<{ user: { isSuperAdmin: boolean } }>('/auth/me');
-      if (me.user?.isSuperAdmin) {
-        window.location.href = '/super-admin/dashboard';
+      const me = await apiClient<{
+        user: { isSuperAdmin: boolean };
+        activeRole?: string | null;
+        activeTenant?: { slug: string } | null;
+      }>('/auth/me');
+
+      const isSuperAdmin = Boolean(me.user?.isSuperAdmin || me.activeRole === 'SUPER_ADMIN');
+      const targetTenantSlug = me.activeTenant?.slug;
+      const defaultDest = getDefaultDashboardForRole(me.activeRole, isSuperAdmin, targetTenantSlug);
+
+      if (targetTenantSlug && !defaultDest.startsWith('/super-admin') && me.activeRole !== 'CUSTOMER') {
+        window.location.href = buildTenantSubdomainUrl(targetTenantSlug, defaultDest);
       } else {
-        window.location.href = '/dashboard';
+        window.location.href = defaultDest;
       }
     } catch (err) {
       if (err instanceof ApiClientError) {

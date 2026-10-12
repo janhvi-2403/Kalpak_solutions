@@ -11,6 +11,14 @@ import { logger } from '@kalpak/logger';
 export class NotificationsService {
   private readonly config = getConfig();
 
+  public getWebBaseUrl(): string {
+    const configured = this.config.WEB_BASE_URL;
+    if (process.env.NODE_ENV === 'production' && (!configured || configured.includes('localhost'))) {
+      return 'https://kalpak-web.onrender.com';
+    }
+    return configured || 'http://localhost:3000';
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailAdapter: EmailNotificationAdapter,
@@ -166,8 +174,8 @@ export class NotificationsService {
     customerPhone?: string | null;
   }) {
     const { tenantId, ticket, actorUserId, customerEmail, customerPhone } = params;
-    const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const ticketLink = `${webBase}/dashboard/tickets/${ticket.id}`;
+    const inAppTicketLink = `/dashboard/tickets/${ticket.id}`;
+    const externalTicketLink = `${this.getWebBaseUrl()}/dashboard/tickets/${ticket.id}`;
 
     // 1. In-App Notification to ticket creator (if registered user)
     if (actorUserId) {
@@ -178,7 +186,7 @@ export class NotificationsService {
         channel: NotificationDeliveryChannel.IN_APP,
         title: `Ticket Created: ${ticket.ticketNumber}`,
         message: `Your ticket "${ticket.title}" (${ticket.priority} priority) has been successfully logged.`,
-        link: ticketLink,
+        link: inAppTicketLink,
         metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, priority: ticket.priority },
       });
     }
@@ -200,7 +208,7 @@ export class NotificationsService {
           title: ticket.title,
           priority: ticket.priority,
           customerName: ticket.raisedForCustomer?.companyName || 'Valued Customer',
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -210,12 +218,12 @@ export class NotificationsService {
       await this.whatsappAdapter.send({
         toPhone: customerPhone,
         template: 'ticket_alert',
-        bodyText: `Hello! Your service ticket #${ticket.ticketNumber} ("${ticket.title}") has been registered. View progress: ${ticketLink}`,
+        bodyText: `Hello! Your service ticket #${ticket.ticketNumber} ("${ticket.title}") has been registered. View progress: ${externalTicketLink}`,
         parameters: {
           ticketNumber: ticket.ticketNumber,
           title: ticket.title,
           priority: ticket.priority,
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -243,8 +251,8 @@ export class NotificationsService {
     assignedByUserId?: string;
   }) {
     const { tenantId, ticket, technician } = params;
-    const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const ticketLink = `${webBase}/dashboard/tickets/${ticket.id}`;
+    const inAppTicketLink = `/dashboard/tickets/${ticket.id}`;
+    const externalTicketLink = `${this.getWebBaseUrl()}/dashboard/tickets/${ticket.id}`;
 
     // 1. In-App Notification to Technician
     await this.createNotification({
@@ -254,7 +262,7 @@ export class NotificationsService {
       channel: NotificationDeliveryChannel.IN_APP,
       title: `Assigned: ${ticket.ticketNumber}`,
       message: `You have been assigned to "${ticket.title}" (${ticket.priority} priority).`,
-      link: ticketLink,
+      link: inAppTicketLink,
       metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, priority: ticket.priority },
     });
 
@@ -277,7 +285,7 @@ export class NotificationsService {
           priority: ticket.priority,
           customer: ticket.raisedForCustomer?.companyName || 'N/A',
           asset: ticket.customerAsset?.product?.name || 'N/A',
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -288,12 +296,12 @@ export class NotificationsService {
         toPhone: technician.phone,
         recipientName: technician.fullName,
         template: 'ticket_assigned',
-        bodyText: `🔧 New Assignment: Ticket #${ticket.ticketNumber} (${ticket.priority}) for ${ticket.raisedForCustomer?.companyName || 'Customer'}. Open: ${ticketLink}`,
+        bodyText: `🔧 New Assignment: Ticket #${ticket.ticketNumber} (${ticket.priority}) for ${ticket.raisedForCustomer?.companyName || 'Customer'}. Open: ${externalTicketLink}`,
         parameters: {
           ticketNumber: ticket.ticketNumber,
           title: ticket.title,
           priority: ticket.priority,
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -320,8 +328,8 @@ export class NotificationsService {
     note?: string;
   }) {
     const { tenantId, ticket, oldStatus, newStatus, notifyUserIds, customerEmail, customerPhone, note } = params;
-    const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const ticketLink = `${webBase}/dashboard/tickets/${ticket.id}`;
+    const inAppTicketLink = `/dashboard/tickets/${ticket.id}`;
+    const externalTicketLink = `${this.getWebBaseUrl()}/dashboard/tickets/${ticket.id}`;
 
     const isResolved = newStatus === 'RESOLVED';
     const isClosed = newStatus === 'CLOSED';
@@ -342,7 +350,7 @@ export class NotificationsService {
           channel: NotificationDeliveryChannel.IN_APP,
           title: `Status: ${ticket.ticketNumber} -> ${newStatus}`,
           message: `Ticket "${ticket.title}" changed from ${oldStatus} to ${newStatus}.${note ? ` Note: ${note}` : ''}`,
-          link: ticketLink,
+          link: inAppTicketLink,
           metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, oldStatus, newStatus },
         }),
       ),
@@ -366,7 +374,7 @@ export class NotificationsService {
           oldStatus,
           newStatus,
           note: note || '',
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -376,12 +384,12 @@ export class NotificationsService {
       await this.whatsappAdapter.send({
         toPhone: customerPhone,
         template: 'status_update',
-        bodyText: `Status Update: Your ticket #${ticket.ticketNumber} is now ${newStatus}. Details: ${ticketLink}`,
+        bodyText: `Status Update: Your ticket #${ticket.ticketNumber} is now ${newStatus}. Details: ${externalTicketLink}`,
         parameters: {
           ticketNumber: ticket.ticketNumber,
           oldStatus,
           newStatus,
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }
@@ -404,8 +412,8 @@ export class NotificationsService {
     adminUserIds: string[];
   }) {
     const { tenantId, ticket, adminUserIds } = params;
-    const webBase = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const ticketLink = `${webBase}/dashboard/tickets/${ticket.id}`;
+    const inAppTicketLink = `/dashboard/tickets/${ticket.id}`;
+    const externalTicketLink = `${this.getWebBaseUrl()}/dashboard/tickets/${ticket.id}`;
 
     // In-app notifications to admins and assigned technician
     const recipientUserIds = [...new Set([...adminUserIds, ticket.assignedTo?.id].filter(Boolean) as string[])];
@@ -419,7 +427,7 @@ export class NotificationsService {
           channel: NotificationDeliveryChannel.IN_APP,
           title: `⚠️ SLA OVERDUE: ${ticket.ticketNumber}`,
           message: `Ticket "${ticket.title}" (${ticket.priority}) has breached its SLA response/resolution deadline!`,
-          link: ticketLink,
+          link: inAppTicketLink,
           metadata: { ticketId: ticket.id, ticketNumber: ticket.ticketNumber, priority: ticket.priority, dueAt: ticket.dueAt },
         }),
       ),
@@ -443,7 +451,7 @@ export class NotificationsService {
           priority: ticket.priority,
           customer: ticket.raisedForCustomer?.companyName || 'N/A',
           dueAt: ticket.dueAt?.toISOString() || 'Past due',
-          link: ticketLink,
+          link: externalTicketLink,
         },
       });
     }

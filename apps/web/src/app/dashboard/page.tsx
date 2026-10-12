@@ -129,16 +129,20 @@ interface FilterOption {
 }
 
 export default function OverallCompanyDashboardPage() {
-  const { activeTenant, activeRole } = useAuth();
+  const { activeTenant, activeRole, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (activeRole === 'DEPARTMENT_ADMIN') {
+    if (user?.isSuperAdmin || activeRole === 'SUPER_ADMIN') {
+      router.replace('/super-admin/dashboard');
+    } else if (activeRole === 'DEPARTMENT_ADMIN') {
       router.replace('/dashboard/department');
     } else if (activeRole === 'SUPPORT_EMPLOYEE') {
       router.replace('/dashboard/employee');
+    } else if (activeRole === 'CUSTOMER' && activeTenant?.slug) {
+      router.replace(`/portal/${activeTenant.slug}/dashboard`);
     }
-  }, [activeRole, router]);
+  }, [user, activeRole, activeTenant, router]);
 
   // Statistics & Loading State
   const [stats, setStats] = useState<DashboardStats | null>(null);
