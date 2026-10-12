@@ -20,8 +20,6 @@ import {
   ChevronUp,
   RefreshCw,
   Server,
-  Database,
-  ShieldAlert,
   FileText,
   HelpCircle,
   Activity,
@@ -310,7 +308,6 @@ export default function HelpAndSupportPage() {
   const [requests, setRequests] = useState<SupportRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [apiLatency, setApiLatency] = useState<number | null>(null);
 
   // State: Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -341,9 +338,6 @@ export default function HelpAndSupportPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('ALL'); // ALL, 7D, 30D, 90D
 
-  // State: Platform Status time period
-  const [uptimePeriod, setUptimePeriod] = useState<'7D' | '30D' | '90D'>('30D');
-
   // State: Expanded FAQ index
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
@@ -360,11 +354,7 @@ export default function HelpAndSupportPage() {
   const fetchSupportRequests = useCallback(async () => {
     try {
       setIsLoading(true);
-      const startTime = performance.now();
       const tenant = await apiClient<any>('/tenants/current');
-      const endTime = performance.now();
-      setApiLatency(Math.round(endTime - startTime));
-
       const rawSaved: any[] = tenant?.settings?.supportRequests || [];
       let listToNormalize = rawSaved;
 
@@ -1043,132 +1033,9 @@ export default function HelpAndSupportPage() {
         </div>
       </Card>
 
-      {/* ── 5. Platform Status and Incidents ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Real Operational Status & Health */}
-        <Card className="lg:col-span-2 p-6 bg-white border-slate-200 shadow-sm space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-600" /> Real-time Platform Operational Status
-              </h2>
-              <p className="text-xs text-slate-500">Live service health monitoring across Kalpak SaaS infrastructure</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                All Systems Operational
-              </span>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center space-y-1">
-              <Server className="w-4 h-4 text-emerald-600 mx-auto" />
-              <div className="text-xs font-semibold text-slate-800">API Gateway</div>
-              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded">
-                Operational {apiLatency ? `(${apiLatency}ms)` : ''}
-              </span>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center space-y-1">
-              <LifeBuoy className="w-4 h-4 text-emerald-600 mx-auto" />
-              <div className="text-xs font-semibold text-slate-800">Web App Router</div>
-              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded">
-                Operational
-              </span>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center space-y-1">
-              <Database className="w-4 h-4 text-emerald-600 mx-auto" />
-              <div className="text-xs font-semibold text-slate-800">PostgreSQL Cloud</div>
-              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded">
-                Operational
-              </span>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center space-y-1">
-              <Mail className="w-4 h-4 text-emerald-600 mx-auto" />
-              <div className="text-xs font-semibold text-slate-800">Notification Engine</div>
-              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100/60 px-1.5 py-0.5 rounded">
-                Operational
-              </span>
-            </div>
-          </div>
 
-          {/* Historical Uptime Target */}
-          <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-xs font-bold text-slate-800">Target SLA Commitment: 99.9% Monthly Uptime</span>
-                <p className="text-[11px] text-slate-500">
-                  Target SLA commitment backed by redundant container health checks and automated failovers.
-                </p>
-              </div>
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 text-xs font-medium">
-                {(['7D', '30D', '90D'] as const).map((period) => (
-                  <button
-                    key={period}
-                    type="button"
-                    onClick={() => setUptimePeriod(period)}
-                    className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-                      uptimePeriod === period ? 'bg-orange-600 text-white font-semibold' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {period === '7D' ? '7 Days' : period === '30D' ? '30 Days' : '90 Days'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Uptime bar simulation */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[11px] font-mono text-slate-500">
-                <span>Observed Availability ({uptimePeriod === '7D' ? 'Last 7 Days' : uptimePeriod === '30D' ? 'Last 30 Days' : 'Last 90 Days'}):</span>
-                <span className="font-bold text-emerald-700">
-                  {uptimePeriod === '7D' ? '100.00%' : uptimePeriod === '30D' ? '99.96%' : '99.94%'}
-                </span>
-              </div>
-              <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden flex gap-0.5">
-                {Array.from({ length: 30 }).map((_, i) => (
-                  <div key={i} className="flex-1 bg-emerald-500 hover:opacity-80 rounded-sm" title={`Day ${i + 1}: 100%`} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Active Incidents & Maintenance Notices */}
-        <Card className="p-6 bg-white border-slate-200 shadow-sm space-y-4">
-          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-blue-600" /> Active Incidents &amp; Maintenance
-          </h2>
-
-          <div className="space-y-3 text-xs">
-            <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-900 space-y-1">
-              <div className="flex items-center gap-1.5 font-bold text-emerald-800 text-[11px]">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> No Unscheduled Outages
-              </div>
-              <p className="text-[11px] text-emerald-700 leading-relaxed">
-                All platform APIs, databases, background workers, and email gateways are running without degradation.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[11px] text-slate-800">Scheduled Maintenance Notice</span>
-                <span className="text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded">
-                  UPCOMING
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                Platform database indexing optimization is scheduled for{' '}
-                <strong className="text-slate-800">Sunday, 02:00 AM – 02:30 AM IST</strong>. Zero service downtime is
-                expected.
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* ── 6. Contact and Self-Service Help ───────────────────────────────── */}
+      {/* ── 5. Contact and Self-Service Help ───────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Contact Channels */}
         <Card className="p-6 bg-white border-slate-200 shadow-sm space-y-4">
