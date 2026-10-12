@@ -17,7 +17,7 @@ export class CreateCustomerDto {
 
   @IsString()
   @IsOptional()
-  @Length(2, 60)
+  @Length(0, 60)
   customerCode?: string;
 
   @IsString()
@@ -106,7 +106,7 @@ export class UpdateCustomerDto {
 
   @IsString()
   @IsOptional()
-  @Length(2, 60)
+  @Length(0, 60)
   customerCode?: string;
 
   @IsString()

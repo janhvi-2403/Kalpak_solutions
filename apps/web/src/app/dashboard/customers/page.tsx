@@ -100,6 +100,8 @@ export default function CustomersPage() {
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerListItem | null>(null);
   const [formCustomerType, setFormCustomerType] = useState<'INDIVIDUAL' | 'BUSINESS_PARTNER' | 'CORPORATE'>('INDIVIDUAL');
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [customerForm, setCustomerForm] = useState({
     customerCode: '',
     companyName: '',
@@ -156,15 +158,31 @@ export default function CustomersPage() {
       queryParams.set('page', page.toString());
       queryParams.set('limit', '15');
 
-      const res = await apiClient.get<{ items: CustomerListItem[]; total: number; totalPages: number }>(
+      const res = await apiClient.get<any>(
         `/customers?${queryParams.toString()}`
       );
-      const data = (res as any)?.data || res;
-      if (data) {
-        setCustomers(data.items || []);
-        setTotalPages(data.totalPages || 1);
-        setTotalCount(data.total || 0);
+      const unwrapped = (res as any)?.data !== undefined ? (res as any).data : res;
+      let itemList: CustomerListItem[] = [];
+      let total = 0;
+      let totalPages = 1;
+
+      if (Array.isArray(unwrapped)) {
+        itemList = unwrapped;
+        total = unwrapped.length;
+        totalPages = 1;
+      } else if (unwrapped && Array.isArray(unwrapped.items)) {
+        itemList = unwrapped.items;
+        total = unwrapped.total ?? unwrapped.items.length;
+        totalPages = unwrapped.totalPages ?? 1;
+      } else if (Array.isArray((res as any)?.items)) {
+        itemList = (res as any).items;
+        total = (res as any).total ?? (res as any).items.length;
+        totalPages = (res as any).totalPages ?? 1;
       }
+
+      setCustomers(itemList);
+      setTotalPages(totalPages);
+      setTotalCount(total);
     } catch (err: any) {
       showToast('error', err.response?.data?.message || err.message || 'Failed to load customers');
     } finally {
@@ -188,6 +206,7 @@ export default function CustomersPage() {
 
   const openCreateModal = () => {
     setEditingCustomer(null);
+    setModalError(null);
     setFormCustomerType('INDIVIDUAL');
     setCustomerForm({
       customerCode: '',
@@ -212,6 +231,7 @@ export default function CustomersPage() {
 
   const openEditModal = (customer: CustomerListItem) => {
     setEditingCustomer(customer);
+    setModalError(null);
     setFormCustomerType(customer.customerType || 'INDIVIDUAL');
     setCustomerForm({
       customerCode: customer.customerCode || '',
@@ -236,12 +256,29 @@ export default function CustomersPage() {
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
+    setIsSavingCustomer(true);
     try {
-      const payload = {
-        ...customerForm,
+      const payload: any = {
         customerType: formCustomerType,
-        contactPerson: customerForm.contactPerson || customerForm.companyName,
+        companyName: customerForm.companyName.trim(),
+        contactPerson: (customerForm.contactPerson || customerForm.companyName).trim(),
+        email: customerForm.email.trim().toLowerCase(),
+        phone: customerForm.phone.trim(),
+        status: customerForm.status || 'ACTIVE',
       };
+
+      if (customerForm.customerCode?.trim()) payload.customerCode = customerForm.customerCode.trim();
+      if (customerForm.alternatePhone?.trim()) payload.alternatePhone = customerForm.alternatePhone.trim();
+      if (customerForm.businessType?.trim()) payload.businessType = customerForm.businessType.trim();
+      if (customerForm.address?.trim()) payload.address = customerForm.address.trim();
+      if (customerForm.city?.trim()) payload.city = customerForm.city.trim();
+      if (customerForm.state?.trim()) payload.state = customerForm.state.trim();
+      if (customerForm.country?.trim()) payload.country = customerForm.country.trim();
+      if (customerForm.pincode?.trim()) payload.pincode = customerForm.pincode.trim();
+      if (customerForm.billingAddress?.trim()) payload.billingAddress = customerForm.billingAddress.trim();
+      if (customerForm.taxId?.trim()) payload.taxId = customerForm.taxId.trim();
+      if (customerForm.notes?.trim()) payload.notes = customerForm.notes.trim();
 
       if (editingCustomer) {
         await apiClient.patch(`/customers/${editingCustomer.id}`, payload);
@@ -252,10 +289,23 @@ export default function CustomersPage() {
       }
 
       setShowAddEditModal(false);
-      fetchCustomers();
-      fetchStats();
+      setPage(1);
+      // Auto-reset filters if current filter would hide newly created customer
+      if (typeFilter !== 'ALL' && typeFilter !== formCustomerType) {
+        setTypeFilter('ALL');
+      }
+      if (statusFilter === 'INACTIVE' && payload.status === 'ACTIVE') {
+        setStatusFilter('ALL');
+      }
+      await fetchCustomers();
+      await fetchStats();
     } catch (err: any) {
-      showToast('error', err.response?.data?.message || 'Failed to save customer');
+      const msg = err.response?.data?.message || err.message || 'Failed to save customer';
+      const formatted = Array.isArray(msg) ? msg.join(', ') : msg;
+      setModalError(formatted);
+      showToast('error', formatted);
+    } finally {
+      setIsSavingCustomer(false);
     }
   };
 
@@ -708,6 +758,12 @@ export default function CustomersPage() {
         title={editingCustomer ? 'Edit Customer Record' : 'Register New Customer'}
       >
         <form onSubmit={handleSaveCustomer} className="space-y-4 text-sm max-h-[80vh] overflow-y-auto pr-1">
+          {modalError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+              <span>{modalError}</span>
+            </div>
+          )}
           {/* Customer Type Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Customer Category *</label>
@@ -908,8 +964,16 @@ export default function CustomersPage() {
             <Button type="button" variant="outline" onClick={() => setShowAddEditModal(false)}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-orange-600 hover:bg-orange-700 text-white">
-              {editingCustomer ? 'Update Customer' : 'Register Customer'}
+            <Button
+              type="submit"
+              disabled={isSavingCustomer}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isSavingCustomer
+                ? 'Saving...'
+                : editingCustomer
+                ? 'Update Customer'
+                : 'Register Customer'}
             </Button>
           </div>
         </form>

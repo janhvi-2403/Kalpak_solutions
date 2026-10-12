@@ -59,7 +59,7 @@ export class CustomersController {
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc'
   ) {
-    return this.customersService.listCustomers(tenantCtx.tenantId, {
+    const result = await this.customersService.listCustomers(tenantCtx.tenantId, {
       search,
       status,
       customerType,
@@ -69,6 +69,13 @@ export class CustomersController {
       sortBy,
       sortOrder,
     });
+
+    // When called by other pages without pagination (e.g. ticket/product dropdowns), return the array directly
+    if (page === undefined && limit === undefined) {
+      return result.items;
+    }
+
+    return result;
   }
 
   @Get('stats')
