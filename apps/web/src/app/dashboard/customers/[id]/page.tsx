@@ -220,9 +220,32 @@ export default function CustomerDetailPage() {
     try {
       setLoading(true);
       const res = await apiClient.get<CustomerDetail>(`/customers/${customerId}`);
-      const cust = (res as any)?.data || res;
-      if (cust) {
-        setCustomer(cust);
+      const raw = (res as any)?.data || res;
+      if (raw) {
+        const extractedCode =
+          raw.customerCode ||
+          raw.notes?.match(/Code:\s*([^\s|]+)/)?.[1] ||
+          `CUST-${(raw.id || '').slice(0, 6).toUpperCase()}`;
+        const extractedType =
+          raw.customerType ||
+          raw.notes?.match(/Type:\s*([^\s|]+)/)?.[1] ||
+          'INDIVIDUAL';
+        const extractedAltPhone =
+          raw.alternatePhone ||
+          raw.notes?.match(/AltPhone:\s*([^\s|]+)/)?.[1] ||
+          '';
+
+        setCustomer({
+          ...raw,
+          customerCode: extractedCode,
+          customerType: extractedType,
+          alternatePhone: extractedAltPhone,
+          branches: Array.isArray(raw.branches) ? raw.branches : [],
+          contacts: Array.isArray(raw.contacts) ? raw.contacts : [],
+          portalUsers: Array.isArray(raw.portalUsers) ? raw.portalUsers : [],
+          assets: Array.isArray(raw.assets) ? raw.assets : [],
+          tickets: Array.isArray(raw.tickets) ? raw.tickets : [],
+        });
       }
     } catch (err: any) {
       showToast('error', err.response?.data?.message || err.message || 'Failed to load customer details');
@@ -452,18 +475,18 @@ export default function CustomerDetailPage() {
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${typeInfo.badge}`}>
                   {typeInfo.text}
                 </span>
-                {customer.customerCode && (
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                    {customer.customerCode}
-                  </span>
-                )}
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                  {customer.customerCode || `CUST-${(customer.id || '').slice(0, 6).toUpperCase()}`}
+                </span>
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium border ${customer.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                   {customer.status}
                 </span>
               </div>
-              <p className="text-sm text-slate-500 flex items-center gap-4">
-                <span>Primary Contact: <strong className="text-slate-700 font-medium">{customer.contactPerson}</strong></span>
-                {customer.city && <span>• {customer.city}, {customer.country || 'India'}</span>}
+              <p className="text-sm text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>Primary Contact: <strong className="text-slate-700 font-medium">{customer.contactPerson || customer.companyName}</strong></span>
+                {customer.phone && <span className="font-mono text-slate-700 font-medium">📞 {customer.phone}</span>}
+                {customer.email && <span className="text-slate-600">✉️ {customer.email}</span>}
+                {customer.city && <span>📍 {customer.city}, {customer.country || 'India'}</span>}
               </p>
             </div>
           </div>
@@ -490,19 +513,19 @@ export default function CustomerDetailPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Branches</span>
-            <p className="text-lg font-bold text-slate-800">{customer.branches.length}</p>
+            <p className="text-lg font-bold text-slate-800">{customer.branches?.length ?? 0}</p>
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Contacts</span>
-            <p className="text-lg font-bold text-slate-800">{customer.contacts.length}</p>
+            <p className="text-lg font-bold text-slate-800">{customer.contacts?.length ?? 0}</p>
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Equipment / Assets</span>
-            <p className="text-lg font-bold text-slate-800">{customer.assets.length}</p>
+            <p className="text-lg font-bold text-slate-800">{customer.assets?.length ?? 0}</p>
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Total Tickets</span>
-            <p className="text-lg font-bold text-slate-800">{customer.tickets.length}</p>
+            <p className="text-lg font-bold text-slate-800">{customer.tickets?.length ?? 0}</p>
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Open Tickets</span>
@@ -510,7 +533,7 @@ export default function CustomerDetailPage() {
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
             <span className="text-xs text-slate-500 uppercase font-semibold">Portal Users</span>
-            <p className="text-lg font-bold text-blue-600">{customer.portalUsers.length}</p>
+            <p className="text-lg font-bold text-blue-600">{customer.portalUsers?.length ?? 0}</p>
           </div>
         </div>
       </div>
@@ -535,7 +558,7 @@ export default function CustomerDetailPage() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Building className="w-4 h-4" /> Branches ({customer.branches.length})
+          <Building className="w-4 h-4" /> Branches ({customer.branches?.length ?? 0})
         </button>
         <button
           onClick={() => setActiveTab('contacts')}
@@ -545,7 +568,7 @@ export default function CustomerDetailPage() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Users className="w-4 h-4" /> Authorized Contacts ({customer.contacts.length})
+          <Users className="w-4 h-4" /> Authorized Contacts ({customer.contacts?.length ?? 0})
         </button>
         <button
           onClick={() => setActiveTab('portalUsers')}
@@ -555,7 +578,7 @@ export default function CustomerDetailPage() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Shield className="w-4 h-4" /> Portal Users ({customer.portalUsers.length})
+          <Shield className="w-4 h-4" /> Portal Users ({customer.portalUsers?.length ?? 0})
         </button>
         <button
           onClick={() => setActiveTab('assets')}
@@ -565,7 +588,7 @@ export default function CustomerDetailPage() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Wrench className="w-4 h-4" /> Equipment & Assets ({customer.assets.length})
+          <Wrench className="w-4 h-4" /> Equipment & Assets ({customer.assets?.length ?? 0})
         </button>
         <button
           onClick={() => setActiveTab('tickets')}
@@ -575,7 +598,7 @@ export default function CustomerDetailPage() {
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Ticket className="w-4 h-4" /> Tickets History ({customer.tickets.length})
+          <Ticket className="w-4 h-4" /> Tickets History ({customer.tickets?.length ?? 0})
         </button>
       </div>
 
@@ -674,7 +697,7 @@ export default function CustomerDetailPage() {
                   city: customer.city || '',
                   state: customer.state || '',
                   pincode: '',
-                  isHeadquarters: customer.branches.length === 0,
+                  isHeadquarters: (customer.branches?.length ?? 0) === 0,
                 });
                 setShowBranchModal(true);
               }}
@@ -684,7 +707,7 @@ export default function CustomerDetailPage() {
             </Button>
           </div>
 
-          {customer.branches.length === 0 ? (
+          {(customer.branches?.length ?? 0) === 0 ? (
             <div className="text-center py-12 border border-dashed rounded-xl space-y-3">
               <Building className="w-10 h-10 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-600 font-medium">No branches registered yet</p>
@@ -704,7 +727,7 @@ export default function CustomerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customer.branches.map((b) => (
+                  {(customer.branches || []).map((b) => (
                     <tr key={b.id} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-800 flex items-center gap-2">
@@ -791,13 +814,13 @@ export default function CustomerDetailPage() {
                 setEditingContact(null);
                 setContactForm({
                   name: '',
-                  branchId: customer.branches[0]?.id || '',
+                  branchId: customer.branches?.[0]?.id || '',
                   designation: '',
                   department: '',
                   email: '',
                   phone: '',
                   alternatePhone: '',
-                  isPrimary: customer.contacts.length === 0,
+                  isPrimary: (customer.contacts?.length ?? 0) === 0,
                   notes: '',
                 });
                 setShowContactModal(true);
@@ -808,7 +831,7 @@ export default function CustomerDetailPage() {
             </Button>
           </div>
 
-          {customer.contacts.length === 0 ? (
+          {(customer.contacts?.length ?? 0) === 0 ? (
             <div className="text-center py-12 border border-dashed rounded-xl space-y-3">
               <Users className="w-10 h-10 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-600 font-medium">No contacts recorded yet</p>
@@ -828,7 +851,7 @@ export default function CustomerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customer.contacts.map((c) => (
+                  {(customer.contacts || []).map((c) => (
                     <tr key={c.id} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-800 flex items-center gap-1.5">
@@ -915,7 +938,7 @@ export default function CustomerDetailPage() {
             </Button>
           </div>
 
-          {customer.portalUsers.length === 0 ? (
+          {(customer.portalUsers?.length ?? 0) === 0 ? (
             <div className="text-center py-12 border border-dashed rounded-xl space-y-3">
               <Shield className="w-10 h-10 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-600 font-medium">No authorized portal users yet</p>
@@ -935,7 +958,7 @@ export default function CustomerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customer.portalUsers.map((pu) => (
+                  {(customer.portalUsers || []).map((pu) => (
                     <tr key={pu.id} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-800">{pu.user.fullName}</div>
@@ -1003,7 +1026,7 @@ export default function CustomerDetailPage() {
             </Button>
           </div>
 
-          {customer.assets.length === 0 ? (
+          {(customer.assets?.length ?? 0) === 0 ? (
             <div className="text-center py-12 border border-dashed rounded-xl space-y-3">
               <Wrench className="w-10 h-10 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-600 font-medium">No equipment linked yet</p>
@@ -1022,7 +1045,7 @@ export default function CustomerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customer.assets.map((a) => (
+                  {(customer.assets || []).map((a) => (
                     <tr key={a.id} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4 font-mono font-semibold text-slate-800">{a.serialNumber}</td>
                       <td className="py-3 px-4">
@@ -1072,7 +1095,7 @@ export default function CustomerDetailPage() {
             </Link>
           </div>
 
-          {customer.tickets.length === 0 ? (
+          {(customer.tickets?.length ?? 0) === 0 ? (
             <div className="text-center py-12 border border-dashed rounded-xl space-y-3">
               <Ticket className="w-10 h-10 text-slate-400 mx-auto" />
               <p className="text-sm text-slate-600 font-medium">No service tickets recorded</p>
@@ -1093,7 +1116,7 @@ export default function CustomerDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customer.tickets.map((t) => (
+                  {(customer.tickets || []).map((t) => (
                     <tr key={t.id} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4">
                         <Link href={`/dashboard/tickets/${t.id}`} className="font-mono font-semibold text-orange-600 hover:underline">
@@ -1317,7 +1340,7 @@ export default function CustomerDetailPage() {
               className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">All Branches / Central</option>
-              {customer.branches.map((b) => (
+              {(customer.branches || []).map((b) => (
                 <option key={b.id} value={b.id}>{b.branchName}</option>
               ))}
             </select>
@@ -1396,7 +1419,7 @@ export default function CustomerDetailPage() {
                 className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Branches</option>
-                {customer.branches.map((b) => (
+                {(customer.branches || []).map((b) => (
                   <option key={b.id} value={b.id}>{b.branchName}</option>
                 ))}
               </select>
@@ -1449,7 +1472,7 @@ export default function CustomerDetailPage() {
               className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="">Headquarters / Main</option>
-              {customer.branches.map((b) => (
+              {(customer.branches || []).map((b) => (
                 <option key={b.id} value={b.id}>{b.branchName}</option>
               ))}
             </select>

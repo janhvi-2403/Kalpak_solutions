@@ -148,6 +148,22 @@ export default function CustomersPage() {
     }
   }, []);
 
+  const generateRandomCode = (type: string) => {
+    const prefix = type === 'BUSINESS_PARTNER' ? 'CUST-BIZ-' : type === 'CORPORATE' ? 'CUST-CORP-' : 'CUST-IND-';
+    const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `${prefix}${rand}`;
+  };
+
+  const selectCategory = (type: 'INDIVIDUAL' | 'BUSINESS_PARTNER' | 'CORPORATE') => {
+    setFormCustomerType(type);
+    if (!editingCustomer) {
+      setCustomerForm((prev) => ({
+        ...prev,
+        customerCode: generateRandomCode(type),
+      }));
+    }
+  };
+
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
@@ -180,6 +196,19 @@ export default function CustomersPage() {
         totalPages = (res as any).totalPages ?? 1;
       }
 
+      // Normalize items with fallback customerCode and customerType for backward-compatibility
+      itemList = itemList.map((c) => ({
+        ...c,
+        customerCode:
+          c.customerCode ||
+          c.notes?.match(/Code:\s*([^\s|]+)/)?.[1] ||
+          `CUST-${(c.id || '').slice(0, 6).toUpperCase()}`,
+        customerType:
+          c.customerType ||
+          (c.notes?.match(/Type:\s*([^\s|]+)/)?.[1] as any) ||
+          'INDIVIDUAL',
+      }));
+
       setCustomers(itemList);
       setTotalPages(totalPages);
       setTotalCount(total);
@@ -209,7 +238,7 @@ export default function CustomersPage() {
     setModalError(null);
     setFormCustomerType('INDIVIDUAL');
     setCustomerForm({
-      customerCode: '',
+      customerCode: generateRandomCode('INDIVIDUAL'),
       companyName: '',
       contactPerson: '',
       email: '',
@@ -259,8 +288,10 @@ export default function CustomersPage() {
     setModalError(null);
     setIsSavingCustomer(true);
     try {
+      const finalCode = customerForm.customerCode?.trim() || generateRandomCode(formCustomerType);
       const payload: any = {
         customerType: formCustomerType,
+        customerCode: finalCode,
         companyName: customerForm.companyName.trim(),
         contactPerson: (customerForm.contactPerson || customerForm.companyName).trim(),
         email: customerForm.email.trim().toLowerCase(),
@@ -268,7 +299,6 @@ export default function CustomersPage() {
         status: customerForm.status || 'ACTIVE',
       };
 
-      if (customerForm.customerCode?.trim()) payload.customerCode = customerForm.customerCode.trim();
       if (customerForm.alternatePhone?.trim()) payload.alternatePhone = customerForm.alternatePhone.trim();
       if (customerForm.businessType?.trim()) payload.businessType = customerForm.businessType.trim();
       if (customerForm.address?.trim()) payload.address = customerForm.address.trim();
@@ -295,7 +325,12 @@ export default function CustomersPage() {
               city: payload.city,
               pincode: payload.pincode,
               status: payload.status,
-              notes: payload.notes,
+              notes: [
+                payload.customerCode ? `Code: ${payload.customerCode}` : '',
+                payload.customerType ? `Type: ${payload.customerType}` : '',
+                payload.alternatePhone ? `AltPhone: ${payload.alternatePhone}` : '',
+                payload.notes,
+              ].filter(Boolean).join(' | '),
             };
             await apiClient.patch(`/customers/${editingCustomer.id}`, legacyPayload);
           } else {
@@ -321,6 +356,7 @@ export default function CustomersPage() {
               notes: [
                 payload.customerCode ? `Code: ${payload.customerCode}` : '',
                 payload.customerType ? `Type: ${payload.customerType}` : '',
+                payload.alternatePhone ? `AltPhone: ${payload.alternatePhone}` : '',
                 payload.notes,
               ].filter(Boolean).join(' | '),
             };
@@ -676,11 +712,9 @@ export default function CustomersPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-500">
-                            {c.customerCode && (
-                              <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-[11px] font-semibold text-slate-700">
-                                {c.customerCode}
-                              </span>
-                            )}
+                            <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700">
+                              {c.customerCode || `CUST-${(c.id || '').slice(0, 6).toUpperCase()}`}
+                            </span>
                             <span className="break-all">{c.email}</span>
                           </div>
                         </div>
@@ -814,7 +848,7 @@ export default function CustomersPage() {
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setFormCustomerType('INDIVIDUAL')}
+                onClick={() => selectCategory('INDIVIDUAL')}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
                   formCustomerType === 'INDIVIDUAL'
                     ? 'border-orange-600 bg-orange-50 text-orange-800 ring-2 ring-orange-200'
@@ -826,7 +860,7 @@ export default function CustomersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFormCustomerType('BUSINESS_PARTNER')}
+                onClick={() => selectCategory('BUSINESS_PARTNER')}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
                   formCustomerType === 'BUSINESS_PARTNER'
                     ? 'border-blue-600 bg-blue-50 text-blue-800 ring-2 ring-blue-200'
@@ -838,7 +872,7 @@ export default function CustomersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFormCustomerType('CORPORATE')}
+                onClick={() => selectCategory('CORPORATE')}
                 className={`py-2 px-3 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
                   formCustomerType === 'CORPORATE'
                     ? 'border-purple-600 bg-purple-50 text-purple-800 ring-2 ring-purple-200'
@@ -864,14 +898,31 @@ export default function CustomersPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Customer Code (Optional — auto-generated if blank)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Customer Code *
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCustomerForm((prev) => ({
+                      ...prev,
+                      customerCode: generateRandomCode(formCustomerType),
+                    }))
+                  }
+                  className="text-[11px] text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1 cursor-pointer"
+                  title="Generate unique reference code"
+                >
+                  <RefreshCw className="w-3 h-3" /> Auto-generate
+                </button>
+              </div>
               <Input
-                placeholder="e.g. CUST-CORP-001"
+                required
+                placeholder="e.g. CUST-IND-1001"
                 value={customerForm.customerCode}
                 onChange={(e) => setCustomerForm({ ...customerForm, customerCode: e.target.value })}
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">Pre-generated unique reference code</span>
             </div>
           </div>
 
