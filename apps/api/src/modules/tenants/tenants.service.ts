@@ -13,6 +13,7 @@ import { UpdateOnboardingDto } from './dto/update-onboarding.dto';
 import { AuditEventType, TenantStatus } from '@kalpak/types';
 import { generateSessionToken, hashToken } from '@kalpak/auth';
 import { getConfig } from '@kalpak/config';
+import { PLAN_PRICING } from '../payments/payments.service';
 
 @Injectable()
 export class TenantsService {
@@ -747,6 +748,7 @@ export class TenantsService {
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
+          policy: true,
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -966,13 +968,136 @@ export class TenantsService {
         paymentsRequiringAttention,
       },
       recentActivity: recentActivity.slice(0, 10),
-      tenants: dbTenants.slice(0, 15).map((t) => ({
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        status: t.status,
-        createdAt: t.createdAt,
-      })),
+      tenants: dbTenants.slice(0, 50).map((t) => {
+        const sub = t.subscriptions?.[0];
+        const settings = (t.settings as Record<string, any>) || {};
+        const plan = (sub?.plan || settings.selectedPlan || 'STARTER').toUpperCase();
+        return {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          status: t.status,
+          plan,
+          billingCycle: sub?.billingCycle || 'ANNUAL',
+          amount: sub?.amount ? Number(sub.amount) : (plan === 'ENTERPRISE' ? 143988 : plan === 'PROFESSIONAL' ? 67188 : 28788),
+          startsAt: sub?.startsAt || t.createdAt,
+          endsAt: sub?.endsAt || new Date(new Date(t.createdAt).getTime() + 14 * 86400000).toISOString(),
+          createdAt: t.createdAt,
+          policy: t.policy,
+          maxUsersQuota: t.policy?.maxUsersQuota || (plan === 'ENTERPRISE' ? 9999 : plan === 'PROFESSIONAL' ? 25 : 5),
+        };
+      }),
+    };
+  }
+
+  async updateTenantSubscription(
+    tenantId: string,
+    actorUserId: string,
+    dto: {
+      plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+      billingCycle?: 'MONTHLY' | 'ANNUAL';
+      status?: 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'CANCELLED';
+      endsAt?: string;
+    }
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+        policy: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with id ${tenantId} not found`);
+    }
+
+    const planLimits = PLAN_PRICING[dto.plan] || PLAN_PRICING.STARTER;
+    const maxTechnicians = dto.plan === 'ENTERPRISE' ? 9999 : dto.plan === 'PROFESSIONAL' ? 25 : 5;
+    const billingCycle = dto.billingCycle || 'ANNUAL';
+    const amount = billingCycle === 'ANNUAL' ? planLimits.annualTotalPrice : planLimits.monthlyPrice;
+    const endsAt = dto.endsAt ? new Date(dto.endsAt) : new Date(Date.now() + 365 * 86400000);
+
+    // 1. Update or create subscription record
+    const existingSub = tenant.subscriptions?.[0];
+    if (existingSub) {
+      await this.prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          plan: dto.plan as any,
+          billingCycle: billingCycle as any,
+          status: (dto.status || 'ACTIVE') as any,
+          amount,
+          endsAt,
+        },
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          tenantId,
+          plan: dto.plan as any,
+          billingCycle: billingCycle as any,
+          status: (dto.status || 'ACTIVE') as any,
+          amount,
+          endsAt,
+        },
+      });
+    }
+
+    // 2. Update tenant policy max quota & strategy based on tier
+    await this.prisma.tenantPolicy.upsert({
+      where: { tenantId },
+      update: {
+        maxUsersQuota: maxTechnicians,
+        assignmentStrategy: dto.plan === 'STARTER' ? 'MANUAL_DEPT_HEAD' : 'AUTO_SKILLS',
+        platformAccess: dto.plan === 'STARTER' ? 'WEB' : 'BOTH',
+      },
+      create: {
+        tenantId,
+        maxUsersQuota: maxTechnicians,
+        assignmentStrategy: dto.plan === 'STARTER' ? 'MANUAL_DEPT_HEAD' : 'AUTO_SKILLS',
+        platformAccess: dto.plan === 'STARTER' ? 'WEB' : 'BOTH',
+      },
+    });
+
+    // 3. Update tenant settings
+    const currentSettings = (tenant.settings as Record<string, any>) || {};
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: (dto.status === 'TRIAL' ? 'TRIAL' : 'ACTIVE') as any,
+        settings: {
+          ...currentSettings,
+          selectedPlan: dto.plan,
+        },
+      },
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorId: actorUserId,
+      eventType: AuditEventType.TENANT_UPDATED,
+      resourceType: 'TENANT_SUBSCRIPTION',
+      resourceId: tenantId,
+      action: 'SUPER_ADMIN_PLAN_CHANGE',
+      metadata: {
+        previousPlan: existingSub?.plan || currentSettings.selectedPlan || 'STARTER',
+        newPlan: dto.plan,
+        billingCycle,
+        maxUsersQuota: maxTechnicians,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Successfully updated tenant ${tenant.name} to ${dto.plan} (${billingCycle})`,
+      tenantId,
+      plan: dto.plan,
+      billingCycle,
+      maxUsersQuota: maxTechnicians,
     };
   }
 }

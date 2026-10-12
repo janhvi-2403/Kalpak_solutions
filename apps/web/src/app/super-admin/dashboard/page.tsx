@@ -29,6 +29,7 @@ import { KalpakLogo } from '@/components/KalpakLogo';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
+import { SubscriptionPlansManagement, ClientTenant } from '@/features/super-admin/subscription-plans-management';
 
 type ActiveTab =
   | 'dashboard'
@@ -72,13 +73,7 @@ interface PlatformOverviewData {
     variant: 'emerald' | 'blue' | 'red' | 'orange' | 'purple';
     timestamp: string;
   }>;
-  tenants: Array<{
-    id: string;
-    name: string;
-    slug: string;
-    status: string;
-    createdAt: string;
-  }>;
+  tenants: ClientTenant[];
 }
 
 export default function SuperAdminDashboardPage() {
@@ -592,78 +587,14 @@ export default function SuperAdminDashboardPage() {
           )}
 
           {/* ───────────────────────────────────────────────────────────── */}
+          {/* ───────────────────────────────────────────────────────────── */}
           {/* MODULE 3: SUBSCRIPTION PLANS */}
           {/* ───────────────────────────────────────────────────────────── */}
           {activeTab === 'plans' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Subscription Plans Management</h2>
-                <p className="text-xs text-slate-500">Define what features, limits, and pricing each SaaS tier includes.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Starter Plan */}
-                <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase text-slate-500">Starter Tier</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold">Standard</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900">₹4,999</h3>
-                    <span className="text-xs text-slate-500 font-medium">/ month billed annually</span>
-                  </div>
-                  <ul className="space-y-2 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Up to 10 Licensed Users</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> 5 GB Document Storage</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Ticket Management & Customer Portal</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Email Notifications</li>
-                    <li className="flex items-center gap-2 text-slate-400"><X className="w-4 h-4 text-slate-300" /> Auto Assignment Engine</li>
-                    <li className="flex items-center gap-2 text-slate-400"><X className="w-4 h-4 text-slate-300" /> REST API Integration</li>
-                  </ul>
-                </div>
-
-                {/* Professional Plan */}
-                <div className="p-6 rounded-3xl bg-gradient-to-b from-blue-50/70 via-white to-white border-2 border-blue-400 shadow-md space-y-4 relative">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase text-blue-700">Professional Tier</span>
-                    <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black uppercase">
-                      Most Popular
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-blue-900">₹9,999</h3>
-                    <span className="text-xs text-blue-700 font-medium">/ month &bull; 14-Day Free Trial</span>
-                  </div>
-                  <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-blue-100">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Up to 50 Licensed Users</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> 50 GB Cloud Storage</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Auto Assignment & SLA Rules</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Advanced Analytics & Reports</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Full REST API Integration</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Bulk Import/Export CSV</li>
-                  </ul>
-                </div>
-
-                {/* Enterprise Plan */}
-                <div className="p-6 rounded-3xl bg-gradient-to-b from-orange-50/70 via-white to-white border-2 border-orange-400 shadow-md space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase text-orange-700">Enterprise Tier</span>
-                    <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-[10px] font-bold">Custom SLA</span>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-orange-950">Custom</h3>
-                    <span className="text-xs text-orange-700 font-medium">Annual SLA Contract</span>
-                  </div>
-                  <ul className="space-y-2 text-xs text-slate-700 pt-2 border-t border-orange-100">
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Unlimited Users & Branches</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> 500+ GB Dedicated Storage</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Custom Workflows & SLAs</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Dedicated Account Manager</li>
-                    <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> Custom Domain & Branding</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+            <SubscriptionPlansManagement
+              tenants={tenants}
+              onRefreshData={loadPlatformData}
+            />
           )}
 
           {/* ───────────────────────────────────────────────────────────── */}

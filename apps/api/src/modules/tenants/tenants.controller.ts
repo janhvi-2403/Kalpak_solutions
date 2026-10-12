@@ -219,4 +219,21 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateTenantPolicy(tenantId, user.id, dto);
   }
+
+  @Patch(':id/subscription')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionCode.TENANT_MANAGE_ALL)
+  @ApiOperation({ summary: 'Super Admin: Upgrade, downgrade or change plan and lifecycle for any client tenant' })
+  async updateTenantSubscriptionById(
+    @Param('id') tenantId: string,
+    @CurrentUser() user: UserPrincipal,
+    @Body() dto: {
+      plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+      billingCycle?: 'MONTHLY' | 'ANNUAL';
+      status?: 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'CANCELLED';
+      endsAt?: string;
+    }
+  ) {
+    return this.tenantsService.updateTenantSubscription(tenantId, user.id, dto);
+  }
 }
