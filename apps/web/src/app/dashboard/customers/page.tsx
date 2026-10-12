@@ -430,7 +430,7 @@ export default function CustomersPage() {
       {/* Toast Alert */}
       {toastMsg && (
         <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-center gap-2 ${
+          className={`fixed top-6 right-6 z-[9999] px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-200 ${
             toastMsg.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
               : 'bg-red-50 text-red-800 border-red-200'
@@ -959,6 +959,13 @@ export default function CustomersPage() {
               className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
+
+          {modalError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+              <span className="font-medium">{modalError}</span>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-3 border-t">
             <Button type="button" variant="outline" onClick={() => setShowAddEditModal(false)}>

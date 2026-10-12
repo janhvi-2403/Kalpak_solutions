@@ -47,7 +47,7 @@ export function Dialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
       <div
@@ -64,7 +64,7 @@ export function Dialog({
             {description && <p className="text-sm text-slate-500 mt-1">{description}</p>}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
             aria-label="Close"
           >
