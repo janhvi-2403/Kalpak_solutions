@@ -20,6 +20,9 @@ model Tenant {
   auditEvents             AuditEvent[]
   assets                  CustomerAsset[]
   customers               Customer[]
+  customerBranches        CustomerBranch[]
+  customerContacts        CustomerContact[]
+  customerUsers           CustomerUser[]
   departments             Department[]
   emailConfiguration      EmailConfiguration?
   emailConnection         EmailConnection?
@@ -74,6 +77,7 @@ model User {
   emailVerifiedAt       DateTime?                @map("email_verified_at") @db.Timestamptz(6)
   auditEvents           AuditEvent[]
   customerAccount       Customer?                @relation("CustomerUser")
+  customerPortalAccess  CustomerUser[]
   headedDepartments     Department[]             @relation("DepartmentHead")
   pocDepartments        Department[]             @relation("DepartmentPoc")
   verificationTokens    EmailVerificationToken[]
@@ -314,13 +318,21 @@ model Department {
 model Customer {
   id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId            String            @map("tenant_id") @db.Uuid
+  customerType        CustomerType      @default(INDIVIDUAL) @map("customer_type")
+  customerCode        String?           @map("customer_code") @db.VarChar(60)
   companyName         String            @map("company_name") @db.VarChar(150)
   contactPerson       String            @map("contact_person") @db.VarChar(100)
   email               String            @db.VarChar(255)
   phone               String            @db.VarChar(30)
+  alternatePhone      String?           @map("alternate_phone") @db.VarChar(30)
+  businessType        String?           @map("business_type") @db.VarChar(80)
   address             String?
   city                String?           @db.VarChar(100)
+  state               String?           @db.VarChar(100)
+  country             String?           @default("India") @db.VarChar(100)
   pincode             String?           @db.VarChar(20)
+  billingAddress      String?           @map("billing_address")
+  taxId               String?           @map("tax_id") @db.VarChar(50)
   status              String            @default("ACTIVE") @db.VarChar(30)
   portalAccessEnabled Boolean           @default(false) @map("portal_access_enabled")
   userId              String?           @unique @map("user_id") @db.Uuid
@@ -329,18 +341,114 @@ model Customer {
   updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt           DateTime?         @map("deleted_at") @db.Timestamptz(6)
   assets              CustomerAsset[]
+  branches            CustomerBranch[]
+  contacts            CustomerContact[]
+  portalUsers         CustomerUser[]
   tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user                User?             @relation("CustomerUser", fields: [userId], references: [id])
   serviceContracts    ServiceContract[]
   tickets             ServiceTicket[]
   workOrders          WorkOrder[]
 
+  @@unique([tenantId, customerCode], name: "uq_customer_tenant_code")
   @@index([tenantId], map: "idx_customers_tenant_id")
+  @@index([tenantId, customerType], map: "idx_customers_tenant_type")
+  @@index([customerCode], map: "idx_customers_code")
   @@index([email], map: "idx_customers_email")
   @@index([phone], map: "idx_customers_phone")
   @@index([status], map: "idx_customers_status")
   @@index([deletedAt], map: "idx_customers_deleted_at")
   @@map("customers")
+}
+
+model CustomerBranch {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String            @map("tenant_id") @db.Uuid
+  customerId     String            @map("customer_id") @db.Uuid
+  branchName     String            @map("branch_name") @db.VarChar(150)
+  branchCode     String?           @map("branch_code") @db.VarChar(50)
+  contactPerson  String?           @map("contact_person") @db.VarChar(100)
+  phone          String?           @db.VarChar(30)
+  email          String?           @db.VarChar(255)
+  address        String?
+  city           String?           @db.VarChar(100)
+  state          String?           @db.VarChar(100)
+  country        String?           @default("India") @db.VarChar(100)
+  pincode        String?           @db.VarChar(20)
+  isHeadquarters Boolean           @default(false) @map("is_headquarters")
+  status         String            @default("ACTIVE") @db.VarChar(30)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)
+
+  customer       Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts       CustomerContact[]
+  portalUsers    CustomerUser[]
+  assets         CustomerAsset[]
+  tickets        ServiceTicket[]
+
+  @@unique([customerId, branchName], name: "uq_customer_branch_name")
+  @@index([tenantId], map: "idx_customer_branches_tenant_id")
+  @@index([customerId], map: "idx_customer_branches_customer_id")
+  @@index([deletedAt], map: "idx_customer_branches_deleted_at")
+  @@map("customer_branches")
+}
+
+model CustomerContact {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String          @map("tenant_id") @db.Uuid
+  customerId     String          @map("customer_id") @db.Uuid
+  branchId       String?         @map("branch_id") @db.Uuid
+  name           String          @db.VarChar(150)
+  designation    String?         @db.VarChar(100)
+  department     String?         @db.VarChar(100)
+  email          String?         @db.VarChar(255)
+  phone          String          @db.VarChar(30)
+  alternatePhone String?         @map("alternate_phone") @db.VarChar(30)
+  isPrimary      Boolean         @default(false) @map("is_primary")
+  status         String          @default("ACTIVE") @db.VarChar(30)
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(6)
+
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  branch         CustomerBranch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tickets        ServiceTicket[]
+
+  @@index([tenantId], map: "idx_customer_contacts_tenant_id")
+  @@index([customerId], map: "idx_customer_contacts_customer_id")
+  @@index([branchId], map: "idx_customer_contacts_branch_id")
+  @@index([email], map: "idx_customer_contacts_email")
+  @@index([phone], map: "idx_customer_contacts_phone")
+  @@index([deletedAt], map: "idx_customer_contacts_deleted_at")
+  @@map("customer_contacts")
+}
+
+model CustomerUser {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String          @map("tenant_id") @db.Uuid
+  customerId String          @map("customer_id") @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  branchId   String?         @map("branch_id") @db.Uuid
+  roleTitle  String?         @map("role_title") @db.VarChar(100)
+  status     String          @default("ACTIVE") @db.VarChar(30)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch     CustomerBranch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, userId], name: "uq_customer_user")
+  @@index([tenantId], map: "idx_customer_users_tenant_id")
+  @@index([customerId], map: "idx_customer_users_customer_id")
+  @@index([userId], map: "idx_customer_users_user_id")
+  @@index([branchId], map: "idx_customer_users_branch_id")
+  @@map("customer_users")
 }
 
 model Product {
@@ -391,6 +499,7 @@ model CustomerAsset {
   id                String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String                          @map("tenant_id") @db.Uuid
   customerId        String                          @map("customer_id") @db.Uuid
+  branchId          String?                         @map("branch_id") @db.Uuid
   productId         String                          @map("product_id") @db.Uuid
   serialNumber      String                          @map("serial_number") @db.VarChar(100)
   installationDate  DateTime?                       @map("installation_date") @db.Timestamptz(6)
@@ -403,6 +512,7 @@ model CustomerAsset {
   deletedAt         DateTime?                       @map("deleted_at") @db.Timestamptz(6)
   contractCoverages ContractAsset[]
   customer          Customer                        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  branch            CustomerBranch?                 @relation(fields: [branchId], references: [id], onDelete: SetNull)
   product           Product                         @relation(fields: [productId], references: [id])
   tenant            Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pmSchedules       PreventiveMaintenanceSchedule[]
@@ -412,6 +522,7 @@ model CustomerAsset {
   @@unique([tenantId, serialNumber], name: "uq_asset_tenant_serial")
   @@index([tenantId], map: "idx_assets_tenant_id")
   @@index([customerId], map: "idx_assets_customer_id")
+  @@index([branchId], map: "idx_assets_branch_id")
   @@index([productId], map: "idx_assets_product_id")
   @@index([status], map: "idx_assets_status")
   @@index([deletedAt], map: "idx_assets_deleted_at")
@@ -454,6 +565,8 @@ model ServiceTicket {
   assignedToUserId    String?                        @map("assigned_to_user_id") @db.Uuid
   departmentId        String?                        @map("department_id") @db.Uuid
   customerAssetId     String?                        @map("customer_asset_id") @db.Uuid
+  customerBranchId    String?                        @map("customer_branch_id") @db.Uuid
+  customerContactId   String?                        @map("customer_contact_id") @db.Uuid
   isOverdue           Boolean                        @default(false) @map("is_overdue")
   tolerableOpenDays   Int                            @default(5) @map("tolerable_open_days")
   dueAt               DateTime?                      @map("due_at") @db.Timestamptz(6)
@@ -476,6 +589,8 @@ model ServiceTicket {
   closedByUser        User?                          @relation("TicketClosedBy", fields: [closedByUserId], references: [id])
   contract            ServiceContract?               @relation(fields: [contractId], references: [id])
   customerAsset       CustomerAsset?                 @relation(fields: [customerAssetId], references: [id])
+  customerBranch      CustomerBranch?                @relation(fields: [customerBranchId], references: [id], onDelete: SetNull)
+  customerContact     CustomerContact?               @relation(fields: [customerContactId], references: [id], onDelete: SetNull)
   department          Department?                    @relation(fields: [departmentId], references: [id])
   pmSchedule          PreventiveMaintenanceSchedule? @relation(fields: [pmScheduleId], references: [id])
   product             Product?                       @relation(fields: [productId], references: [id])
@@ -495,6 +610,8 @@ model ServiceTicket {
   @@index([assignedToUserId], map: "idx_tickets_assigned_to")
   @@index([departmentId], map: "idx_tickets_department_id")
   @@index([raisedForCustomerId], map: "idx_tickets_customer_id")
+  @@index([customerBranchId], map: "idx_tickets_customer_branch_id")
+  @@index([customerContactId], map: "idx_tickets_customer_contact_id")
   @@index([contractId], map: "idx_tickets_contract_id")
   @@index([pmScheduleId], map: "idx_tickets_pm_schedule_id")
   @@index([isOverdue], map: "idx_tickets_is_overdue")
@@ -1279,4 +1396,10 @@ enum SupportEmailVerificationStatus {
   EXPIRED
   FAILED
   UNVERIFIED
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS_PARTNER
+  CORPORATE
 }

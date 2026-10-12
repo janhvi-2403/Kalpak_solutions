@@ -30,6 +30,28 @@ export class PortalService {
    * Helper: Resolve and validate the Customer entity linked to the current logged-in user.
    */
   async resolveCustomerForUser(userId: string, tenantId: string) {
+    // 1. Check CustomerUser junction table for authorized users
+    const customerUser = await this.prisma.customerUser.findFirst({
+      where: {
+        userId,
+        tenantId,
+        status: 'ACTIVE',
+      },
+      include: {
+        customer: true,
+      },
+    });
+
+    if (customerUser && customerUser.customer && !customerUser.customer.deletedAt) {
+      if (!customerUser.customer.portalAccessEnabled) {
+        throw new ForbiddenException(
+          'Self-service portal access has been disabled for your organization. Please contact your support team.'
+        );
+      }
+      return customerUser.customer;
+    }
+
+    // 2. Fallback: check 1-to-1 customer.userId for backward compatibility
     const customer = await this.prisma.customer.findFirst({
       where: {
         userId,

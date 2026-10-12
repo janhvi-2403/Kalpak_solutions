@@ -31,6 +31,16 @@ export class CreateTicketDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  customerBranchId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  customerContactId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   departmentId?: string;
 
   @ApiPropertyOptional()

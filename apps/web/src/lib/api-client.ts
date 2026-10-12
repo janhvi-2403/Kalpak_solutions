@@ -180,6 +180,38 @@ export async function apiClient<T>(
   return (await response.text()) as unknown as T;
 }
 
+apiClient.get = function <T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  return apiClient<T>(endpoint, { ...options, method: 'GET' });
+};
+
+apiClient.post = function <T>(endpoint: string, data?: any, options: RequestOptions = {}): Promise<T> {
+  return apiClient<T>(endpoint, {
+    ...options,
+    method: 'POST',
+    body: data !== undefined ? (typeof data === 'string' ? data : JSON.stringify(data)) : undefined,
+  });
+};
+
+apiClient.patch = function <T>(endpoint: string, data?: any, options: RequestOptions = {}): Promise<T> {
+  return apiClient<T>(endpoint, {
+    ...options,
+    method: 'PATCH',
+    body: data !== undefined ? (typeof data === 'string' ? data : JSON.stringify(data)) : undefined,
+  });
+};
+
+apiClient.put = function <T>(endpoint: string, data?: any, options: RequestOptions = {}): Promise<T> {
+  return apiClient<T>(endpoint, {
+    ...options,
+    method: 'PUT',
+    body: data !== undefined ? (typeof data === 'string' ? data : JSON.stringify(data)) : undefined,
+  });
+};
+
+apiClient.delete = function <T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  return apiClient<T>(endpoint, { ...options, method: 'DELETE' });
+};
+
 export function setAuthToken(token: string): void {
   if (typeof window !== 'undefined' && token) {
     localStorage.setItem('kalpak_session_token', token);

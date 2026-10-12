@@ -5,26 +5,43 @@ import { X } from 'lucide-react';
 import { cn } from '@kalpak/ui';
 
 export interface DialogProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+  onOpenChange?: (open: boolean) => void;
   title?: string;
   description?: string;
   children: React.ReactNode;
   className?: string;
 }
 
-export function Dialog({ isOpen, onClose, title, description, children, className }: DialogProps) {
+export function Dialog({
+  isOpen,
+  open,
+  onClose,
+  onOpenChange,
+  title,
+  description,
+  children,
+  className,
+}: DialogProps) {
+  const visible = open !== undefined ? open : Boolean(isOpen);
+  const handleClose = React.useCallback(() => {
+    if (onClose) onClose();
+    if (onOpenChange) onOpenChange(false);
+  }, [onClose, onOpenChange]);
+
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
+      if (e.key === 'Escape' && visible) {
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [visible, handleClose]);
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

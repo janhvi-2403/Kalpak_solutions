@@ -161,4 +161,25 @@ CREATE POLICY tenant_isolation_payment_transactions ON payment_transactions
     USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
     WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
 
+ALTER TABLE customer_branches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_customer_branches ON customer_branches;
+CREATE POLICY tenant_isolation_customer_branches ON customer_branches
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE customer_contacts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_customer_contacts ON customer_contacts;
+CREATE POLICY tenant_isolation_customer_contacts ON customer_contacts
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
+ALTER TABLE customer_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_customer_users ON customer_users;
+CREATE POLICY tenant_isolation_customer_users ON customer_users
+    FOR ALL
+    USING (is_rls_bypassed() = true OR tenant_id = current_tenant_id())
+    WITH CHECK (is_rls_bypassed() = true OR tenant_id = current_tenant_id());
+
 

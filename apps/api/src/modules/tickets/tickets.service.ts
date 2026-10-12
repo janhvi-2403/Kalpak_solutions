@@ -69,6 +69,23 @@ const TICKET_SELECT = {
       product: { select: { name: true, modelNumber: true } },
     },
   },
+  customerBranch: {
+    select: {
+      id: true,
+      branchName: true,
+      branchCode: true,
+      city: true,
+    },
+  },
+  customerContact: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      designation: true,
+    },
+  },
 } satisfies Prisma.ServiceTicketSelect;
 
 @Injectable()
@@ -148,6 +165,20 @@ export class TicketsService {
       if (!customer) throw new NotFoundException(`Customer not found`);
     }
 
+    if (dto.customerBranchId) {
+      const branch = await this.prisma.customerBranch.findFirst({
+        where: { id: dto.customerBranchId, tenantId, deletedAt: null },
+      });
+      if (!branch) throw new NotFoundException(`Customer branch not found`);
+    }
+
+    if (dto.customerContactId) {
+      const contact = await this.prisma.customerContact.findFirst({
+        where: { id: dto.customerContactId, tenantId, deletedAt: null },
+      });
+      if (!contact) throw new NotFoundException(`Customer contact not found`);
+    }
+
     if (dto.departmentId) {
       const dept = await this.prisma.department.findFirst({
         where: { id: dto.departmentId, tenantId, deletedAt: null },
@@ -178,6 +209,8 @@ export class TicketsService {
           source: dto.source || 'PORTAL',
           raisedByUserId: (actorUserId && actorUserId.length > 0) ? actorUserId : null,
           raisedForCustomerId: dto.raisedForCustomerId,
+          customerBranchId: dto.customerBranchId,
+          customerContactId: dto.customerContactId,
           departmentId: dto.departmentId,
           customerAssetId: dto.customerAssetId,
           assignedToUserId: dto.assignedToUserId,
