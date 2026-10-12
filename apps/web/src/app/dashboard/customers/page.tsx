@@ -281,10 +281,54 @@ export default function CustomersPage() {
       if (customerForm.notes?.trim()) payload.notes = customerForm.notes.trim();
 
       if (editingCustomer) {
-        await apiClient.patch(`/customers/${editingCustomer.id}`, payload);
+        try {
+          await apiClient.patch(`/customers/${editingCustomer.id}`, payload);
+        } catch (patchErr: any) {
+          const errString = JSON.stringify(patchErr?.response?.data || patchErr?.message || '');
+          if (errString.includes('should not exist')) {
+            const legacyPayload = {
+              companyName: payload.companyName,
+              contactPerson: payload.contactPerson,
+              email: payload.email,
+              phone: payload.phone,
+              address: [payload.address, payload.city, payload.state, payload.country].filter(Boolean).join(', '),
+              city: payload.city,
+              pincode: payload.pincode,
+              status: payload.status,
+              notes: payload.notes,
+            };
+            await apiClient.patch(`/customers/${editingCustomer.id}`, legacyPayload);
+          } else {
+            throw patchErr;
+          }
+        }
         showToast('success', `Customer "${payload.companyName}" updated successfully`);
       } else {
-        await apiClient.post('/customers', payload);
+        try {
+          await apiClient.post('/customers', payload);
+        } catch (postErr: any) {
+          const errString = JSON.stringify(postErr?.response?.data || postErr?.message || '');
+          if (errString.includes('should not exist')) {
+            const legacyPayload = {
+              companyName: payload.companyName,
+              contactPerson: payload.contactPerson,
+              email: payload.email,
+              phone: payload.phone,
+              address: [payload.address, payload.city, payload.state, payload.country].filter(Boolean).join(', '),
+              city: payload.city,
+              pincode: payload.pincode,
+              status: payload.status,
+              notes: [
+                payload.customerCode ? `Code: ${payload.customerCode}` : '',
+                payload.customerType ? `Type: ${payload.customerType}` : '',
+                payload.notes,
+              ].filter(Boolean).join(' | '),
+            };
+            await apiClient.post('/customers', legacyPayload);
+          } else {
+            throw postErr;
+          }
+        }
         showToast('success', `Customer "${payload.companyName}" registered successfully`);
       }
 
