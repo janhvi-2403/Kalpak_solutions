@@ -77,3 +77,85 @@ export interface CurrentSubscriptionResponse {
     allowCustomerToRaise: boolean;
   } | null;
 }
+
+export type PlanStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT' | 'ARCHIVED';
+
+export interface PlanLimits {
+  maxUsers: number | 'Unlimited';
+  maxDepartments: number | 'Unlimited';
+  maxTicketsMonthly: number | 'Unlimited';
+  storageGb: number | 'Unlimited';
+  maxIntegrations: number | 'Unlimited';
+}
+
+export interface PlanFeatures {
+  ticketManagement: boolean;
+  customerPortal: boolean;
+  manualAssignment: boolean;
+  autoAssignment: boolean;
+  workloadBalancing: boolean;
+  employeeOnBehalf: boolean;
+  ticketAgingAlerts: boolean;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  whatsappNotifications: boolean;
+  mobileAccess: boolean;
+  basicReports: boolean;
+  advancedReports: boolean;
+  apiIntegration: boolean;
+  bulkImportExport: boolean;
+  customWorkflows: boolean;
+  customSla: boolean;
+  multiLocation: boolean;
+  ssoSaml: boolean;
+  dedicatedManager: boolean;
+  slaUptime999: boolean;
+  [key: string]: boolean | string | undefined;
+}
+
+export interface PlanDefinition {
+  id: string;
+  code: string;
+  name: string;
+  badge?: string;
+  description?: string;
+  monthlyPrice: number;
+  annualMonthlyPrice: number;
+  annualTotalPrice: number;
+  discountPercent: number;
+  currency: string;
+  billingIntervals?: ('MONTHLY' | 'ANNUAL')[];
+  trialDays: number;
+  isFreeTrialAllowed: boolean;
+  effectiveDate?: string;
+  status: PlanStatus;
+  isRecommended: boolean;
+  displayOrder: number;
+  limits: PlanLimits;
+  features: PlanFeatures;
+  highlights: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreatePlanRequest {
+  code: string;
+  name: string;
+  badge?: string;
+  description?: string;
+  monthlyPrice: number;
+  annualMonthlyPrice?: number;
+  annualTotalPrice?: number;
+  discountPercent?: number;
+  currency?: string;
+  trialDays?: number;
+  isFreeTrialAllowed?: boolean;
+  status?: PlanStatus;
+  isRecommended?: boolean;
+  displayOrder?: number;
+  limits?: Partial<PlanLimits>;
+  features?: Partial<PlanFeatures>;
+  highlights?: string[];
+}
+
+export interface UpdatePlanRequest extends Partial<CreatePlanRequest> {}

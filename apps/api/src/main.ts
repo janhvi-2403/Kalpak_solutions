@@ -144,8 +144,8 @@ async function bootstrap() {
   });
 
   const port = config.PORT;
-  await app.listen(port);
-  logger.info(`[Kalpak API] Server successfully listening on port ${port}`);
+  await app.listen(port, '0.0.0.0');
+  logger.info(`[Kalpak API] Server successfully listening on 0.0.0.0:${port}`);
   logger.info(`[Kalpak API] Swagger OpenAPI documentation available at http://localhost:${port}/api/docs`);
 }
 

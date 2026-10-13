@@ -19,13 +19,16 @@ import {
   Archive,
   RefreshCw,
   AlertTriangle,
+  Copy,
+  Power,
+  Trash2,
 } from 'lucide-react';
 import { Button, Input, Dialog } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
 
 // ── Types & Interfaces ─────────────────────────────────────────────────────────
 
-export type PlanStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+export type PlanStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT' | 'ARCHIVED';
 
 export interface PlanLimits {
   maxUsers: number | 'Unlimited';
@@ -57,10 +60,36 @@ export interface PlanFeatures {
   ssoSaml: boolean;
   dedicatedManager: boolean;
   slaUptime999: boolean;
+  [key: string]: boolean | string | undefined;
 }
+
+export const STANDARD_FEATURE_LABELS: Record<string, string> = {
+  ticketManagement: 'Ticket Management & Calls',
+  customerPortal: 'Customer Self-Service Portal',
+  manualAssignment: 'Manual Assignment & Dispatch',
+  autoAssignment: 'Automatic Assignment Engine',
+  workloadBalancing: 'Technician Workload Balancing',
+  employeeOnBehalf: 'Employee-on-Behalf Ticket Creation',
+  ticketAgingAlerts: 'SLA Aging & Escalation Alerts',
+  emailNotifications: 'Email Notifications & Alerts',
+  pushNotifications: 'Push Notifications & Web Alerts',
+  whatsappNotifications: 'WhatsApp Instant Alerts',
+  mobileAccess: 'Mobile Technician Field Access',
+  basicReports: 'Basic Operational Dashboards',
+  advancedReports: 'Advanced Analytics & Exports',
+  apiIntegration: 'Public REST API Keys',
+  bulkImportExport: 'Bulk Data Import & CSV Export',
+  customWorkflows: 'Custom Workflow & Ticket Builder',
+  customSla: 'Custom SLA Escalation Rules',
+  multiLocation: 'Multi-Location Support',
+  ssoSaml: 'SSO / SAML Enterprise Auth',
+  dedicatedManager: 'Dedicated Account Manager',
+  slaUptime999: '99.9% Platform Uptime SLA',
+};
 
 export interface PlanDefinition {
   id: string; // 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE' | custom string
+  code?: string;
   name: string;
   badge: string; // e.g. "Starter → Manage", "Professional → Automate", "Enterprise → Scale"
   description: string;
@@ -297,7 +326,18 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
   // Modals state
   const [editingPlan, setEditingPlan] = useState<PlanDefinition | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
-  const [editorTab, setEditorTab] = useState<'basic' | 'pricing' | 'entitlements'>('basic');
+  const [editorTab, setEditorTab] = useState<'basic' | 'pricing' | 'limits' | 'entitlements'>('basic');
+
+  // Delete modal state
+  const [planToDelete, setPlanToDelete] = useState<PlanDefinition | null>(null);
+  const [isDeletingPlan, setIsDeletingPlan] = useState(false);
+  const [forceDelete, setForceDelete] = useState(false);
+
+  // Custom options builder states in editor
+  const [newHighlightInput, setNewHighlightInput] = useState('');
+  const [newFeatureNameInput, setNewFeatureNameInput] = useState('');
+  const [newFeatureValueInput, setNewFeatureValueInput] = useState('');
+  const [newFeatureStatus, setNewFeatureStatus] = useState<boolean>(true);
 
   // Plan Change / Upgrade / Downgrade Preview modal
   const [planChangeTarget, setPlanChangeTarget] = useState<{
@@ -323,34 +363,34 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
     setTimeout(() => setToast(null), 5000);
   };
 
-  // Load custom plans from storage or initialize
-  useEffect(() => {
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
+
+  // Load custom plans from server API or fallback
+  const fetchPlans = React.useCallback(async () => {
     try {
-      const stored = localStorage.getItem('kalpak_saas_plans_catalogue');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setPlans(parsed);
-          return;
-        }
+      setIsLoadingPlans(true);
+      const res = await apiClient<PlanDefinition[]>('/plans/manage');
+      if (Array.isArray(res) && res.length > 0) {
+        setPlans(res);
+        return;
       }
-    } catch {}
+    } catch (err: any) {
+      console.warn('Could not fetch server plans, using fallback:', err);
+    } finally {
+      setIsLoadingPlans(false);
+    }
     setPlans(INITIAL_CANONICAL_PLANS);
   }, []);
 
-  const savePlansToStorage = (updatedPlans: PlanDefinition[]) => {
-    setPlans(updatedPlans);
-    try {
-      localStorage.setItem('kalpak_saas_plans_catalogue', JSON.stringify(updatedPlans));
-    } catch {}
-  };
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
 
-  // Reset to Home Page Defaults
-  const handleResetToDefaults = () => {
-    if (confirm('Reset all plans to canonical home page defaults (Starter ₹2,399, Professional ₹5,599, Enterprise ₹11,999)?')) {
-      savePlansToStorage(INITIAL_CANONICAL_PLANS);
-      showToast('success', 'Plans reset to canonical home page values successfully.');
-    }
+  // Refresh plans from server
+  const handleRefreshPlans = async () => {
+    await fetchPlans();
+    showToast('success', 'Plans refreshed from database.');
   };
 
   // Map client counts per plan
@@ -439,39 +479,118 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
     setEditorTab('basic');
   };
 
-  const handleSavePlan = () => {
+  const handleSavePlan = async () => {
     if (!editingPlan) return;
     if (!editingPlan.name.trim()) {
       alert('Plan name is required.');
       return;
     }
 
-    let updated: PlanDefinition[];
-    if (isCreatingNew) {
-      updated = [...plans, editingPlan].sort((a, b) => a.displayOrder - b.displayOrder);
-    } else {
-      updated = plans
-        .map((p) => (p.id === editingPlan.id ? editingPlan : p))
-        .sort((a, b) => a.displayOrder - b.displayOrder);
+    try {
+      setIsSavingPlan(true);
+      if (isCreatingNew) {
+        const payload = {
+          ...editingPlan,
+          code: (editingPlan.code || editingPlan.id).toUpperCase(),
+        };
+        const created = await apiClient<PlanDefinition>('/plans', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setPlans((prev) => [...prev, created].sort((a, b) => a.displayOrder - b.displayOrder));
+        showToast('success', `Plan "${created.name}" created and published to server.`);
+      } else {
+        const updated = await apiClient<PlanDefinition>(`/plans/${editingPlan.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(editingPlan),
+        });
+        setPlans((prev) =>
+          prev.map((p) => (p.id === updated.id ? updated : p)).sort((a, b) => a.displayOrder - b.displayOrder)
+        );
+        showToast('success', `Plan "${updated.name}" updated successfully.`);
+      }
+      setEditingPlan(null);
+      setIsCreatingNew(false);
+      await fetchPlans();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to save plan on server.');
+    } finally {
+      setIsSavingPlan(false);
     }
+  };
 
-    savePlansToStorage(updated);
-    setEditingPlan(null);
-    setIsCreatingNew(false);
-    showToast('success', `Plan "${editingPlan.name}" saved successfully.`);
+  // Toggle Plan Status (Activate / Deactivate)
+  const handleTogglePlanStatus = async (plan: PlanDefinition) => {
+    const nextStatus: PlanStatus = plan.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      const updated = await apiClient<PlanDefinition>(`/plans/${plan.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setPlans((prev) => prev.map((p) => (p.id === plan.id ? updated : p)));
+      showToast('success', `Plan "${plan.name}" status updated to ${nextStatus}.`);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to update plan status.');
+    }
+  };
+
+  // Duplicate an existing plan
+  const handleDuplicatePlan = async (plan: PlanDefinition) => {
+    try {
+      const duplicated = await apiClient<PlanDefinition>(`/plans/${plan.id}/duplicate`, {
+        method: 'POST',
+      });
+      setPlans((prev) => [...prev, duplicated].sort((a, b) => a.displayOrder - b.displayOrder));
+      showToast('success', `Plan duplicated as "${duplicated.name}".`);
+      await fetchPlans();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to duplicate plan.');
+    }
   };
 
   // Deprecate / Archive plan
-  const handleToggleArchivePlan = (planId: string) => {
-    const updated = plans.map((p) => {
-      if (p.id === planId) {
-        const nextStatus: PlanStatus = p.status === 'ARCHIVED' ? 'ACTIVE' : 'ARCHIVED';
-        return { ...p, status: nextStatus };
+  const handleArchivePlan = async (plan: PlanDefinition) => {
+    const isCurrentlyArchived = plan.status === 'ARCHIVED';
+    const actionLabel = isCurrentlyArchived ? 'restore' : 'archive';
+    if (!confirm(`Are you sure you want to ${actionLabel} "${plan.name}"?`)) {
+      return;
+    }
+
+    try {
+      const nextStatus: PlanStatus = isCurrentlyArchived ? 'ACTIVE' : 'ARCHIVED';
+      const updated = await apiClient<PlanDefinition>(`/plans/${plan.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      setPlans((prev) => prev.map((p) => (p.id === plan.id ? updated : p)));
+      showToast('success', `Plan "${plan.name}" ${isCurrentlyArchived ? 'restored' : 'archived'}.`);
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to update plan archive status.');
+    }
+  };
+
+  // Permanently delete a plan
+  const handleConfirmDeletePlan = async () => {
+    if (!planToDelete) return;
+    try {
+      setIsDeletingPlan(true);
+      const forceParam = forceDelete ? '?force=true' : '';
+      await apiClient(`/plans/${planToDelete.id}${forceParam}`, {
+        method: 'DELETE',
+      });
+      setPlans((prev) => prev.filter((p) => p.id !== planToDelete.id && p.code !== planToDelete.code));
+      showToast('success', `Plan "${planToDelete.name}" permanently deleted.`);
+      if (editingPlan?.id === planToDelete.id) {
+        setEditingPlan(null);
       }
-      return p;
-    });
-    savePlansToStorage(updated);
-    showToast('success', `Plan status updated.`);
+      setPlanToDelete(null);
+      setForceDelete(false);
+      await fetchPlans();
+    } catch (err: any) {
+      showToast('error', err?.message || 'Failed to delete plan.');
+    } finally {
+      setIsDeletingPlan(false);
+    }
   };
 
   // ── Plan Change (Upgrade / Downgrade) Execution ──────────────────────────────
@@ -612,11 +731,12 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
 
           <button
             type="button"
-            onClick={handleResetToDefaults}
-            title="Reset to canonical home page values"
-            className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 border border-slate-200 transition-colors"
+            onClick={handleRefreshPlans}
+            disabled={isLoadingPlans}
+            title="Refresh plans from database"
+            className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${isLoadingPlans ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -813,28 +933,76 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                     </div>
                   </div>
 
-                  {/* Actions Footer */}
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center gap-2">
-                    <Button
-                      onClick={() => handleOpenEdit(plan)}
-                      variant="outline"
-                      className="flex-1 text-xs font-bold border-slate-200 hover:border-orange-400 hover:text-orange-600"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 mr-1.5" />
-                      <span>Edit Plan &amp; Limits</span>
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleArchivePlan(plan.id)}
-                      title={isArchived ? 'Activate plan' : 'Archive / Deprecate plan'}
-                      className={`p-2 rounded-xl border text-xs transition-colors ${
-                        isArchived
-                          ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                          : 'border-slate-200 text-slate-500 hover:bg-slate-100'
-                      }`}
-                    >
-                      <Archive className="w-4 h-4" />
-                    </button>
+                  {/* Actions Footer: Edit, Delete, Duplicate, Activate/Deactivate, Archive */}
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => handleOpenEdit(plan)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-xs font-bold border-slate-200 hover:border-orange-400 hover:text-orange-600 h-8"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 mr-1" />
+                        <span>Edit Plan</span>
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setPlanToDelete(plan);
+                          setForceDelete(false);
+                        }}
+                        variant="outline"
+                        size="sm"
+                        title="Delete Plan Permanently"
+                        className="text-xs font-bold border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-400 h-8 px-3"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        <span>Delete</span>
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-50">
+                      <span className="font-medium">Quick actions:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicatePlan(plan)}
+                          title="Duplicate Plan"
+                          className="px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-orange-600 transition-colors flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePlanStatus(plan)}
+                          title={
+                            plan.status === 'ACTIVE'
+                              ? 'Deactivate plan (Hide from checkout)'
+                              : 'Activate plan (Publish to checkout)'
+                          }
+                          className={`px-2 py-1 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${
+                            plan.status === 'ACTIVE'
+                              ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                              : 'border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-emerald-600'
+                          }`}
+                        >
+                          <Power className="w-3 h-3" />
+                          <span>{plan.status === 'ACTIVE' ? 'Active' : 'Draft'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleArchivePlan(plan)}
+                          title={isArchived ? 'Restore plan' : 'Archive plan'}
+                          className={`px-2 py-1 rounded-lg border text-[11px] transition-colors flex items-center gap-1 ${
+                            isArchived
+                              ? 'border-amber-300 text-amber-700 hover:bg-amber-100'
+                              : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-amber-600'
+                          }`}
+                        >
+                          <Archive className="w-3 h-3" />
+                          <span>{isArchived ? 'Archived' : 'Archive'}</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -903,6 +1071,17 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                             <span className="inline-block px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold font-mono">
                               {planClientCounts[p.id] || 0} Clients
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleOpenEdit(p);
+                                setEditorTab('entitlements');
+                              }}
+                              className="w-full text-[11px] font-bold py-1 px-2 rounded-lg border border-orange-200 text-orange-700 bg-orange-50/60 hover:bg-orange-100 transition-colors flex items-center justify-center gap-1 mt-1.5"
+                            >
+                              <Sliders className="w-3 h-3 text-orange-600" />
+                              <span>Customize Options</span>
+                            </button>
                           </div>
                         </th>
                       );
@@ -1214,7 +1393,7 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                   editorTab === 'basic' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                1. Plan Info &amp; Status
+                1. Plan Info
               </button>
               <button
                 type="button"
@@ -1223,7 +1402,16 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                   editorTab === 'pricing' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                2. Pricing &amp; Free Trial
+                2. Pricing &amp; Trial
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditorTab('limits')}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  editorTab === 'limits' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                3. Resource Limits
               </button>
               <button
                 type="button"
@@ -1232,7 +1420,7 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                   editorTab === 'entitlements' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                3. Feature Entitlements
+                4. Custom Options &amp; Features
               </button>
             </div>
 
@@ -1296,6 +1484,7 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
                       className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800"
                     >
                       <option value="ACTIVE">Active (Available for checkout)</option>
+                      <option value="INACTIVE">Inactive (Deactivated from checkout)</option>
                       <option value="DRAFT">Draft (Internal preview only)</option>
                       <option value="ARCHIVED">Archived (Grandfather existing clients, hide for new)</option>
                     </select>
@@ -1430,104 +1619,456 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
               </div>
             )}
 
-            {/* TAB 3: FEATURE ENTITLEMENTS & LIMITS */}
-            {editorTab === 'entitlements' && (
+            {/* TAB 3: CAPACITY & RESOURCE LIMITS */}
+            {editorTab === 'limits' && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <span className="font-bold text-slate-800 block">Numeric Capacity &amp; Resource Limits</span>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600">Max Users / Staff</label>
-                      <Input
-                        value={String(editingPlan.limits.maxUsers)}
-                        onChange={(e) =>
-                          setEditingPlan({
-                            ...editingPlan,
-                            limits: {
-                              ...editingPlan.limits,
-                              maxUsers: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600">Max Departments</label>
-                      <Input
-                        value={String(editingPlan.limits.maxDepartments)}
-                        onChange={(e) =>
-                          setEditingPlan({
-                            ...editingPlan,
-                            limits: {
-                              ...editingPlan.limits,
-                              maxDepartments: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600">Storage (GB)</label>
-                      <Input
-                        value={String(editingPlan.limits.storageGb)}
-                        onChange={(e) =>
-                          setEditingPlan({
-                            ...editingPlan,
-                            limits: {
-                              ...editingPlan.limits,
-                              storageGb: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <span className="font-bold text-slate-800 block">Numeric Capacity &amp; Resource Quotas</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Define maximum staff, department, storage, and ticket quotas enforced for organizations on this tier.
+                  </p>
                 </div>
 
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <span className="font-bold text-slate-800 block">Module Toggles &amp; Capabilities</span>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {[
-                      { key: 'ticketManagement', label: 'Ticket Management & Calls' },
-                      { key: 'customerPortal', label: 'Customer Self-Service Portal' },
-                      { key: 'autoAssignment', label: 'Auto Assignment Engine' },
-                      { key: 'workloadBalancing', label: 'Workload Balancing' },
-                      { key: 'ticketAgingAlerts', label: 'SLA Aging Alerts' },
-                      { key: 'emailNotifications', label: 'Email Notifications' },
-                      { key: 'pushNotifications', label: 'Push Notifications' },
-                      { key: 'whatsappNotifications', label: 'WhatsApp Instant Alerts' },
-                      { key: 'mobileAccess', label: 'Mobile Technician Access' },
-                      { key: 'basicReports', label: 'Basic Operational Reports' },
-                      { key: 'advancedReports', label: 'Advanced Analytics Engine' },
-                      { key: 'apiIntegration', label: 'Public REST API Keys' },
-                      { key: 'bulkImportExport', label: 'Bulk Import/Export' },
-                      { key: 'customWorkflows', label: 'Custom Workflow Engine' },
-                      { key: 'customSla', label: 'Custom SLA Escalations' },
-                      { key: 'multiLocation', label: 'Multi-Location Support' },
-                      { key: 'ssoSaml', label: 'SSO / SAML Enterprise Auth' },
-                      { key: 'dedicatedManager', label: 'Dedicated Account Manager' },
-                    ].map((item) => (
-                      <label
-                        key={item.key}
-                        className="flex items-center gap-2 p-2 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={(editingPlan.features as any)[item.key]}
-                          onChange={(e) =>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">Licensed Technicians / Staff</label>
+                    <Input
+                      value={String(editingPlan.limits.maxUsers)}
+                      onChange={(e) =>
+                        setEditingPlan({
+                          ...editingPlan,
+                          limits: {
+                            ...editingPlan.limits,
+                            maxUsers: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="bg-white font-mono font-bold"
+                    />
+                    <div className="flex gap-1 pt-1">
+                      {['5', '15', '25', '50', 'Unlimited'].map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() =>
                             setEditingPlan({
                               ...editingPlan,
-                              features: {
-                                ...editingPlan.features,
-                                [item.key]: e.target.checked,
+                              limits: {
+                                ...editingPlan.limits,
+                                maxUsers: val === 'Unlimited' ? 'Unlimited' : Number(val),
                               },
                             })
                           }
-                          className="w-4 h-4 text-orange-600 rounded border-slate-300"
+                          className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 font-bold"
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">Organization Departments</label>
+                    <Input
+                      value={String(editingPlan.limits.maxDepartments)}
+                      onChange={(e) =>
+                        setEditingPlan({
+                          ...editingPlan,
+                          limits: {
+                            ...editingPlan.limits,
+                            maxDepartments: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="bg-white font-mono font-bold"
+                    />
+                    <div className="flex gap-1 pt-1">
+                      {['1', '3', '5', '10', 'Unlimited'].map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() =>
+                            setEditingPlan({
+                              ...editingPlan,
+                              limits: {
+                                ...editingPlan.limits,
+                                maxDepartments: val === 'Unlimited' ? 'Unlimited' : Number(val),
+                              },
+                            })
+                          }
+                          className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 font-bold"
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">Cloud Storage (GB)</label>
+                    <Input
+                      value={String(editingPlan.limits.storageGb)}
+                      onChange={(e) =>
+                        setEditingPlan({
+                          ...editingPlan,
+                          limits: {
+                            ...editingPlan.limits,
+                            storageGb: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="bg-white font-mono font-bold"
+                    />
+                    <div className="flex gap-1 pt-1">
+                      {['5', '20', '50', '100', 'Unlimited'].map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() =>
+                            setEditingPlan({
+                              ...editingPlan,
+                              limits: {
+                                ...editingPlan.limits,
+                                storageGb: val === 'Unlimited' ? 'Unlimited' : Number(val),
+                              },
+                            })
+                          }
+                          className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 font-bold"
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">Monthly Service Tickets</label>
+                    <Input
+                      value={String(editingPlan.limits.maxTicketsMonthly || 'Unlimited')}
+                      onChange={(e) =>
+                        setEditingPlan({
+                          ...editingPlan,
+                          limits: {
+                            ...editingPlan.limits,
+                            maxTicketsMonthly: e.target.value === 'Unlimited' ? 'Unlimited' : Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="bg-white font-mono font-bold"
+                    />
+                    <div className="flex gap-1 pt-1">
+                      {['500', '2500', '10000', 'Unlimited'].map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() =>
+                            setEditingPlan({
+                              ...editingPlan,
+                              limits: {
+                                ...editingPlan.limits,
+                                maxTicketsMonthly: val === 'Unlimited' ? 'Unlimited' : Number(val),
+                              },
+                            })
+                          }
+                          className="px-2 py-0.5 rounded text-[10px] bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 font-bold"
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: CUSTOM OPTIONS & HIGHLIGHTS BUILDER */}
+            {editorTab === 'entitlements' && (
+              <div className="space-y-6">
+                {/* 1. Plan Highlights & Selling Points (Customer Facing) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs">
+                        Plan Selling Points &amp; Highlights
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Bullet points displayed on plan cards, main landing page, and client upgrade modals.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 font-bold">
+                      {(editingPlan.highlights || []).length} Highlights
+                    </span>
+                  </div>
+
+                  {/* Add New Highlight Form */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Add key selling point (e.g. Up to 15 Technicians, WhatsApp Alerts)..."
+                      value={newHighlightInput}
+                      onChange={(e) => setNewHighlightInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newHighlightInput.trim()) {
+                            setEditingPlan({
+                              ...editingPlan,
+                              highlights: [...(editingPlan.highlights || []), newHighlightInput.trim()],
+                            });
+                            setNewHighlightInput('');
+                          }
+                        }
+                      }}
+                      className="text-xs"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        if (newHighlightInput.trim()) {
+                          setEditingPlan({
+                            ...editingPlan,
+                            highlights: [...(editingPlan.highlights || []), newHighlightInput.trim()],
+                          });
+                          setNewHighlightInput('');
+                        }
+                      }}
+                      className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 h-9"
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Add Option
+                    </Button>
+                  </div>
+
+                  {/* Quick Preset Suggestion Chips */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-slate-400 self-center mr-1">Quick Add:</span>
+                    {[
+                      'Unlimited Service Tickets',
+                      '14-Day Full Free Trial',
+                      'WhatsApp & SMS Alerts',
+                      'Automatic Technician Routing',
+                      'Mobile Field App Access',
+                      'Custom SLA Escalations',
+                      'Dedicated Account Manager',
+                      '2FA Security & Audit Logs',
+                      '99.9% Uptime Guarantee',
+                    ].map((suggestion) => {
+                      const alreadyAdded = (editingPlan.highlights || []).includes(suggestion);
+                      if (alreadyAdded) return null;
+                      return (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => {
+                            setEditingPlan({
+                              ...editingPlan,
+                              highlights: [...(editingPlan.highlights || []), suggestion],
+                            });
+                          }}
+                          className="text-[10px] px-2 py-0.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-colors font-medium flex items-center gap-1"
+                        >
+                          <Plus className="w-2.5 h-2.5 text-slate-400" />
+                          <span>{suggestion}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Highlights List */}
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 pt-1">
+                    {(editingPlan.highlights || []).map((highlight, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 group hover:border-slate-300"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <input
+                          type="text"
+                          value={highlight}
+                          onChange={(e) => {
+                            const updated = [...(editingPlan.highlights || [])];
+                            updated[idx] = e.target.value;
+                            setEditingPlan({ ...editingPlan, highlights: updated });
+                          }}
+                          className="flex-1 bg-transparent text-xs text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-orange-500 rounded px-1"
                         />
-                        <span className="text-[11px] font-semibold text-slate-800">{item.label}</span>
-                      </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (editingPlan.highlights || []).filter((_, i) => i !== idx);
+                            setEditingPlan({ ...editingPlan, highlights: updated });
+                          }}
+                          title="Remove option"
+                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ))}
+                    {(editingPlan.highlights || []).length === 0 && (
+                      <div className="text-center py-4 text-xs text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        No highlights added yet. Use the input above or click a suggestion chip to add.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Custom Capabilities & Feature Options */}
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs">
+                        Feature Entitlements &amp; Custom Options
+                      </span>
+                      <p className="text-[11px] text-slate-500">
+                        Customize what capabilities are included, specify custom values, or add brand-new options.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Add New Custom Feature Option Form */}
+                  <div className="p-3 rounded-xl bg-orange-50/50 border border-orange-200/80 space-y-2.5">
+                    <span className="text-[11px] font-bold text-orange-950 block">
+                      + Add New Custom Feature / Capability Option:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <div className="sm:col-span-6">
+                        <Input
+                          placeholder="Feature or capability name (e.g. Night Shift Field Support)..."
+                          value={newFeatureNameInput}
+                          onChange={(e) => setNewFeatureNameInput(e.target.value)}
+                          className="text-xs bg-white"
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <Input
+                          placeholder="Detail / Quota (Optional)"
+                          value={newFeatureValueInput}
+                          onChange={(e) => setNewFeatureValueInput(e.target.value)}
+                          className="text-xs bg-white"
+                        />
+                      </div>
+                      <div className="sm:col-span-3 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setNewFeatureStatus(!newFeatureStatus)}
+                          className={`flex-1 h-9 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                            newFeatureStatus
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-slate-200 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          {newFeatureStatus ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                          <span>{newFeatureStatus ? 'Included' : 'Excluded'}</span>
+                        </button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            if (newFeatureNameInput.trim()) {
+                              const featureKey = newFeatureNameInput.trim().replace(/\s+/g, '_').toLowerCase();
+                              setEditingPlan({
+                                ...editingPlan,
+                                features: {
+                                  ...editingPlan.features,
+                                  [featureKey]: newFeatureValueInput.trim() ? newFeatureValueInput.trim() : newFeatureStatus,
+                                },
+                              });
+                              setNewFeatureNameInput('');
+                              setNewFeatureValueInput('');
+                              setNewFeatureStatus(true);
+                              showToast('success', `Option "${newFeatureNameInput.trim()}" added to plan.`);
+                            }
+                          }}
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs h-9 px-3"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List of Feature Options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-64 overflow-y-auto pr-1">
+                    {Object.entries(editingPlan.features || {}).map(([key, val]) => {
+                      const isIncluded =
+                        val === true || (typeof val === 'string' && val.toLowerCase() !== 'false' && val.toLowerCase() !== 'no');
+                      const label =
+                        STANDARD_FEATURE_LABELS[key] ||
+                        key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                      const isCustom = !STANDARD_FEATURE_LABELS[key];
+                      const detailText = typeof val === 'string' && val !== 'true' && val !== 'false' ? val : '';
+
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between p-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 gap-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold text-slate-800 block truncate" title={label}>
+                              {label}
+                            </span>
+                            {detailText && (
+                              <span className="text-[10px] font-mono text-orange-600 font-semibold block">
+                                {detailText}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Toggle Included / Excluded */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPlan({
+                                  ...editingPlan,
+                                  features: {
+                                    ...editingPlan.features,
+                                    [key]: !isIncluded,
+                                  },
+                                });
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border ${
+                                isIncluded
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                              }`}
+                            >
+                              {isIncluded ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>Yes</span>
+                                </>
+                              ) : (
+                                <>
+                                  <X className="w-3 h-3 text-slate-400" />
+                                  <span>No</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Delete custom feature button */}
+                            {isCustom && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedFeatures = { ...editingPlan.features };
+                                  delete updatedFeatures[key];
+                                  setEditingPlan({
+                                    ...editingPlan,
+                                    features: updatedFeatures,
+                                  });
+                                }}
+                                title="Remove custom option"
+                                className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1535,19 +2076,125 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
 
             {/* Modal Action Buttons */}
             <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-              <Button variant="outline" onClick={() => setEditingPlan(null)}>
-                Cancel
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setEditingPlan(null)} disabled={isSavingPlan}>
+                  Cancel
+                </Button>
+                {!isCreatingNew && (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setPlanToDelete(editingPlan);
+                      setForceDelete(false);
+                    }}
+                    disabled={isSavingPlan}
+                    className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-xs font-bold"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    <span>Delete Plan</span>
+                  </Button>
+                )}
+              </div>
               <Button
                 onClick={handleSavePlan}
+                disabled={isSavingPlan}
                 className="bg-gradient-to-r from-orange-500 to-amber-600 text-white font-bold"
               >
-                Save Plan Changes
+                {isSavingPlan ? 'Saving Plan...' : 'Save Plan Changes'}
               </Button>
             </div>
           </div>
         </Dialog>
       )}
+
+      {/* ───────────────────────────────────────────────────────────────────────── */}
+      {/* DELETE PLAN CONFIRMATION DIALOG                                          */}
+      {/* ───────────────────────────────────────────────────────────────────────── */}
+      {planToDelete && (() => {
+        const activeTenantCount = (planToDelete?.id ? planClientCounts[planToDelete.id] : 0) ?? 0;
+        return (
+          <Dialog
+            open={!!planToDelete}
+            onOpenChange={(open) => !open && setPlanToDelete(null)}
+            title={`Permanently Delete Plan: ${planToDelete.name}`}
+          >
+            <div className="space-y-4 text-xs pt-1">
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-rose-950">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>Confirm Permanent Deletion</span>
+                </div>
+                <p className="leading-relaxed">
+                  You are about to delete <strong className="font-mono text-rose-950">{planToDelete.name}</strong> ({planToDelete.code || planToDelete.id}).
+                  This will permanently remove the plan from the database and public pricing listings.
+                </p>
+              </div>
+
+              {activeTenantCount > 0 ? (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <Users className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>
+                      Warning: {activeTenantCount} Client Organization(s) Currently Subscribed
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    Existing clients are actively using this plan tier. We recommend clicking <strong>Archive</strong> instead to grandfather their existing terms while preventing any new signups.
+                  </p>
+                  <label className="flex items-start gap-2 pt-2 border-t border-amber-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forceDelete}
+                      onChange={(e) => setForceDelete(e.target.checked)}
+                      className="w-4 h-4 text-rose-600 rounded border-amber-400 mt-0.5"
+                    />
+                    <span className="text-[11px] font-bold text-amber-950">
+                      I acknowledge that {activeTenantCount} client(s) use this tier, and I still want to force permanent deletion.
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <p className="text-slate-500 text-[11px]">
+                  No active client subscriptions are linked to this plan. It is completely safe to delete.
+                </p>
+              )}
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPlanToDelete(null);
+                    setForceDelete(false);
+                  }}
+                  disabled={isDeletingPlan}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleConfirmDeletePlan}
+                  disabled={isDeletingPlan || (activeTenantCount > 0 && !forceDelete)}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                >
+                  {isDeletingPlan ? (
+                    <div className="flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting Plan...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Plan Permanently</span>
+                    </div>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Dialog>
+        );
+      })()}
 
       {/* ───────────────────────────────────────────────────────────────────────── */}
       {/* MODAL 2: PLAN CHANGE PREVIEW (Upgrade / Downgrade) (Feature 5)            */}

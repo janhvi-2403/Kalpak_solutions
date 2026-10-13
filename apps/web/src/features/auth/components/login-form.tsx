@@ -124,6 +124,10 @@ export function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         const rawMsg = err.errorResponse?.message || '';
+        const isLocalhost =
+          typeof window !== 'undefined' &&
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
         if (
           !rawMsg ||
           rawMsg.includes('<html') ||
@@ -132,7 +136,9 @@ export function LoginForm() {
           rawMsg.trim().startsWith('<')
         ) {
           setError(
-            'The server is waking up from sleep on the Render free tier (cold start). Please wait 10 seconds and try again.'
+            isLocalhost
+              ? 'Backend API server is not running on port 4000. Please start the backend with: pnpm --filter @kalpak/api run start:dev'
+              : 'The server is waking up from sleep on the Render free tier (cold start). Please wait ~30-60 seconds and try again.'
           );
         } else {
           setError(rawMsg);

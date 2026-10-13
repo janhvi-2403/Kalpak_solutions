@@ -26,6 +26,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { PlansModule } from './modules/plans/plans.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { EmailIntegrationModule } from './modules/email-integration/email-integration.module';
 
@@ -51,6 +52,7 @@ import { EmailIntegrationModule } from './modules/email-integration/email-integr
     PortalModule,
     ContractsModule,
     PaymentsModule,
+    PlansModule,
     ReportsModule,
     EmailIntegrationModule,
   ],

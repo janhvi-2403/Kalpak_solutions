@@ -30,10 +30,10 @@ export class BillingAddressDto {
 }
 
 export class CreatePaymentOrderDto {
-  @ApiProperty({ enum: ['STARTER', 'PROFESSIONAL', 'ENTERPRISE'], example: 'STARTER' })
-  @IsEnum(['STARTER', 'PROFESSIONAL', 'ENTERPRISE'])
+  @ApiProperty({ example: 'STARTER', description: 'Plan code (STARTER, PROFESSIONAL, ENTERPRISE, or custom created plan)' })
+  @IsString()
   @IsNotEmpty()
-  plan!: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+  plan!: string;
 
   @ApiProperty({ enum: ['MONTHLY', 'ANNUAL'], example: 'ANNUAL' })
   @IsEnum(['MONTHLY', 'ANNUAL'])

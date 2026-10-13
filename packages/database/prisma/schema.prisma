@@ -998,6 +998,33 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model SubscriptionPlan {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code               String   @unique @db.VarChar(50)
+  name               String   @db.VarChar(100)
+  badge              String?  @db.VarChar(100)
+  description        String?
+  monthlyPrice       Decimal  @map("monthly_price") @db.Decimal(12, 2)
+  annualMonthlyPrice Decimal  @map("annual_monthly_price") @db.Decimal(12, 2)
+  annualTotalPrice   Decimal  @map("annual_total_price") @db.Decimal(12, 2)
+  discountPercent    Int      @default(20) @map("discount_percent")
+  currency           String   @default("INR") @db.VarChar(10)
+  trialDays          Int      @default(0) @map("trial_days")
+  isFreeTrialAllowed Boolean  @default(false) @map("is_free_trial_allowed")
+  status             String   @default("ACTIVE") @db.VarChar(20)
+  isRecommended      Boolean  @default(false) @map("is_recommended")
+  displayOrder       Int      @default(0) @map("display_order")
+  limits             Json     @default("{}")
+  features           Json     @default("{}")
+  highlights         String[] @default([])
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status], map: "idx_subscription_plans_status")
+  @@index([displayOrder], map: "idx_subscription_plans_display_order")
+  @@map("subscription_plans")
+}
+
 model PaymentTransaction {
   id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String        @map("tenant_id") @db.Uuid

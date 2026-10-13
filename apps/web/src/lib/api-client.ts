@@ -121,10 +121,15 @@ export async function apiClient<T>(
       errorData = await response.json();
     } else {
       const rawText = await response.text();
+      const isLocalhost =
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
       let userFriendlyMessage = 'An unexpected server error occurred. Please try again.';
       if ([502, 503, 504].includes(response.status)) {
-        userFriendlyMessage =
-          'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.';
+        userFriendlyMessage = isLocalhost
+          ? 'Backend API server is not running or unreachable on port 4000. Please start the backend service (pnpm --filter @kalpak/api run start:dev).'
+          : 'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.';
       } else if (rawText && !rawText.trim().startsWith('<') && !rawText.includes('<html') && rawText.length < 300) {
         userFriendlyMessage = rawText;
       }
@@ -144,9 +149,15 @@ export async function apiClient<T>(
       typeof errorData.message === 'string' &&
       (errorData.message.trim().startsWith('<') || errorData.message.includes('<html') || errorData.message.includes('<!DOCTYPE'))
     ) {
+      const isLocalhost =
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
       errorData.message =
         response.status >= 500
-          ? 'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.'
+          ? isLocalhost
+            ? 'Backend API server is not running or unreachable on port 4000. Please start the backend service (pnpm --filter @kalpak/api run start:dev).'
+            : 'The server is waking up from sleep on the Render free tier (cold start). Please wait a few seconds and try again.'
           : 'An unexpected response was received from the server. Please try again.';
     }
 

@@ -33,9 +33,9 @@ declare global {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface CurrentPlanData {
-  plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+  plan: string;
   planName: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'TRIAL' | 'PENDING_PAYMENT';
+  status: 'ACTIVE' | 'EXPIRED' | 'TRIAL' | 'PENDING_PAYMENT' | string;
   isActive: boolean;
   isExpired: boolean;
   startsAt: string | null;
@@ -49,7 +49,7 @@ interface CurrentPlanData {
 }
 
 interface PlanOption {
-  plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+  plan: string;
   planName: string;
   monthlyPrice: number;
   annualMonthlyPrice: number;
@@ -177,7 +177,7 @@ export default function SubscriptionHubPage() {
   // Modals & Triggers
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<'PROFESSIONAL' | 'ENTERPRISE'>('PROFESSIONAL');
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string>('PROFESSIONAL');
   const [renewalCycle, setRenewalCycle] = useState<'ANNUAL' | 'MONTHLY'>('ANNUAL');
   const [upgradeCycle, setUpgradeCycle] = useState<'ANNUAL' | 'MONTHLY'>('ANNUAL');
   
@@ -220,7 +220,7 @@ export default function SubscriptionHubPage() {
   }, [fetchData]);
 
   // Handle Razorpay Payment flow (for Renew or Upgrade)
-  const initiatePayment = async (plan: 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE', cycle: 'ANNUAL' | 'MONTHLY') => {
+  const initiatePayment = async (plan: string, cycle: 'ANNUAL' | 'MONTHLY') => {
     setIsProcessingPayment(true);
     setPaymentError(null);
     setPaymentSuccessMsg(null);
@@ -1075,17 +1075,17 @@ export default function SubscriptionHubPage() {
           </div>
 
           {/* Comparison Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {availablePlans.map((p) => {
               const price = upgradeCycle === 'ANNUAL' ? p.annualTotalPrice : p.monthlyPrice;
               const isSelected = selectedUpgradePlan === p.plan;
               return (
                 <div
                   key={p.plan}
-                  onClick={() => p.plan !== 'STARTER' && setSelectedUpgradePlan(p.plan as any)}
+                  onClick={() => !p.isCurrent && setSelectedUpgradePlan(p.plan)}
                   className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
                     p.isCurrent
-                      ? 'border-slate-200 bg-slate-50/50 opacity-70'
+                      ? 'border-slate-200 bg-slate-50/50 opacity-70 cursor-not-allowed'
                       : isSelected
                       ? 'border-orange-500 bg-orange-50/30 ring-2 ring-orange-500/20'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -1136,11 +1136,11 @@ export default function SubscriptionHubPage() {
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedUpgradePlan(p.plan as any);
-                          initiatePayment(p.plan as any, upgradeCycle);
+                          setSelectedUpgradePlan(p.plan);
+                          initiatePayment(p.plan, upgradeCycle);
                         }}
                       >
-                        Upgrade to {p.plan}
+                        Upgrade to {p.planName || p.plan}
                       </Button>
                     )}
                   </div>

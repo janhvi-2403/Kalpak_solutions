@@ -30,6 +30,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
 import { SubscriptionPlansManagement, ClientTenant } from '@/features/super-admin/subscription-plans-management';
+import { FeaturesEntitlementsManagement } from '@/features/super-admin/entitlements-management';
 
 type ActiveTab =
   | 'dashboard'
@@ -687,54 +688,7 @@ export default function SuperAdminDashboardPage() {
           {/* MODULE 6: FEATURES & ENTITLEMENTS */}
           {/* ───────────────────────────────────────────────────────────── */}
           {activeTab === 'entitlements' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Features & Entitlement Engine</h2>
-                <p className="text-xs text-slate-500">Canonical catalogue of platform capabilities mapped by subscription tier.</p>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-                <div className="p-4 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-700 uppercase tracking-wider grid grid-cols-12">
-                  <div className="col-span-6">Feature Capability</div>
-                  <div className="col-span-2 text-center">Starter</div>
-                  <div className="col-span-2 text-center">Professional</div>
-                  <div className="col-span-2 text-center">Enterprise</div>
-                </div>
-
-                <div className="divide-y divide-slate-100 text-xs font-medium">
-                  {[
-                    { code: 'TICKET_MANAGEMENT', label: 'Ticket Management & Dispatch', starter: true, pro: true, ent: true },
-                    { code: 'CUSTOMER_PORTAL', label: 'Dedicated Client Service Portal', starter: true, pro: true, ent: true },
-                    { code: 'EMPLOYEE_TICKET_CREATION', label: 'Field Staff Ticket Raising', starter: true, pro: true, ent: true },
-                    { code: 'AUTO_ASSIGNMENT', label: 'Auto-Assignment SLA Dispatch', starter: false, pro: true, ent: true },
-                    { code: 'EMAIL_NOTIFICATION', label: 'Email Alerts & Escalations', starter: true, pro: true, ent: true },
-                    { code: 'WHATSAPP_NOTIFICATION', label: 'WhatsApp Instant Messaging', starter: false, pro: false, ent: true },
-                    { code: 'REPORTS', label: 'Basic Operational Summary Reports', starter: true, pro: true, ent: true },
-                    { code: 'ADVANCED_REPORTS', label: 'Executive Analytics & Drilldown', starter: false, pro: true, ent: true },
-                    { code: 'API_INTEGRATION', label: 'Public REST API Keys', starter: false, pro: true, ent: true },
-                    { code: 'BULK_IMPORT_EXPORT', label: 'Bulk Customer & Asset Import/Export', starter: false, pro: true, ent: true },
-                    { code: 'CUSTOM_WORKFLOW', label: 'Custom SLA Escalation Workflows', starter: false, pro: false, ent: true },
-                    { code: 'CUSTOM_DOMAIN', label: 'Custom White-Label Subdomain', starter: false, pro: false, ent: true },
-                  ].map((feat) => (
-                    <div key={feat.code} className="p-3.5 grid grid-cols-12 items-center hover:bg-slate-50">
-                      <div className="col-span-6 font-bold text-slate-800 flex items-center gap-2">
-                        <span className="font-mono text-[11px] text-slate-400">{feat.code}</span>
-                        <span>{feat.label}</span>
-                      </div>
-                      <div className="col-span-2 flex justify-center">
-                        {feat.starter ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-slate-300" />}
-                      </div>
-                      <div className="col-span-2 flex justify-center">
-                        {feat.pro ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-slate-300" />}
-                      </div>
-                      <div className="col-span-2 flex justify-center">
-                        {feat.ent ? <Check className="w-4 h-4 text-emerald-600" /> : <X className="w-4 h-4 text-slate-300" />}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <FeaturesEntitlementsManagement />
           )}
 
           {/* ───────────────────────────────────────────────────────────── */}

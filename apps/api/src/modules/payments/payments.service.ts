@@ -12,7 +12,7 @@ import { getConfig } from '@kalpak/config';
 import { logger } from '@kalpak/logger';
 import { CreatePaymentOrderDto } from './dto/create-order.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
-import { PlanPricing } from '@kalpak/types';
+import { PlanPricing, PlanTier } from '@kalpak/types';
 
 // Official Plan Pricing Structure (Server-side ground truth in INR)
 export const PLAN_PRICING: Record<'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE', PlanPricing> = {
@@ -124,8 +124,29 @@ export class PaymentsService {
       throw new ForbiddenException('Only a Client Administrator or Owner can manage subscriptions.');
     }
 
-    // B. Server-side price calculation (ground truth)
-    const pricing = PLAN_PRICING[dto.plan];
+    // B. Server-side price calculation (ground truth from Database or canonical fallback)
+    const fallbackTier: PlanTier = (['STARTER', 'PROFESSIONAL', 'ENTERPRISE'].includes(String(dto.plan).toUpperCase())
+      ? String(dto.plan).toUpperCase()
+      : 'STARTER') as PlanTier;
+    let pricing: any = (PLAN_PRICING as any)[fallbackTier];
+    try {
+      const dbPlan = await (this.prisma as any).subscriptionPlan.findFirst({
+        where: { code: String(dto.plan).toUpperCase(), status: 'ACTIVE' },
+      });
+      if (dbPlan) {
+        const limits = (dbPlan.limits as any) || {};
+        pricing = {
+          plan: dbPlan.code,
+          monthlyPrice: Number(dbPlan.monthlyPrice),
+          annualMonthlyPrice: Number(dbPlan.annualMonthlyPrice),
+          annualTotalPrice: Number(dbPlan.annualTotalPrice),
+          discountPercent: dbPlan.discountPercent,
+          maxTechnicians: limits.maxUsers === 'Unlimited' ? 9999 : Number(limits.maxUsers || 5),
+          features: dbPlan.highlights || [],
+        };
+      }
+    } catch {}
+
     if (!pricing) {
       throw new BadRequestException(`Unsupported plan: ${dto.plan}`);
     }
@@ -188,12 +209,16 @@ export class PaymentsService {
     const endsAt = new Date(now);
     endsAt.setMonth(endsAt.getMonth() + durationMonths);
 
+    const planTierEnum: PlanTier = (['STARTER', 'PROFESSIONAL', 'ENTERPRISE'].includes(String(dto.plan).toUpperCase())
+      ? String(dto.plan).toUpperCase()
+      : 'ENTERPRISE') as PlanTier;
+
     await this.prisma.$transaction(async (tx) => {
       // Create or update subscription record as PENDING_PAYMENT
       await tx.subscription.create({
         data: {
           tenantId,
-          plan: dto.plan,
+          plan: planTierEnum,
           billingCycle: dto.billingCycle,
           status: 'PENDING_PAYMENT',
           amount: totalAmount,
@@ -203,6 +228,7 @@ export class PaymentsService {
           endsAt,
           gatewayOrderId: orderId,
           metadata: {
+            actualPlanCode: String(dto.plan).toUpperCase(),
             initiatedByUserId: userId,
             receipt,
             baseAmount,
@@ -221,9 +247,10 @@ export class PaymentsService {
           amount: totalAmount,
           currency: 'INR',
           status: 'CREATED',
-          plan: dto.plan,
+          plan: planTierEnum,
           billingCycle: dto.billingCycle,
           rawGatewayResponse: {
+            actualPlanCode: String(dto.plan).toUpperCase(),
             receipt,
             baseAmount,
             gstAmount,
@@ -984,18 +1011,47 @@ export class PaymentsService {
       : Math.round((currentPrice * 0.18) / 1.18);
     const basePrice = currentPrice - taxAmount;
 
-    // Available plans for comparison & upgrades
-    const availablePlans = Object.values(PLAN_PRICING).map((p) => ({
-      plan: p.plan,
-      planName: `${p.plan.charAt(0) + p.plan.slice(1).toLowerCase()} Plan`,
-      monthlyPrice: p.monthlyPrice,
-      annualMonthlyPrice: p.annualMonthlyPrice,
-      annualTotalPrice: p.annualTotalPrice,
-      discountPercent: p.discountPercent,
-      maxTechnicians: p.maxTechnicians,
-      features: p.features,
-      isCurrent: p.plan === currentPlanTier,
-    }));
+    // Available plans for comparison & upgrades (loaded from database or canonical fallback)
+    let availablePlans: any[] = [];
+    try {
+      const dbActivePlans = await (this.prisma as any).subscriptionPlan.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { displayOrder: 'asc' },
+      });
+      if (dbActivePlans && dbActivePlans.length > 0) {
+        availablePlans = dbActivePlans.map((p: any) => {
+          const limits = (p.limits as any) || {};
+          const maxTechnicians = limits.maxUsers === 'Unlimited' ? 9999 : Number(limits.maxUsers || 5);
+          return {
+            plan: p.code,
+            planName: p.name,
+            badge: p.badge || `${p.name} Plan`,
+            description: p.description || '',
+            monthlyPrice: Number(p.monthlyPrice),
+            annualMonthlyPrice: Number(p.annualMonthlyPrice),
+            annualTotalPrice: Number(p.annualTotalPrice),
+            discountPercent: p.discountPercent || 20,
+            maxTechnicians,
+            features: Array.isArray(p.highlights) && p.highlights.length > 0 ? p.highlights : [],
+            isCurrent: p.code === currentPlanTier,
+          };
+        });
+      }
+    } catch {}
+
+    if (availablePlans.length === 0) {
+      availablePlans = Object.values(PLAN_PRICING).map((p) => ({
+        plan: p.plan,
+        planName: `${p.plan.charAt(0) + p.plan.slice(1).toLowerCase()} Plan`,
+        monthlyPrice: p.monthlyPrice,
+        annualMonthlyPrice: p.annualMonthlyPrice,
+        annualTotalPrice: p.annualTotalPrice,
+        discountPercent: p.discountPercent,
+        maxTechnicians: p.maxTechnicians,
+        features: p.features,
+        isCurrent: p.plan === currentPlanTier,
+      }));
+    }
 
     // Renewal pricing
     const renewalBaseAnnual = planPricing.annualTotalPrice;

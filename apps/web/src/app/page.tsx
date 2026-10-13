@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   LifeBuoy,
@@ -35,6 +35,22 @@ export default function HomePage() {
   const { user, logout } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dbPlans, setDbPlans] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/v1/plans')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        const list = json?.data || json;
+        if (Array.isArray(list) && list.length > 0) {
+          setDbPlans(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const formatPriceINR = (amt: number) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
 
   const starterCheckoutUrl = '/signup?plan=starter&returnUrl=/checkout/starter';
 
@@ -674,40 +690,162 @@ export default function HomePage() {
           </div>
 
           {/* Pricing Cards Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-7xl mx-auto">
-            {/* 1. Starter Plan (Starter -> Manage) */}
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 flex flex-col justify-between hover:border-slate-300 transition-all shadow-xs">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-950">Starter</h3>
-                    <span className="text-xs font-extrabold text-orange-600 tracking-wide uppercase">
-                      Starter &rarr; Manage
-                    </span>
-                  </div>
-                  <span className="text-xs font-bold px-2.5 py-1 bg-slate-200/80 text-slate-700 rounded-md">
-                    Up to 5 Technicians
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 mb-5 leading-relaxed">
-                  Manage service calls, customer history, and support team operations from one centralized system.
-                </p>
+          <div className={`grid grid-cols-1 ${dbPlans.length > 3 ? 'md:grid-cols-2 lg:grid-cols-4' : 'lg:grid-cols-3'} gap-8 items-stretch max-w-7xl mx-auto`}>
+            {dbPlans.length > 0 ? (
+              dbPlans.map((plan: any) => {
+                const isPro = plan.code === 'PROFESSIONAL' || plan.isRecommended;
+                const price = billingCycle === 'annual' ? plan.annualMonthlyPrice : plan.monthlyPrice;
+                const limits = plan.limits || {};
+                const maxUsersText =
+                  limits.maxUsers === 'Unlimited' ? 'Unlimited Scale' : `Up to ${limits.maxUsers || 5} Technicians`;
+                const ctaUrl =
+                  plan.code === 'STARTER'
+                    ? starterCheckoutUrl
+                    : plan.isFreeTrialAllowed
+                    ? `/signup?plan=${plan.code.toLowerCase()}&returnUrl=/checkout/${plan.code.toLowerCase()}`
+                    : `/signup?plan=${plan.code.toLowerCase()}`;
+                const ctaText =
+                  plan.code === 'STARTER'
+                    ? 'Buy Now'
+                    : plan.isFreeTrialAllowed
+                    ? `Start ${plan.trialDays || 14}-Day Free Trial`
+                    : 'Get Started';
 
-                {/* Plan Limits Box */}
-                <div className="bg-white p-3 rounded-xl border border-slate-200/80 mb-6 text-xs space-y-1 text-slate-700">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Staff Limit:</span>
-                    <strong className="text-slate-900">Up to 5 Technicians / Staff</strong>
+                return (
+                  <div
+                    key={plan.id || plan.code}
+                    className={`rounded-2xl p-8 flex flex-col justify-between transition-all shadow-xs relative ${
+                      isPro
+                        ? 'bg-white border-2 border-orange-500 shadow-xl lg:-translate-y-2'
+                        : 'bg-slate-50 border border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {plan.isRecommended && (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-amber-600 text-white text-xs font-bold uppercase tracking-wider px-4 py-1 rounded-full shadow-sm whitespace-nowrap">
+                        Most Popular • {plan.name}
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center justify-between mb-3 mt-1">
+                        <div>
+                          <h3 className="text-2xl font-black text-slate-950">{plan.name}</h3>
+                          {plan.badge && (
+                            <span className="text-xs font-extrabold text-orange-600 tracking-wide uppercase">
+                              {plan.badge}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold px-2.5 py-1 bg-slate-200/80 text-slate-700 rounded-md">
+                          {maxUsersText}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mb-5 leading-relaxed">
+                        {plan.description}
+                      </p>
+
+                      {/* Plan Limits Box */}
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 mb-6 text-xs space-y-1 text-slate-700">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Staff Limit:</span>
+                          <strong className="text-slate-900">{maxUsersText}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Service Tickets:</span>
+                          <strong className="text-emerald-600">
+                            {limits.maxTicketsMonthly || 'Unlimited Tickets & Calls'}
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Storage:</span>
+                          <strong className="text-slate-900">
+                            {limits.storageGb ? `${limits.storageGb} GB Storage` : 'Standard Storage'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="mb-6">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl sm:text-4xl font-extrabold text-slate-950">
+                            {formatPriceINR(price)}
+                          </span>
+                          <span className="text-sm font-medium text-slate-500">/month</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {billingCycle === 'annual'
+                            ? `Billed annually (${formatPriceINR(plan.annualTotalPrice)}/yr)`
+                            : 'Billed monthly'}
+                          {plan.isFreeTrialAllowed ? ` • ${plan.trialDays}-Day Free Trial` : ''}
+                        </p>
+                      </div>
+
+                      {/* Highlights */}
+                      <div className="pt-5 border-t border-slate-200 space-y-2.5 text-xs text-slate-700">
+                        {Array.isArray(plan.highlights) &&
+                          plan.highlights.map((h: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>{h}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-4">
+                      <Link
+                        href={ctaUrl}
+                        className={`w-full inline-flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl font-bold transition-all shadow-xs ${
+                          isPro
+                            ? 'text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md'
+                            : 'text-slate-900 bg-white border border-slate-300 hover:bg-slate-100 hover:border-orange-400 hover:text-orange-600'
+                        }`}
+                      >
+                        <span>{ctaText}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                      <p className="text-[11px] text-center text-slate-500 mt-2">
+                        Instant activation •{' '}
+                        {plan.isFreeTrialAllowed ? `${plan.trialDays} days trial` : 'Get started in minutes'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Service Tickets:</span>
-                    <strong className="text-emerald-600">Unlimited Tickets & Calls</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Workspaces:</span>
-                    <strong className="text-slate-900">1 Organization Workspace</strong>
-                  </div>
-                </div>
+                );
+              })
+            ) : (
+              <>
+                {/* 1. Starter Plan (Starter -> Manage) */}
+                <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 flex flex-col justify-between hover:border-slate-300 transition-all shadow-xs">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-950">Starter</h3>
+                        <span className="text-xs font-extrabold text-orange-600 tracking-wide uppercase">
+                          Starter &rarr; Manage
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold px-2.5 py-1 bg-slate-200/80 text-slate-700 rounded-md">
+                        Up to 5 Technicians
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-5 leading-relaxed">
+                      Manage service calls, customer history, and support team operations from one centralized system.
+                    </p>
+
+                    {/* Plan Limits Box */}
+                    <div className="bg-white p-3 rounded-xl border border-slate-200/80 mb-6 text-xs space-y-1 text-slate-700">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Staff Limit:</span>
+                        <strong className="text-slate-900">Up to 5 Technicians / Staff</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Service Tickets:</span>
+                        <strong className="text-emerald-600">Unlimited Tickets & Calls</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Workspaces:</span>
+                        <strong className="text-slate-900">1 Organization Workspace</strong>
+                      </div>
+                    </div>
 
                 <div className="mb-6">
                   <div className="flex items-baseline gap-1">
@@ -987,6 +1125,8 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
+          </>
+        )}
           </div>
         </div>
       </section>
