@@ -7,9 +7,6 @@ import {
   Building2,
   Layers,
   Receipt,
-  Sliders,
-  ShieldCheck,
-  Settings,
   Users,
   Clock,
   AlertTriangle,
@@ -17,11 +14,10 @@ import {
   LogOut,
   Search,
   CheckCircle2,
-  Save,
+  Sparkles,
+  Activity,
   Check,
   X,
-  Activity,
-  Sparkles,
 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 import { useAuth } from '@/lib/auth-context';
@@ -33,10 +29,7 @@ type ActiveTab =
   | 'dashboard'
   | 'clients'
   | 'plans'
-  | 'billing'
-  | 'enterprise'
-  | 'security'
-  | 'settings';
+  | 'billing';
 
 interface PlatformOverviewData {
   overview: {
@@ -83,18 +76,7 @@ export default function SuperAdminDashboardPage() {
 
 
 
-  // Enterprise Override State Demo
-  const [enterpriseConfig, setEnterpriseConfig] = useState({
-    companyName: 'Pune Auto Components Ltd',
-    maxUsers: 500,
-    maxStorageGb: 500,
-    advancedAnalytics: true,
-    apiIntegration: true,
-    whatsapp: true,
-    customWorkflow: true,
-    customSla: true,
-    customDomain: true,
-  });
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -190,9 +172,6 @@ export default function SuperAdminDashboardPage() {
             { id: 'clients', label: 'Clients / Tenants', icon: Building2 },
             { id: 'plans', label: 'Subscription Plans', icon: Layers },
             { id: 'billing', label: 'Billing & Payments', icon: Receipt },
-            { id: 'enterprise', label: 'Enterprise Configuration', icon: Sliders },
-            { id: 'security', label: 'Security & Audit', icon: ShieldCheck },
-            { id: 'settings', label: 'System Settings', icon: Settings },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -245,9 +224,6 @@ export default function SuperAdminDashboardPage() {
               {activeTab === 'clients' && 'Client Organization Management'}
               {activeTab === 'plans' && 'Subscription Plan Catalogue & Entitlements'}
               {activeTab === 'billing' && 'Billing, Invoices & Payment Gateway'}
-              {activeTab === 'enterprise' && 'Enterprise Custom Overrides'}
-              {activeTab === 'security' && 'Platform Security & Audit Trail'}
-              {activeTab === 'settings' && 'Platform System Settings'}
             </h1>
           </div>
 
@@ -628,141 +604,6 @@ export default function SuperAdminDashboardPage() {
                 </div>
                 <div className="p-8 text-center text-xs text-slate-500">
                   No payment transactions recorded yet. Live gateway webhooks will populate here upon checkout.
-                </div>
-              </div>
-            </div>
-          )}
-
-
-
-          {/* ───────────────────────────────────────────────────────────── */}
-          {/* MODULE 7: ENTERPRISE CONFIGURATION */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'enterprise' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Enterprise Custom Overrides</h2>
-                <p className="text-xs text-slate-500">Configure customized user limits, storage capacities, and custom features per enterprise client.</p>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Target Enterprise Tenant</label>
-                    <input
-                      type="text"
-                      value={enterpriseConfig.companyName}
-                      onChange={(e) => setEnterpriseConfig({ ...enterpriseConfig, companyName: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Max Licensed Users</label>
-                    <input
-                      type="number"
-                      value={enterpriseConfig.maxUsers}
-                      onChange={(e) => setEnterpriseConfig({ ...enterpriseConfig, maxUsers: Number(e.target.value) })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t border-slate-100">
-                  <span className="text-xs font-bold text-slate-800 block">Custom Feature Overrides</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {[
-                      { key: 'advancedAnalytics', label: 'Enable Advanced Analytics Engine' },
-                      { key: 'apiIntegration', label: 'Enable Dedicated API Access' },
-                      { key: 'whatsapp', label: 'Enable WhatsApp Customer Alerts' },
-                      { key: 'customWorkflow', label: 'Enable Custom Workflow Engine' },
-                      { key: 'customSla', label: 'Enable Custom SLA Escalation Rules' },
-                      { key: 'customDomain', label: 'Enable Custom Subdomain Mapping' },
-                    ].map((item) => (
-                      <label key={item.key} className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={(enterpriseConfig as any)[item.key]}
-                          onChange={(e) => setEnterpriseConfig({ ...enterpriseConfig, [item.key]: e.target.checked })}
-                          className="w-4 h-4 text-orange-600 rounded border-slate-300"
-                        />
-                        <span className="font-semibold text-slate-800">{item.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-end">
-                  <Button className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 font-extrabold">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Enterprise Overrides
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ───────────────────────────────────────────────────────────── */}
-          {/* MODULE 8: SECURITY & AUDIT */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'security' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Security & Audit Log</h2>
-                <p className="text-xs text-slate-500">Immutable platform security events, plan updates, and administrator actions.</p>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-                <div className="p-4 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider grid grid-cols-12">
-                  <div className="col-span-3">Timestamp</div>
-                  <div className="col-span-3">Actor</div>
-                  <div className="col-span-6">Action / Event Details</div>
-                </div>
-                <div className="divide-y divide-slate-100 text-xs font-medium">
-                  <div className="p-4 grid grid-cols-12 items-center">
-                    <div className="col-span-3 font-mono text-slate-500">{new Date().toLocaleString()}</div>
-                    <div className="col-span-3 font-bold text-orange-600">Super Admin</div>
-                    <div className="col-span-6 text-slate-800 font-semibold">Super Admin platform session active & verified</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ───────────────────────────────────────────────────────────── */}
-          {/* MODULE 9: SYSTEM SETTINGS */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'settings' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">System & Platform Settings</h2>
-                <p className="text-xs text-slate-500">Manage Kalpak SaaS global configurations, policies, and integrations.</p>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700">Platform Brand Name</label>
-                    <input type="text" defaultValue="Kalpak Solutions" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700">Default Currency</label>
-                    <input type="text" defaultValue="INR (₹)" disabled className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 font-semibold" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700">Session Inactivity Timeout</label>
-                    <input type="text" defaultValue="60 minutes" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-semibold" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700">Payment Gateway</label>
-                    <input type="text" defaultValue="Razorpay (Production / Live)" disabled className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 font-semibold" />
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-end">
-                  <Button className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 font-extrabold">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Platform Settings
-                  </Button>
                 </div>
               </div>
             </div>
