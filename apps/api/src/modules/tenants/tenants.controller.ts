@@ -236,4 +236,20 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateTenantSubscription(tenantId, user.id, dto);
   }
+
+  @Patch(':id/status')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionCode.TENANT_MANAGE_ALL)
+  @ApiOperation({ summary: 'Super Admin: Activate, suspend, or deactivate a client tenant organization' })
+  async updateTenantStatusById(
+    @Param('id') tenantId: string,
+    @CurrentUser() user: UserPrincipal,
+    @Body() dto: {
+      status: 'ACTIVE' | 'SUSPENDED' | 'TRIAL' | 'CANCELLED';
+      reason: string;
+      category?: string;
+    }
+  ) {
+    return this.tenantsService.updateTenantStatus(tenantId, user.id, dto);
+  }
 }

@@ -12,18 +12,15 @@ import {
   AlertTriangle,
   IndianRupee,
   LogOut,
-  Search,
   CheckCircle2,
   Sparkles,
   Activity,
-  Check,
-  X,
 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
 import { SubscriptionPlansManagement, ClientTenant } from '@/features/super-admin/subscription-plans-management';
+import { ClientsTenantsManagement } from '@/features/super-admin/clients-tenants-management';
 
 type ActiveTab =
   | 'dashboard'
@@ -71,8 +68,6 @@ export default function SuperAdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [data, setData] = useState<PlatformOverviewData | null>(null);
   const [isDataLoading, setIsDataLoading] = useState(true);
-  const [clientSearchQuery, setClientSearchQuery] = useState('');
-  const [selectedClientModal, setSelectedClientModal] = useState<any>(null);
 
 
 
@@ -144,11 +139,6 @@ export default function SuperAdminDashboardPage() {
   }
 
   const { overview, planBreakdown, revenueMetrics, recentActivity, tenants = [] } = data;
-
-  const filteredTenants = tenants.filter((t) =>
-    t.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
-    t.slug.toLowerCase().includes(clientSearchQuery.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex selection:bg-orange-500 selection:text-white font-sans">
@@ -430,128 +420,10 @@ export default function SuperAdminDashboardPage() {
           {/* MODULE 2: CLIENTS / TENANTS */}
           {/* ───────────────────────────────────────────────────────────── */}
           {activeTab === 'clients' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900">Clients / Tenants</h2>
-                  <p className="text-xs text-slate-500">Manage all tenant companies using Kalpak's SaaS platform.</p>
-                </div>
-
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search company or slug..."
-                    value={clientSearchQuery}
-                    onChange={(e) => setClientSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              {filteredTenants.length === 0 ? (
-                <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs space-y-3">
-                  <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
-                  <h3 className="text-base font-bold text-slate-700">No Client Tenants Found</h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    There are currently no active tenant organizations in the database. When a client signs up or starts a trial, their management profile will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-                  <div className="p-4 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider grid grid-cols-12">
-                    <div className="col-span-4">Company</div>
-                    <div className="col-span-3">Plan</div>
-                    <div className="col-span-3">Status</div>
-                    <div className="col-span-2 text-right">Created</div>
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {filteredTenants.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={() => setSelectedClientModal(t)}
-                        className="p-4 grid grid-cols-12 items-center text-xs hover:bg-orange-50/40 cursor-pointer transition-colors"
-                      >
-                        <div className="col-span-4 font-bold text-slate-900 flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-700 font-black flex items-center justify-center">
-                            {t.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <span className="block font-extrabold">{t.name}</span>
-                            <span className="block text-[11px] text-slate-400 font-mono">/{t.slug}</span>
-                          </div>
-                        </div>
-                        <div className="col-span-3 font-semibold text-slate-700">Professional</div>
-                        <div className="col-span-3">
-                          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            {t.status}
-                          </span>
-                        </div>
-                        <div className="col-span-2 text-right text-slate-500 font-mono">
-                          {new Date(t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Client Overview Modal */}
-              {selectedClientModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-                  <div className="bg-white rounded-3xl border border-slate-200 max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                      <div>
-                        <span className="text-[11px] font-black text-orange-600 uppercase tracking-wider">Client Overview</span>
-                        <h3 className="text-xl font-extrabold text-slate-900">{selectedClientModal.name}</h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedClientModal(null)}
-                        className="p-2 rounded-xl text-slate-400 hover:bg-slate-100"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-slate-400 font-semibold block">Account Status</span>
-                        <span className="font-extrabold text-emerald-700 text-sm mt-0.5 block">{selectedClientModal.status}</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-slate-400 font-semibold block">Subscription Plan</span>
-                        <span className="font-extrabold text-slate-900 text-sm mt-0.5 block">Professional (14-Day Trial)</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-slate-400 font-semibold block">User Limit</span>
-                        <span className="font-extrabold text-slate-900 text-sm mt-0.5 block">50 Licensed Users</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                        <span className="text-slate-400 font-semibold block">Storage Limit</span>
-                        <span className="font-extrabold text-slate-900 text-sm mt-0.5 block">50 GB High-Speed CDN</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <span className="text-xs font-bold text-slate-700 block">Enabled Platform Features</span>
-                      <div className="flex flex-wrap gap-2 text-[11px]">
-                        {['Ticket Management', 'Customer Portal', 'Auto Assignment', 'Reports', 'API Integration'].map((feat) => (
-                          <span key={feat} className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold flex items-center gap-1">
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            {feat}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-2 flex justify-end">
-                      <Button onClick={() => setSelectedClientModal(null)}>Close Overview</Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ClientsTenantsManagement
+              tenants={tenants}
+              onRefresh={loadPlatformData}
+            />
           )}
 
           {/* ───────────────────────────────────────────────────────────── */}

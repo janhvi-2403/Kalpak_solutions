@@ -1100,6 +1100,65 @@ export class TenantsService {
       maxUsersQuota: maxTechnicians,
     };
   }
+
+  async updateTenantStatus(
+    tenantId: string,
+    actorUserId: string,
+    dto: {
+      status: 'ACTIVE' | 'SUSPENDED' | 'TRIAL' | 'CANCELLED';
+      reason: string;
+      category?: string;
+    }
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with id ${tenantId} not found`);
+    }
+
+    const previousStatus = tenant.status;
+    const currentSettings = (tenant.settings as Record<string, any>) || {};
+
+    const updatedTenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: dto.status as any,
+        settings: {
+          ...currentSettings,
+          statusChangeReason: dto.reason,
+          statusChangeCategory: dto.category || 'ADMIN_ACTION',
+          statusChangedAt: new Date().toISOString(),
+          statusChangedBy: actorUserId,
+        },
+      },
+    });
+
+    await this.auditService.record({
+      tenantId,
+      actorId: actorUserId,
+      eventType: AuditEventType.TENANT_UPDATED,
+      resourceType: 'TENANT_STATUS',
+      resourceId: tenantId,
+      action: `SUPER_ADMIN_STATUS_${dto.status}`,
+      metadata: {
+        previousStatus,
+        newStatus: dto.status,
+        reason: dto.reason,
+        category: dto.category || 'ADMIN_ACTION',
+      },
+    });
+
+    return {
+      success: true,
+      tenantId,
+      name: tenant.name,
+      previousStatus,
+      status: updatedTenant.status,
+      message: `Successfully transitioned ${tenant.name} to ${dto.status}`,
+    };
+  }
 }
 
 
