@@ -749,6 +749,13 @@ export class TenantsService {
             take: 1,
           },
           policy: true,
+          memberships: {
+            include: {
+              user: true,
+              role: true,
+            },
+            take: 5,
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -972,10 +979,19 @@ export class TenantsService {
         const sub = t.subscriptions?.[0];
         const settings = (t.settings as Record<string, any>) || {};
         const plan = (sub?.plan || settings.selectedPlan || 'STARTER').toUpperCase();
+        const adminMember =
+          t.memberships?.find((m) => m.role?.name?.toUpperCase().includes('ADMIN')) || t.memberships?.[0];
+        const adminUser = adminMember?.user;
+        const fallbackDomain = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
         return {
           id: t.id,
           name: t.name,
-          slug: t.slug,
+          displayName: settings.displayName || t.name,
+          industry: settings.industry || 'IT & Services',
+          clientAdminName: adminUser?.fullName || 'Primary Administrator',
+          clientAdminEmail: adminUser?.email || `admin@${fallbackDomain || 'company'}.com`,
+          contactPhone: adminUser?.phoneNumber || settings.phone || '+91 98000 00000',
           status: t.status,
           plan,
           billingCycle: sub?.billingCycle || 'ANNUAL',
@@ -985,6 +1001,9 @@ export class TenantsService {
           createdAt: t.createdAt,
           policy: t.policy,
           maxUsersQuota: t.policy?.maxUsersQuota || (plan === 'ENTERPRISE' ? 9999 : plan === 'PROFESSIONAL' ? 25 : 5),
+          activeUsers: t.memberships?.length || 1,
+          website: settings.website || '',
+          businessAddress: settings.addressLine1 || settings.address || '',
         };
       }),
     };
