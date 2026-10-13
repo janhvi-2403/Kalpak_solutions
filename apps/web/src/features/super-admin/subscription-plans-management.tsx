@@ -22,9 +22,11 @@ import {
   Copy,
   Power,
   Trash2,
+  ToggleRight,
 } from 'lucide-react';
 import { Button, Input, Dialog } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
+import { FeaturesEntitlementsManagement } from './entitlements-management';
 
 // ── Types & Interfaces ─────────────────────────────────────────────────────────
 
@@ -311,8 +313,8 @@ interface Props {
 export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Props) {
   // ── States ───────────────────────────────────────────────────────────────────
 
-  // Sub-tabs: 'catalogue' | 'comparison' | 'lifecycle'
-  const [subTab, setSubTab] = useState<'catalogue' | 'comparison' | 'lifecycle'>('catalogue');
+  // Sub-tabs: 'catalogue' | 'entitlements' | 'comparison' | 'lifecycle'
+  const [subTab, setSubTab] = useState<'catalogue' | 'entitlements' | 'comparison' | 'lifecycle'>('catalogue');
 
   // Plans list (persisted in localStorage for administrative customizer)
   const [plans, setPlans] = useState<PlanDefinition[]>(INITIAL_CANONICAL_PLANS);
@@ -701,13 +703,23 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
             </button>
             <button
               type="button"
+              onClick={() => setSubTab('entitlements')}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                subTab === 'entitlements' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ToggleRight className="w-3.5 h-3.5 text-purple-600" />
+              <span>2. Features & Entitlements</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setSubTab('comparison')}
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 subTab === 'comparison' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Sliders className="w-3.5 h-3.5 text-blue-600" />
-              <span>4. Plan Comparison</span>
+              <span>3. Plan Comparison</span>
             </button>
             <button
               type="button"
@@ -717,7 +729,7 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
               }`}
             >
               <Users className="w-3.5 h-3.5 text-emerald-600" />
-              <span>5. Client Lifecycle & Upgrades</span>
+              <span>4. Subscriptions & Lifecycle</span>
             </button>
           </div>
 
@@ -1012,7 +1024,14 @@ export function SubscriptionPlansManagement({ tenants = [], onRefreshData }: Pro
       )}
 
       {/* ───────────────────────────────────────────────────────────────────────── */}
-      {/* 4. PLAN COMPARISON MATRIX VIEW (Feature 4)                              */}
+      {/* 2. FEATURES & ENTITLEMENTS ENGINE VIEW                                    */}
+      {/* ───────────────────────────────────────────────────────────────────────── */}
+      {subTab === 'entitlements' && (
+        <FeaturesEntitlementsManagement />
+      )}
+
+      {/* ───────────────────────────────────────────────────────────────────────── */}
+      {/* 3. PLAN COMPARISON MATRIX VIEW                                           */}
       {/* ───────────────────────────────────────────────────────────────────────── */}
       {subTab === 'comparison' && (
         <div className="space-y-6">

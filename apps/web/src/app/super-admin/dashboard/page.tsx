@@ -6,9 +6,7 @@ import {
   LayoutDashboard,
   Building2,
   Layers,
-  CreditCard,
   Receipt,
-  ToggleRight,
   Sliders,
   ShieldCheck,
   Settings,
@@ -30,15 +28,12 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui';
 import { apiClient } from '@/lib/api-client';
 import { SubscriptionPlansManagement, ClientTenant } from '@/features/super-admin/subscription-plans-management';
-import { FeaturesEntitlementsManagement } from '@/features/super-admin/entitlements-management';
 
 type ActiveTab =
   | 'dashboard'
   | 'clients'
   | 'plans'
-  | 'subscriptions'
   | 'billing'
-  | 'entitlements'
   | 'enterprise'
   | 'security'
   | 'settings';
@@ -194,9 +189,7 @@ export default function SuperAdminDashboardPage() {
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
             { id: 'clients', label: 'Clients / Tenants', icon: Building2 },
             { id: 'plans', label: 'Subscription Plans', icon: Layers },
-            { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
             { id: 'billing', label: 'Billing & Payments', icon: Receipt },
-            { id: 'entitlements', label: 'Features & Entitlements', icon: ToggleRight },
             { id: 'enterprise', label: 'Enterprise Configuration', icon: Sliders },
             { id: 'security', label: 'Security & Audit', icon: ShieldCheck },
             { id: 'settings', label: 'System Settings', icon: Settings },
@@ -250,10 +243,8 @@ export default function SuperAdminDashboardPage() {
             <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wide">
               {activeTab === 'dashboard' && 'Executive Business Dashboard'}
               {activeTab === 'clients' && 'Client Organization Management'}
-              {activeTab === 'plans' && 'Subscription Plan Catalogue'}
-              {activeTab === 'subscriptions' && 'Active Subscriptions Lifecycle'}
+              {activeTab === 'plans' && 'Subscription Plan Catalogue & Entitlements'}
               {activeTab === 'billing' && 'Billing, Invoices & Payment Gateway'}
-              {activeTab === 'entitlements' && 'Feature Entitlements Engine'}
               {activeTab === 'enterprise' && 'Enterprise Custom Overrides'}
               {activeTab === 'security' && 'Platform Security & Audit Trail'}
               {activeTab === 'settings' && 'Platform System Settings'}
@@ -599,49 +590,7 @@ export default function SuperAdminDashboardPage() {
           )}
 
           {/* ───────────────────────────────────────────────────────────── */}
-          {/* MODULE 4: SUBSCRIPTIONS */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'subscriptions' && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Client Subscriptions Lifecycle</h2>
-                <p className="text-xs text-slate-500">Track active tenant subscriptions, renewal deadlines, and lifecycle statuses.</p>
-              </div>
 
-              <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-                <div className="p-4 bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider grid grid-cols-12">
-                  <div className="col-span-3">Company</div>
-                  <div className="col-span-2">Plan</div>
-                  <div className="col-span-3">Status</div>
-                  <div className="col-span-2">Start Date</div>
-                  <div className="col-span-2 text-right">Renewal Date</div>
-                </div>
-                {tenants.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-500">No active subscriptions found in the database.</div>
-                ) : (
-                  <div className="divide-y divide-slate-100 text-xs">
-                    {tenants.map((t) => (
-                      <div key={t.id} className="p-4 grid grid-cols-12 items-center hover:bg-slate-50">
-                        <div className="col-span-3 font-extrabold text-slate-900">{t.name}</div>
-                        <div className="col-span-2 font-semibold text-slate-700">Starter</div>
-                        <div className="col-span-3">
-                          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            TRIALING
-                          </span>
-                        </div>
-                        <div className="col-span-2 text-slate-600 font-mono">
-                          {new Date(t.createdAt).toLocaleDateString('en-IN')}
-                        </div>
-                        <div className="col-span-2 text-right text-slate-600 font-mono">
-                          {new Date(new Date(t.createdAt).getTime() + 14 * 86400000).toLocaleDateString('en-IN')}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* ───────────────────────────────────────────────────────────── */}
           {/* MODULE 5: BILLING & PAYMENTS */}
@@ -684,12 +633,7 @@ export default function SuperAdminDashboardPage() {
             </div>
           )}
 
-          {/* ───────────────────────────────────────────────────────────── */}
-          {/* MODULE 6: FEATURES & ENTITLEMENTS */}
-          {/* ───────────────────────────────────────────────────────────── */}
-          {activeTab === 'entitlements' && (
-            <FeaturesEntitlementsManagement />
-          )}
+
 
           {/* ───────────────────────────────────────────────────────────── */}
           {/* MODULE 7: ENTERPRISE CONFIGURATION */}
