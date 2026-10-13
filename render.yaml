@@ -9,9 +9,7 @@ services:
     name: kalpak-api
     runtime: node
     plan: free
-    region: oregon
-    buildCommand: npm install -g pnpm@10.29.2 && pnpm install --prod=false && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/**" run build && pnpm --filter @kalpak/api run build
-    preDeployCommand: pnpm --filter @kalpak/database exec prisma db push --skip-generate --accept-data-loss
+    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/api run build
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /health
     autoDeploy: true
@@ -64,8 +62,7 @@ services:
     name: kalpak-web
     runtime: node
     plan: free
-    region: oregon
-    buildCommand: npm install -g pnpm@10.29.2 && pnpm install --prod=false && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/**" run build && pnpm --filter @kalpak/web run build
+    buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/web run build
     startCommand: pnpm --filter @kalpak/web run start
     autoDeploy: true
     envVars:
