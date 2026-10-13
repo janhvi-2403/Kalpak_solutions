@@ -389,7 +389,7 @@ export default function SuperAdminDashboardPage() {
                   <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
                     <div className="p-3 bg-slate-50 text-[11px] font-black text-slate-500 uppercase tracking-wider grid grid-cols-12">
                       <div className="col-span-4">Client Company</div>
-                      <div className="col-span-3">Plan</div>
+                      <div className="col-span-3">Event / Action</div>
                       <div className="col-span-3">Status</div>
                       <div className="col-span-2 text-right">Activity Time</div>
                     </div>
@@ -401,7 +401,7 @@ export default function SuperAdminDashboardPage() {
                           </div>
                           <span>{act.tenantName}</span>
                         </div>
-                        <div className="col-span-3 text-slate-600 font-medium">Starter / Pro</div>
+                        <div className="col-span-3 text-slate-700 font-medium truncate">{act.action}</div>
                         <div className="col-span-3">
                           <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             {act.badge}

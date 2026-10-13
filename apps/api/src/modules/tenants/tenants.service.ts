@@ -754,7 +754,18 @@ export class TenantsService {
               user: true,
               role: true,
             },
-            take: 5,
+          },
+          departments: true,
+          customers: true,
+          tickets: true,
+          auditEvents: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            include: {
+              actor: {
+                select: { fullName: true, email: true },
+              },
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -982,28 +993,48 @@ export class TenantsService {
         const adminMember =
           t.memberships?.find((m) => m.role?.name?.toUpperCase().includes('ADMIN')) || t.memberships?.[0];
         const adminUser = adminMember?.user;
-        const fallbackDomain = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
         return {
           id: t.id,
           name: t.name,
           displayName: settings.displayName || t.name,
           industry: settings.industry || 'IT & Services',
-          clientAdminName: adminUser?.fullName || 'Primary Administrator',
-          clientAdminEmail: adminUser?.email || `admin@${fallbackDomain || 'company'}.com`,
-          contactPhone: adminUser?.phoneNumber || settings.phone || '+91 98000 00000',
+          clientAdminName: adminUser?.fullName || 'Not specified',
+          clientAdminEmail: adminUser?.email || settings.businessEmail || 'Not specified',
+          contactPhone: adminUser?.phoneNumber || settings.phoneNumber || settings.phone || 'Not provided',
           status: t.status,
           plan,
           billingCycle: sub?.billingCycle || 'ANNUAL',
           amount: sub?.amount ? Number(sub.amount) : (plan === 'ENTERPRISE' ? 143988 : plan === 'PROFESSIONAL' ? 67188 : 28788),
           startsAt: sub?.startsAt || t.createdAt,
-          endsAt: sub?.endsAt || new Date(new Date(t.createdAt).getTime() + 14 * 86400000).toISOString(),
+          endsAt: sub?.endsAt || (t.policy?.subscriptionEndsAt) || null,
           createdAt: t.createdAt,
           policy: t.policy,
           maxUsersQuota: t.policy?.maxUsersQuota || (plan === 'ENTERPRISE' ? 9999 : plan === 'PROFESSIONAL' ? 25 : 5),
-          activeUsers: t.memberships?.length || 1,
+          activeUsers: t.memberships?.length || 0,
+          departmentsCount: t.departments?.length || 0,
+          customersCount: t.customers?.length || 0,
+          ticketsCount: t.tickets?.length || 0,
           website: settings.website || '',
           businessAddress: settings.addressLine1 || settings.address || '',
+          country: settings.country || 'India',
+          timezone: settings.timezone || 'Asia/Kolkata (IST)',
+          members: (t.memberships || []).map((m: any) => ({
+            id: m.id,
+            fullName: m.user?.fullName || 'User',
+            email: m.user?.email || '',
+            phone: m.user?.phoneNumber || 'Not provided',
+            role: m.role?.name || 'Member',
+            isActive: m.user?.isActive ?? true,
+            lastLoginAt: m.user?.lastLoginAt || null,
+          })),
+          auditLogs: (t.auditEvents || []).map((a: any) => ({
+            id: a.id,
+            action: a.action,
+            actor: a.actor?.fullName || a.actor?.email || 'System',
+            timestamp: new Date(a.createdAt).toLocaleString('en-IN'),
+            details: `Action: ${a.action} (${a.eventType})`,
+          })),
         };
       }),
     };

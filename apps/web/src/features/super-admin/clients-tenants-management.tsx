@@ -26,6 +26,7 @@ import {
   Activity,
   Shield,
   Info,
+  UserCheck,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -33,6 +34,16 @@ import { apiClient } from '@/lib/api-client';
 
 export type TenantStatusType = 'Active' | 'Trial' | 'Pending' | 'Suspended' | 'Deactivated';
 export type PlanTierType = 'Starter' | 'Professional' | 'Enterprise';
+
+export interface TenantMemberRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+}
 
 export interface CompanyTenantRecord {
   id: string; // Used internally for API mutations, NOT displayed to user for security
@@ -48,31 +59,27 @@ export interface CompanyTenantRecord {
   activeUsers: number;
   maxUsersQuota: number;
   status: TenantStatusType;
-  // Extended profile details
+  // Extended profile details directly from DB
   website?: string;
   businessAddress?: string;
   country?: string;
   timezone?: string;
   preferredLanguage?: string;
+  departmentsCount?: number;
+  customersCount?: number;
+  ticketsCount?: number;
   storageUsedGb?: number;
   storageLimitGb?: number;
-  departmentsCount?: number;
-  departmentsLimit?: number;
   apiCallsMonthly?: number;
   apiCallsLimit?: number;
   mfaEnforced?: boolean;
   ssoEnabled?: boolean;
   activeSessionsCount?: number;
-  lastLoginIp?: string;
   lastLoginAt?: string;
   billingCycle?: 'Monthly' | 'Annual';
   paymentMethodStatus?: string;
   statusReason?: string;
-  contacts?: {
-    primaryAdmin: { name: string; email: string; phone: string };
-    technicalOps?: { name: string; email: string; phone: string };
-    billingContact?: { name: string; email: string; phone: string };
-  };
+  members?: TenantMemberRecord[];
   auditLogs?: Array<{
     id: string;
     action: string;
@@ -89,7 +96,7 @@ interface ClientsTenantsManagementProps {
 }
 
 export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTenantsManagementProps) {
-  // Map genuine companies from database
+  // Map genuine companies directly from database records
   const mapDbTenantToRecord = (dbTenant: any): CompanyTenantRecord => {
     const rawStatus = (dbTenant.status || '').toUpperCase();
     const mappedStatus: TenantStatusType =
@@ -107,54 +114,74 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
     const mappedPlan: PlanTierType =
       rawPlan === 'ENTERPRISE' ? 'Enterprise' : rawPlan === 'PROFESSIONAL' ? 'Professional' : 'Starter';
 
+    // Map genuine registered members
+    const realMembers: TenantMemberRecord[] = (dbTenant.members || []).map((m: any) => ({
+      id: m.id || m.userId || String(Math.random()),
+      fullName: m.fullName || 'User',
+      email: m.email || '',
+      phone: m.phone || 'Not provided',
+      role: m.role || 'Member',
+      isActive: m.isActive ?? true,
+      lastLoginAt: m.lastLoginAt || null,
+    }));
+
+    const adminFromMembers = realMembers.find(
+      (m) => m.role.toUpperCase().includes('ADMIN') || m.role.toUpperCase().includes('OWNER')
+    ) || realMembers[0];
+
+    const adminName = dbTenant.clientAdminName || adminFromMembers?.fullName || 'Not specified';
+    const adminEmail = dbTenant.clientAdminEmail || adminFromMembers?.email || 'Not specified';
+    const adminPhone =
+      dbTenant.contactPhone && dbTenant.contactPhone !== 'Not provided' && dbTenant.contactPhone !== '+91 98000 00000'
+        ? dbTenant.contactPhone
+        : adminFromMembers?.phone && adminFromMembers?.phone !== 'Not provided'
+        ? adminFromMembers.phone
+        : 'Not provided';
+
     return {
       id: dbTenant.id,
       name: dbTenant.name,
       displayName: dbTenant.displayName || dbTenant.name,
       industry: dbTenant.industry || 'IT & Services',
-      clientAdminName: dbTenant.clientAdminName || 'Primary Administrator',
-      clientAdminEmail: dbTenant.clientAdminEmail || `admin@company.com`,
-      contactPhone: dbTenant.contactPhone || '+91 98000 00000',
+      clientAdminName: adminName,
+      clientAdminEmail: adminEmail,
+      contactPhone: adminPhone,
       plan: mappedPlan,
       registeredOn: dbTenant.createdAt ? String(dbTenant.createdAt).substring(0, 10) : '2026-10-10',
-      planExpiry: dbTenant.endsAt ? String(dbTenant.endsAt).substring(0, 10) : '2027-10-10',
-      activeUsers: Number(dbTenant.activeUsers) || 1,
-      maxUsersQuota: Number(dbTenant.maxUsersQuota) || (mappedPlan === 'Enterprise' ? 9999 : mappedPlan === 'Professional' ? 25 : 5),
+      planExpiry: dbTenant.endsAt ? String(dbTenant.endsAt).substring(0, 10) : 'No expiration set',
+      activeUsers: Number(dbTenant.activeUsers ?? realMembers.length ?? 0),
+      maxUsersQuota:
+        Number(dbTenant.maxUsersQuota) || (mappedPlan === 'Enterprise' ? 9999 : mappedPlan === 'Professional' ? 25 : 5),
       status: mappedStatus,
-      website: dbTenant.website || '',
-      businessAddress: dbTenant.businessAddress || 'Registered Office',
+      website: dbTenant.website || 'Not specified',
+      businessAddress: dbTenant.businessAddress || 'Not specified',
       country: dbTenant.country || 'India',
       timezone: dbTenant.timezone || 'Asia/Kolkata (IST)',
       preferredLanguage: dbTenant.preferredLanguage || 'English',
-      storageUsedGb: 2.5,
+      departmentsCount: Number(dbTenant.departmentsCount ?? 0),
+      customersCount: Number(dbTenant.customersCount ?? 0),
+      ticketsCount: Number(dbTenant.ticketsCount ?? 0),
+      storageUsedGb: 0.0,
       storageLimitGb: mappedPlan === 'Enterprise' ? 500 : mappedPlan === 'Professional' ? 20 : 5,
-      departmentsCount: 2,
-      departmentsLimit: mappedPlan === 'Enterprise' ? 9999 : mappedPlan === 'Professional' ? 5 : 2,
-      apiCallsMonthly: 4500,
+      apiCallsMonthly: 0,
       apiCallsLimit: mappedPlan === 'Enterprise' ? 500000 : mappedPlan === 'Professional' ? 50000 : 5000,
       mfaEnforced: false,
       ssoEnabled: mappedPlan === 'Enterprise',
-      activeSessionsCount: 1,
-      lastLoginIp: '127.0.0.1',
-      lastLoginAt: 'Recently',
+      activeSessionsCount: realMembers.length > 0 ? 1 : 0,
+      lastLoginAt: realMembers[0]?.lastLoginAt
+        ? new Date(realMembers[0].lastLoginAt).toLocaleString('en-IN')
+        : 'No recent login recorded',
       billingCycle: dbTenant.billingCycle === 'MONTHLY' ? 'Monthly' : 'Annual',
-      paymentMethodStatus: 'Active Auto-Debit',
-      contacts: {
-        primaryAdmin: {
-          name: dbTenant.clientAdminName || 'Primary Administrator',
-          email: dbTenant.clientAdminEmail || 'admin@company.com',
-          phone: dbTenant.contactPhone || '+91 98000 00000',
-        },
-      },
-      auditLogs: [
-        {
-          id: `aud-${String(dbTenant.id).substring(0, 6)}`,
-          action: 'TENANT_REGISTERED',
-          actor: 'System',
-          timestamp: dbTenant.createdAt ? new Date(dbTenant.createdAt).toLocaleString('en-IN') : 'Registered',
-          details: `Organization account provisioned with ${mappedPlan} subscription plan.`,
-        },
-      ],
+      paymentMethodStatus:
+        dbTenant.status === 'TRIAL' ? 'Trial Evaluation' : 'Verified Active',
+      members: realMembers,
+      auditLogs: (dbTenant.auditLogs || []).map((a: any) => ({
+        id: a.id,
+        action: a.action,
+        actor: a.actor || 'System',
+        timestamp: a.timestamp || 'Recorded',
+        details: a.details || 'System event',
+      })),
     };
   };
 
@@ -933,17 +960,19 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                     <Building2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-bold text-slate-700">No registered companies found</p>
                     <p className="text-xs text-slate-400 mt-1">
-                      As customer companies register on the platform, their live account records will appear here.
+                      As customer companies register on the platform, their genuine account records will appear here.
                     </p>
                   </td>
                 </tr>
               ) : (
                 paginatedCompanies.map((c) => {
                   const isSelected = selectedIds.has(c.id);
+                  const hasExpiry = c.planExpiry && c.planExpiry !== 'No expiration set';
                   const isExpiringSoon =
+                    hasExpiry &&
                     new Date(c.planExpiry).getTime() - new Date().getTime() < 14 * 86400000 &&
                     new Date(c.planExpiry).getTime() > new Date().getTime();
-                  const isExpired = new Date(c.planExpiry).getTime() <= new Date().getTime();
+                  const isExpired = hasExpiry && new Date(c.planExpiry).getTime() <= new Date().getTime();
 
                   return (
                     <tr
@@ -985,16 +1014,18 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                       {/* Client Admin */}
                       <td className="p-4">
                         <span className="block font-bold text-slate-900">{c.clientAdminName}</span>
-                        <span className="block text-[11px] text-slate-400">Primary Admin</span>
+                        <span className="block text-[11px] text-slate-400">Primary Administrator</span>
                       </td>
 
                       {/* Contact */}
                       <td className="p-4 text-slate-600">
                         <div className="space-y-0.5">
-                          <span className="block text-[11px] font-medium text-slate-800 truncate max-w-[150px]">
+                          <span className="block text-[11px] font-medium text-slate-800 truncate max-w-[170px]">
                             {c.clientAdminEmail}
                           </span>
-                          <span className="block text-[10px] text-slate-500 font-mono">{c.contactPhone}</span>
+                          <span className="block text-[10px] text-slate-500 font-mono">
+                            {c.contactPhone !== 'Not provided' ? c.contactPhone : '—'}
+                          </span>
                         </div>
                       </td>
 
@@ -1034,11 +1065,13 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                                 : 'text-slate-700'
                             }`}
                           >
-                            {new Date(c.planExpiry).toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            })}
+                            {hasExpiry
+                              ? new Date(c.planExpiry).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : 'Ongoing'}
                           </span>
                           {isExpired ? (
                             <span className="inline-block text-[10px] font-bold text-rose-600 bg-rose-50 px-1 rounded">
@@ -1309,7 +1342,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                 <div>
                   <span className="text-slate-400 text-[11px] block font-semibold">Contact phone</span>
                   <span className="text-white font-mono text-[11px] truncate block">
-                    {viewProfileModal.contactPhone}
+                    {viewProfileModal.contactPhone !== 'Not provided' ? viewProfileModal.contactPhone : '—'}
                   </span>
                 </div>
                 <div>
@@ -1329,11 +1362,13 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                 <div>
                   <span className="text-slate-400 text-[11px] block font-semibold">Plan expires</span>
                   <span className="text-orange-400 font-bold block">
-                    {new Date(viewProfileModal.planExpiry).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    {viewProfileModal.planExpiry && viewProfileModal.planExpiry !== 'No expiration set'
+                      ? new Date(viewProfileModal.planExpiry).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : 'Ongoing'}
                   </span>
                 </div>
               </div>
@@ -1401,7 +1436,18 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                         Company Website
                       </span>
                       <p className="text-sm font-extrabold text-slate-900">
-                        {viewProfileModal.website || 'Not specified'}
+                        {viewProfileModal.website && viewProfileModal.website !== 'Not specified' ? (
+                          <a
+                            href={viewProfileModal.website}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-orange-600 hover:underline"
+                          >
+                            {viewProfileModal.website}
+                          </a>
+                        ) : (
+                          'Not specified'
+                        )}
                       </p>
                     </div>
 
@@ -1410,7 +1456,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                         Business Physical Address
                       </span>
                       <p className="text-xs font-semibold text-slate-800">
-                        {viewProfileModal.businessAddress || 'Corporate Office'}
+                        {viewProfileModal.businessAddress || 'Not specified'}
                       </p>
                     </div>
 
@@ -1435,102 +1481,68 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                 </div>
               )}
 
-              {/* TAB 2: CONTACTS */}
+              {/* TAB 2: CONTACTS (REAL DATABASE USERS ONLY) */}
               {profileActiveTab === 'contacts' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-extrabold text-slate-900">Primary Organization Contacts</h3>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900">Registered Organization Personnel</h3>
+                      <p className="text-xs text-slate-500">Live user accounts linked to this company in PostgreSQL</p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => openEditModal(viewProfileModal)}
                       className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1"
                     >
-                      <Edit2 className="w-3 h-3" /> Update Contacts
+                      <Edit2 className="w-3 h-3" /> Update Profile Contacts
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Primary Admin */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-xs">
-                          PA
-                        </div>
-                        <div>
-                          <span className="block font-bold text-slate-900 text-xs">
-                            {viewProfileModal.contacts?.primaryAdmin.name || viewProfileModal.clientAdminName}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase">Primary Administrator</span>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xs">
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="truncate">
-                            {viewProfileModal.contacts?.primaryAdmin.email || viewProfileModal.clientAdminEmail}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{viewProfileModal.contacts?.primaryAdmin.phone || viewProfileModal.contactPhone}</span>
-                        </div>
-                      </div>
+                  {(!viewProfileModal.members || viewProfileModal.members.length === 0) ? (
+                    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500">
+                      No team members provisioned yet under this organization in the database.
                     </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {viewProfileModal.members.map((member) => (
+                        <div key={member.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                {member.fullName.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="block font-bold text-slate-900 text-xs truncate">
+                                  {member.fullName}
+                                </span>
+                                <span className="block text-[10px] font-bold text-orange-600 uppercase tracking-wider">
+                                  {member.role.replace(/_/g, ' ')}
+                                </span>
+                              </div>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                member.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              {member.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
 
-                    {/* Technical Contact */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                          TO
+                          <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xs">
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{member.email || '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-mono">{member.phone !== 'Not provided' ? member.phone : '—'}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <span className="block font-bold text-slate-900 text-xs">
-                            {viewProfileModal.contacts?.technicalOps?.name || 'Technical Operations'}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase">Technical Operations</span>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xs">
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="truncate">
-                            {viewProfileModal.contacts?.technicalOps?.email || viewProfileModal.clientAdminEmail}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{viewProfileModal.contacts?.technicalOps?.phone || viewProfileModal.contactPhone}</span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-
-                    {/* Billing Contact */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
-                          BC
-                        </div>
-                        <div>
-                          <span className="block font-bold text-slate-900 text-xs">
-                            {viewProfileModal.contacts?.billingContact?.name || 'Accounts Dept'}
-                          </span>
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase">Billing & Invoicing</span>
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-slate-200/60 space-y-1 text-xs">
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Mail className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="truncate">
-                            {viewProfileModal.contacts?.billingContact?.email || viewProfileModal.clientAdminEmail}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{viewProfileModal.contacts?.billingContact?.phone || viewProfileModal.contactPhone}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1543,8 +1555,12 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                       <h4 className="text-xl font-black text-slate-900">{viewProfileModal.plan} Plan</h4>
                       <p className="text-xs text-slate-600">
                         Billing Interval:{' '}
-                        <strong>{viewProfileModal.billingCycle || 'Annual'}</strong> · Renewal on{' '}
-                        <strong>{viewProfileModal.planExpiry}</strong>
+                        <strong>{viewProfileModal.billingCycle || 'Annual'}</strong> · Renewal date:{' '}
+                        <strong>
+                          {viewProfileModal.planExpiry && viewProfileModal.planExpiry !== 'No expiration set'
+                            ? viewProfileModal.planExpiry
+                            : 'Continuous'}
+                        </strong>
                       </p>
                     </div>
 
@@ -1565,7 +1581,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
                       <span className="text-slate-400 font-semibold block uppercase text-[10px]">Payment Method Status</span>
                       <span className="font-extrabold text-slate-900 block">
-                        {viewProfileModal.paymentMethodStatus || 'Razorpay Gateway Verified'}
+                        {viewProfileModal.paymentMethodStatus || 'Verified'}
                       </span>
                     </div>
 
@@ -1579,16 +1595,19 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                 </div>
               )}
 
-              {/* TAB 4: USAGE */}
+              {/* TAB 4: USAGE (GENUINE DATABASE METRICS ONLY) */}
               {profileActiveTab === 'usage' && (
                 <div className="space-y-6">
-                  <h3 className="text-sm font-extrabold text-slate-900">Real-Time Resource Quotas & Consumption</h3>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Database Resource Quotas & Active Usage</h3>
+                    <p className="text-xs text-slate-500">Live operational counts tallied directly from database models</p>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    {/* User Quota */}
+                    {/* Active Staff / Members */}
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-orange-600" /> Active Users
+                          <Users className="w-3.5 h-3.5 text-orange-600" /> Active Staff / Users
                         </span>
                         <span className="font-extrabold text-slate-900">
                           {viewProfileModal.activeUsers} /{' '}
@@ -1608,76 +1627,61 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                       </div>
                     </div>
 
-                    {/* Storage Quota */}
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                          <Database className="w-3.5 h-3.5 text-blue-600" /> Storage Consumption
-                        </span>
-                        <span className="font-extrabold text-slate-900">
-                          {viewProfileModal.storageUsedGb || 2.5} GB / {viewProfileModal.storageLimitGb || 20} GB
-                        </span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              ((viewProfileModal.storageUsedGb || 2.5) / (viewProfileModal.storageLimitGb || 20)) * 100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
                     {/* Department Quota */}
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-emerald-600" /> Departments
+                          <Layers className="w-3.5 h-3.5 text-emerald-600" /> Configured Departments
                         </span>
                         <span className="font-extrabold text-slate-900">
-                          {viewProfileModal.departmentsCount || 2} /{' '}
-                          {viewProfileModal.departmentsLimit || 5}
+                          {viewProfileModal.departmentsCount || 0} Departments in DB
                         </span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-emerald-500 rounded-full"
                           style={{
-                            width: `${Math.min(
-                              100,
-                              ((viewProfileModal.departmentsCount || 2) /
-                                (viewProfileModal.departmentsLimit || 5)) *
-                                100
-                            )}%`,
+                            width: `${Math.min(100, (viewProfileModal.departmentsCount || 0) * 20)}%`,
                           }}
                         />
                       </div>
                     </div>
 
-                    {/* API Monthly Calls */}
+                    {/* Registered Customers / Clients */}
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                          <Activity className="w-3.5 h-3.5 text-purple-600" /> Monthly API Calls
+                          <UserCheck className="w-3.5 h-3.5 text-blue-600" /> Client / Customer Records
                         </span>
                         <span className="font-extrabold text-slate-900">
-                          {viewProfileModal.apiCallsMonthly?.toLocaleString() || '4,500'} /{' '}
-                          {viewProfileModal.apiCallsLimit?.toLocaleString() || '50,000'}
+                          {viewProfileModal.customersCount || 0} Registered Clients
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 rounded-full"
+                          style={{
+                            width: `${Math.min(100, (viewProfileModal.customersCount || 0) * 10)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Support Tickets */}
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-purple-600" /> Service Tickets Volume
+                        </span>
+                        <span className="font-extrabold text-slate-900">
+                          {viewProfileModal.ticketsCount || 0} Tickets Logged
                         </span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-purple-500 rounded-full"
                           style={{
-                            width: `${Math.min(
-                              100,
-                              ((viewProfileModal.apiCallsMonthly || 4500) /
-                                (viewProfileModal.apiCallsLimit || 50000)) *
-                                100
-                            )}%`,
+                            width: `${Math.min(100, (viewProfileModal.ticketsCount || 0) * 5)}%`,
                           }}
                         />
                       </div>
@@ -1722,7 +1726,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                         Active Concurrent Sessions
                       </span>
                       <span className="font-extrabold text-slate-900 block">
-                        {viewProfileModal.activeSessionsCount || 1} Authenticated Session
+                        {viewProfileModal.activeSessionsCount || 0} Authenticated Session
                       </span>
                     </div>
 
@@ -1731,7 +1735,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                         Last Admin Login Activity
                       </span>
                       <span className="font-extrabold text-slate-900 block">
-                        {viewProfileModal.lastLoginAt || 'Recent Active Session'}
+                        {viewProfileModal.lastLoginAt || 'No recent activity'}
                       </span>
                     </div>
                   </div>
@@ -1743,13 +1747,13 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-extrabold text-slate-900">Audit Trail & Security Event Log</h3>
-                    <span className="text-[11px] text-slate-500">Immutable chronological events</span>
+                    <span className="text-[11px] text-slate-500">Live immutable events from audit database</span>
                   </div>
 
                   <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
                     {(!viewProfileModal.auditLogs || viewProfileModal.auditLogs.length === 0) ? (
                       <div className="p-8 text-center text-slate-500 text-xs">
-                        No historical audit records found for this company.
+                        No audit events recorded yet for this organization in the database.
                       </div>
                     ) : (
                       viewProfileModal.auditLogs.map((log) => (
