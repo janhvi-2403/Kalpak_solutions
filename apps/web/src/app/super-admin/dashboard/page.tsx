@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Sparkles,
   Activity,
+  ShieldCheck,
 } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 import { useAuth } from '@/lib/auth-context';
@@ -142,26 +143,44 @@ export default function SuperAdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex selection:bg-orange-500 selection:text-white font-sans">
-      {/* ─── SIDEBAR NAVIGATION (9 CORE MODULES) ─── */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 shadow-xl z-30">
+      {/* ─── SIDEBAR NAVIGATION (EXECUTIVE PLATFORM CONSOLE) ─── */}
+      <aside className="w-80 bg-slate-900 text-slate-300 flex flex-col shrink-0 border-r border-slate-800 shadow-2xl z-30">
         {/* Brand Header */}
-        <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-          <KalpakLogo size="sm" variant="dark" href="/super-admin/dashboard" />
-          <div>
-            <span className="block text-[11px] font-black text-orange-400 uppercase tracking-widest">
+        <div className="p-5 border-b border-slate-800/80 bg-slate-950/50">
+          <div className="flex items-center justify-between gap-3">
+            <KalpakLogo size="sm" variant="dark" href="/super-admin/dashboard" showTagline={false} />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/35 shrink-0 shadow-sm whitespace-nowrap">
+              <ShieldCheck className="w-3.5 h-3.5 text-orange-400" />
               Super Admin
             </span>
-            <span className="block text-xs font-bold text-white">Platform Console</span>
+          </div>
+
+          <div className="mt-4 p-3 rounded-2xl bg-gradient-to-r from-slate-800/80 to-slate-800/40 border border-slate-700/70 shadow-sm flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-xs font-black text-white tracking-wide uppercase whitespace-nowrap">Platform Console</span>
+                <span className="block text-[11px] text-slate-400 font-medium truncate">Root System Operations</span>
+              </div>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold uppercase bg-slate-900/90 text-emerald-400 border border-emerald-500/30 shrink-0 whitespace-nowrap">
+              Online
+            </span>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'clients', label: 'Clients / Tenants', icon: Building2 },
-            { id: 'plans', label: 'Subscription Plans', icon: Layers },
-            { id: 'billing', label: 'Billing & Payments', icon: Receipt },
+            { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, desc: 'Live platform telemetry' },
+            { id: 'clients', label: 'Clients / Tenants', icon: Building2, desc: 'Manage client accounts' },
+            { id: 'plans', label: 'Subscription Plans', icon: Layers, desc: 'Tier catalog & limits' },
+            { id: 'billing', label: 'Billing & Payments', icon: Receipt, desc: 'Invoices & gateway' },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -170,33 +189,42 @@ export default function SuperAdminDashboardPage() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id as ActiveTab)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-bold transition-all text-left ${
                   isActive
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20'
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/25 ring-1 ring-white/20'
                     : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`p-2 rounded-xl shrink-0 ${isActive ? 'bg-white/20' : 'bg-slate-800 text-slate-400'}`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-extrabold text-sm truncate">{item.label}</div>
+                    <div className={`text-[10px] font-medium truncate ${isActive ? 'text-orange-100' : 'text-slate-400'}`}>
+                      {item.desc}
+                    </div>
+                  </div>
+                </div>
               </button>
             );
           })}
         </nav>
 
         {/* User Info & Sign Out Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="block text-xs font-extrabold text-white truncate">
-                {user?.fullName || 'Super Administrator'}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/80">
+          <div className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-900/60 border border-slate-800/80">
+            <div className="min-w-0 flex-1">
+              <span className="block text-xs font-black text-white truncate">
+                {user?.fullName || 'System Super Administrator'}
               </span>
-              <span className="block text-[11px] text-slate-400 truncate">{user?.email}</span>
+              <span className="block text-[11px] text-slate-400 font-mono truncate">{user?.email || 'admin@kalpak.com'}</span>
             </div>
             <button
               type="button"
               onClick={handleLogout}
               title="Sign Out"
-              className="p-2 rounded-lg bg-red-950/40 text-red-400 hover:bg-red-900/60 transition-colors shrink-0"
+              className="p-2.5 rounded-xl bg-red-950/40 text-red-400 hover:bg-red-900/60 hover:text-white border border-red-900/40 transition-all shrink-0 flex items-center justify-center shadow-xs"
             >
               <LogOut className="w-4 h-4" />
             </button>
