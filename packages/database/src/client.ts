@@ -29,6 +29,10 @@ export async function withTenantRls<T>(
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     if (tenantId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+      if (!isUuid) {
+        throw new Error(`Invalid tenant ID format for RLS context: "${tenantId}"`);
+      }
       // Set the session variable for PostgreSQL RLS
       await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
     }

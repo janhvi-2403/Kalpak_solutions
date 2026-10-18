@@ -76,15 +76,20 @@ export class TenantGuard implements CanActivate {
       }
     }
 
-    // Determine target tenant ID (session user tenant ID or subdomain tenant ID)
-    const tenantId = subdomainTenant?.id || sessionUserTenantId || request.headers['x-tenant-id'];
+    // Determine target tenant ID strictly from verified subdomain tenant or session user tenant
+    const tenantId = subdomainTenant?.id || sessionUserTenantId;
 
     if (isOptional && !tenantId) {
       return true;
     }
 
     if (!tenantId) {
-      throw new ForbiddenException('Active tenant context is required for this operation');
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'TENANT_CONTEXT_REQUIRED',
+        message: 'Active tenant context is required for this operation',
+      });
     }
 
     // 2. Verify tenant exists and is active

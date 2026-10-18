@@ -3,21 +3,19 @@
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { apiClient, ApiClientError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
-import { Button, Input, PasswordInput, Alert } from '@/components/ui';
+import { Button, Input, PasswordInput, Alert, PhoneInput, TimezoneSelect } from '@/components/ui';
 import { ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
+import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 function SignupContent() {
-  const { refetchSession } = useAuth();
-
   // Organization Fields
   const [companyName, setCompanyName] = useState('');
   const [slug, setSlug] = useState('');
   const [businessEmail, setBusinessEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [country, setCountry] = useState('United States');
-  const [timezone, setTimezone] = useState('America/New_York');
+  const [country, setCountry] = useState('');
+  const [timezone, setTimezone] = useState('');
 
   // Admin User Fields
   const [fullName, setFullName] = useState('');
@@ -44,12 +42,16 @@ function SignupContent() {
   };
 
   const autoSlug = (text: string) => {
-    return text
+    // 1. Unicode NFKD normalization to cleanly separate diacritics/accents from base characters
+    const normalized = text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+    // 2. Transliterate and convert to clean lowercase alphanumeric slug with single hyphens
+    return normalized
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
       .slice(0, 50);
   };
 
@@ -84,6 +86,21 @@ function SignupContent() {
     if (businessEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(businessEmail.trim())) {
       errors.businessEmail = 'Please enter a valid business email address';
       messages.push('Business Email: Invalid email format');
+    }
+
+    if (phoneNumber.trim()) {
+      const phoneCheck = normalizePhoneNumber(phoneNumber.trim());
+      if (!phoneCheck.isValid) {
+        errors.phoneNumber = phoneCheck.error || 'Please enter a valid international phone number';
+        messages.push('Phone Number: ' + (phoneCheck.error || 'Invalid international phone number'));
+      }
+    }
+
+    if (timezone.trim()) {
+      if (!isValidIanaTimezone(timezone.trim())) {
+        errors.timezone = 'Please select a valid IANA timezone identifier';
+        messages.push('Primary Timezone: Invalid timezone identifier');
+      }
     }
 
     const hasUpper = /[A-Z]/.test(password);
@@ -126,7 +143,7 @@ function SignupContent() {
     setIsLoading(true);
 
     try {
-      await apiClient('/auth/signup', {
+      const response = await apiClient<any>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           companyName: companyName.trim(),
@@ -141,11 +158,12 @@ function SignupContent() {
         }),
       });
 
-      // Refresh auth state with newly issued session
-      await refetchSession();
-
-      // Redirect client admin directly to real subscription checkout
-      window.location.href = '/checkout/starter';
+      // Redirect client admin directly to verify email screen or returned redirect URL
+      if (response?.redirectUrl) {
+        window.location.href = response.redirectUrl;
+      } else {
+        window.location.href = `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`;
+      }
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         const res = err.errorResponse;
@@ -314,14 +332,18 @@ function SignupContent() {
                   />
                 </div>
                 <div>
-                  <Input
+                  <PhoneInput
                     id="phone"
-                    type="tel"
                     label="Phone Number (Optional)"
                     value={phoneNumber}
                     error={fieldErrors['phoneNumber']}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="+1 (555) 019-2834"
+                    onChange={(val) => {
+                      setPhoneNumber(val);
+                      if (fieldErrors['phoneNumber']) {
+                        setFieldErrors((prev) => ({ ...prev, phoneNumber: '' }));
+                      }
+                    }}
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div>
@@ -330,16 +352,21 @@ function SignupContent() {
                     label="Country (Optional)"
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
-                    placeholder="United States"
+                    placeholder="e.g. India, United States, Japan"
                   />
                 </div>
                 <div>
-                  <Input
+                  <TimezoneSelect
                     id="timezone"
                     label="Primary Timezone (Optional)"
                     value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    placeholder="America/New_York"
+                    error={fieldErrors['timezone']}
+                    onChange={(val) => {
+                      setTimezone(val);
+                      if (fieldErrors['timezone']) {
+                        setFieldErrors((prev) => ({ ...prev, timezone: '' }));
+                      }
+                    }}
                   />
                 </div>
               </div>

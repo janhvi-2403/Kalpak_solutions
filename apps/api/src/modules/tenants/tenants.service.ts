@@ -14,6 +14,7 @@ import { AuditEventType, TenantStatus } from '@kalpak/types';
 import { generateSessionToken, hashToken } from '@kalpak/auth';
 import { getConfig } from '@kalpak/config';
 import { PLAN_PRICING } from '../payments/payments.service';
+import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 @Injectable()
 export class TenantsService {
@@ -131,20 +132,44 @@ export class TenantsService {
       throw new NotFoundException('Tenant organization not found');
     }
 
+    // Validate timezone if provided
+    let validatedTimezone = dto.timezone;
+    if (dto.timezone !== undefined && dto.timezone !== null && dto.timezone.trim()) {
+      const cleanTz = dto.timezone.trim();
+      if (!isValidIanaTimezone(cleanTz)) {
+        throw new BadRequestException(
+          `Invalid timezone identifier "${cleanTz}". Please provide a valid IANA timezone identifier (e.g. "Asia/Kolkata", "America/New_York").`
+        );
+      }
+      validatedTimezone = cleanTz;
+    }
+
+    // Validate and normalize phone number if provided
+    let validatedPhone = dto.phone;
+    if (dto.phone !== undefined && dto.phone !== null && dto.phone.trim()) {
+      const phoneResult = normalizePhoneNumber(dto.phone.trim());
+      if (!phoneResult.isValid) {
+        throw new BadRequestException(
+          phoneResult.error || `Invalid international phone number format: "${dto.phone}".`
+        );
+      }
+      validatedPhone = phoneResult.e164 || dto.phone;
+    }
+
     const currentSettings = (tenant.settings as Record<string, any>) || {};
     const updatedCompanyProfile = {
       ...(currentSettings.companyProfile || {}),
       name: dto.name?.trim() || currentSettings.companyProfile?.name || tenant.name,
       logoUrl: dto.logoUrl !== undefined ? dto.logoUrl : currentSettings.companyProfile?.logoUrl || currentSettings.logoUrl,
       address: dto.address !== undefined ? dto.address?.trim() : currentSettings.companyProfile?.address,
-      phone: dto.phone !== undefined ? dto.phone?.trim() : currentSettings.companyProfile?.phone,
+      phone: validatedPhone !== undefined ? validatedPhone : currentSettings.companyProfile?.phone,
       website: dto.website !== undefined ? dto.website?.trim() : currentSettings.companyProfile?.website,
       supportEmail: dto.supportEmail !== undefined ? dto.supportEmail?.trim() : currentSettings.companyProfile?.supportEmail,
       city: dto.city !== undefined ? dto.city?.trim() : currentSettings.companyProfile?.city,
       state: dto.state !== undefined ? dto.state?.trim() : currentSettings.companyProfile?.state,
       country: dto.country !== undefined ? dto.country?.trim() : currentSettings.companyProfile?.country || 'India',
       pincode: dto.pincode !== undefined ? dto.pincode?.trim() : currentSettings.companyProfile?.pincode,
-      timezone: dto.timezone !== undefined ? dto.timezone : currentSettings.companyProfile?.timezone || 'Asia/Kolkata',
+      timezone: validatedTimezone !== undefined ? validatedTimezone : currentSettings.companyProfile?.timezone || 'Asia/Kolkata',
       dateTimeFormat: dto.dateTimeFormat !== undefined ? dto.dateTimeFormat : currentSettings.companyProfile?.dateTimeFormat || 'DD/MM/YYYY hh:mm A',
       workingDays: dto.workingDays !== undefined ? dto.workingDays : currentSettings.companyProfile?.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
       businessHours: dto.businessHours !== undefined ? dto.businessHours : currentSettings.companyProfile?.businessHours || '09:00 AM - 06:00 PM',
@@ -155,6 +180,8 @@ export class TenantsService {
 
     const updatedSettings = {
       ...currentSettings,
+      timezone: updatedCompanyProfile.timezone,
+      phoneNumber: updatedCompanyProfile.phone,
       companyProfile: updatedCompanyProfile,
       logoUrl: dto.logoUrl !== undefined ? dto.logoUrl : currentSettings.logoUrl,
       primaryColor: dto.primaryColor !== undefined ? dto.primaryColor : currentSettings.primaryColor,

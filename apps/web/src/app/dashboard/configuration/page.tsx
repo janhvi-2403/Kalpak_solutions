@@ -44,6 +44,8 @@ import {
   CardTitle,
   CardContent,
   Skeleton,
+  TimezoneSelect,
+  PhoneInput,
 } from '@/components/ui';
 import {
   ServiceCategoriesTab,
@@ -188,15 +190,6 @@ const DAYS_OF_WEEK = [
   'Friday',
   'Saturday',
   'Sunday',
-];
-
-const TIMEZONES = [
-  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (IST +05:30) - Mumbai, New Delhi' },
-  { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
-  { value: 'America/New_York', label: 'America/New_York (EST/EDT -05:00)' },
-  { value: 'Europe/London', label: 'Europe/London (GMT/BST +00:00)' },
-  { value: 'Asia/Dubai', label: 'Asia/Dubai (GST +04:00)' },
-  { value: 'Asia/Singapore', label: 'Asia/Singapore (SGT +08:00)' },
 ];
 
 const DATE_FORMATS = [
@@ -1359,15 +1352,15 @@ export default function ConfigurationPage() {
                           placeholder="support@company.com"
                         />
 
-                        <Input
+                        <PhoneInput
                           id="company-phone"
                           label="Official Contact Phone"
                           required
                           value={companyProfile.phone}
-                          onChange={(e) =>
-                            setCompanyProfile({ ...companyProfile, phone: e.target.value })
+                          onChange={(val) =>
+                            setCompanyProfile({ ...companyProfile, phone: val })
                           }
-                          placeholder="+91 7498862377"
+                          placeholder="Enter contact phone"
                         />
 
                         <Input
@@ -1545,22 +1538,15 @@ export default function ConfigurationPage() {
                     </CardHeader>
                     <CardContent className="space-y-4 pt-4">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Operational Timezone
-                        </label>
-                        <select
+                        <TimezoneSelect
+                          id="operational-timezone"
+                          label="Operational Timezone"
                           value={companyProfile.timezone}
-                          onChange={(e) =>
-                            setCompanyProfile({ ...companyProfile, timezone: e.target.value })
+                          onChange={(tz) =>
+                            setCompanyProfile({ ...companyProfile, timezone: tz })
                           }
-                          className="w-full text-xs rounded-xl border border-slate-200 p-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                        >
-                          {TIMEZONES.map((tz) => (
-                            <option key={tz.value} value={tz.value}>
-                              {tz.label}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Select timezone (e.g. Asia/Kolkata, UTC)"
+                        />
                       </div>
 
                       <div>

@@ -62,6 +62,7 @@ export class SessionAuthGuard implements CanActivate {
             isActive: true,
             isSuperAdmin: true,
             mfaEnabled: true,
+            emailVerified: true,
             deletedAt: true,
           },
         },
@@ -91,6 +92,16 @@ export class SessionAuthGuard implements CanActivate {
       throw new ForbiddenException('User account is currently deactivated');
     }
 
+    // Email verification check (Super Admins are exempt)
+    if (!user.emailVerified && !user.isSuperAdmin) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address before accessing this resource. Check your inbox for the verification link.',
+      });
+    }
+
     // 5. MFA verification boundary check
     const allowUnverifiedMfa = this.reflector.getAllAndOverride<boolean>(ALLOW_UNVERIFIED_MFA_KEY, [
       context.getHandler(),
@@ -109,6 +120,7 @@ export class SessionAuthGuard implements CanActivate {
       isActive: user.isActive,
       isSuperAdmin: user.isSuperAdmin,
       mfaEnabled: user.mfaEnabled,
+      emailVerified: user.emailVerified,
     };
     request.session = session;
 

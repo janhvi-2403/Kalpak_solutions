@@ -87,6 +87,13 @@ describe('Production Multi-Tenant Subdomain Routing & Security', () => {
       expect(subdomainResolver.extractSubdomain('billing.kalpaksolutions.com')).toBeNull();
       expect(subdomainResolver.extractSubdomain('auth.kalpaksolutions.com')).toBeNull();
       expect(subdomainResolver.extractSubdomain('login.kalpaksolutions.com')).toBeNull();
+      expect(subdomainResolver.extractSubdomain('settings.kalpaksolutions.com')).toBeNull();
+      expect(subdomainResolver.extractSubdomain('pricing.kalpaksolutions.com')).toBeNull();
+      expect(subdomainResolver.extractSubdomain('checkout.kalpaksolutions.com')).toBeNull();
+      expect(subdomainResolver.extractSubdomain('config.kalpaksolutions.com')).toBeNull();
+      expect(subdomainResolver.isReserved('settings')).toBe(true);
+      expect(subdomainResolver.isReserved('checkout')).toBe(true);
+      expect(subdomainResolver.isReserved('pricing')).toBe(true);
     });
 
     it('should reject invalid, malicious, or malformed subdomain slugs', () => {
@@ -95,6 +102,7 @@ describe('Production Multi-Tenant Subdomain Routing & Security', () => {
       expect(subdomainResolver.isValidSubdomainSlug('slug_with_underscores')).toBe(false);
       expect(subdomainResolver.isValidSubdomainSlug('-starting-hyphen')).toBe(false);
       expect(subdomainResolver.isValidSubdomainSlug('ending-hyphen-')).toBe(false);
+      expect(subdomainResolver.isValidSubdomainSlug('settings')).toBe(false); // reserved
       expect(subdomainResolver.isValidSubdomainSlug('a')).toBe(false); // < 2 chars
       expect(subdomainResolver.isValidSubdomainSlug('a'.repeat(64))).toBe(false); // > 63 chars
       expect(subdomainResolver.isValidSubdomainSlug('valid-slug-123')).toBe(true);
@@ -224,6 +232,35 @@ describe('Production Multi-Tenant Subdomain Routing & Security', () => {
 
       const context = createMockContext(request);
       await expect(tenantGuard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should REJECT forged x-tenant-id header and not grant tenant context', async () => {
+      // User connects on an apex or generic domain and attempts to forge x-tenant-id header
+      const request = {
+        headers: {
+          host: 'kalpaksolutions.com',
+          'x-tenant-id': mockTenantB.id, // Forged header!
+        },
+        user: {
+          id: 'user-acme-1',
+          email: 'admin@acme.com',
+          isSuperAdmin: false,
+        },
+        session: {
+          id: 'sess-1',
+          activeTenantId: null, // Session has no active tenant workspace
+        },
+      };
+
+      const context = createMockContext(request);
+
+      try {
+        await tenantGuard.canActivate(context);
+        fail('Should have thrown ForbiddenException for missing/untrusted tenant context');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.response?.code).toBe('TENANT_CONTEXT_REQUIRED');
+      }
     });
   });
 

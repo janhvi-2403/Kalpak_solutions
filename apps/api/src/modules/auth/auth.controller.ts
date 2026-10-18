@@ -9,6 +9,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -28,9 +29,11 @@ import { UserPrincipal } from '@kalpak/types';
 import { getConfig } from '@kalpak/config';
 import { generateCsrfToken } from '@kalpak/auth';
 import { SubdomainResolverService } from '../../core/tenant/subdomain-resolver.service';
+import { RateLimiterGuard, RateLimit } from '../../core/auth/rate-limiter.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')
+@UseGuards(RateLimiterGuard)
 export class AuthController {
   private readonly config = getConfig();
 
@@ -82,6 +85,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ points: 10, durationSeconds: 60 })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate user with email and password' })
@@ -129,6 +133,7 @@ export class AuthController {
 
 
   @Public()
+  @RateLimit({ points: 5, durationSeconds: 900 })
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new B2B tenant organization and first client administrator' })
@@ -142,23 +147,26 @@ export class AuthController {
 
     const result = await this.authService.signup(dto, ipAddress, userAgent);
 
-    // Set secure HttpOnly session cookie for browser clients
-    const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
-    const cookieDomain = this.getCookieDomain(req);
-    const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
-    res.cookie(this.config.SESSION_COOKIE_NAME, result.rawToken, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: isSecure ? 'none' : 'lax',
-      maxAge: maxAgeMs,
-      path: '/',
-      domain: cookieDomain,
-    });
+    // Set secure HttpOnly session cookie for browser clients only if an active session token is issued
+    if ((result as any).rawToken) {
+      const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+      const cookieDomain = this.getCookieDomain(req);
+      const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+      res.cookie(this.config.SESSION_COOKIE_NAME, (result as any).rawToken, {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: isSecure ? 'none' : 'lax',
+        maxAge: maxAgeMs,
+        path: '/',
+        domain: cookieDomain,
+      });
+    }
 
     return result;
   }
 
   @Public()
+  @RateLimit({ points: 10, durationSeconds: 300 })
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email address with single-use expiring token' })
@@ -173,6 +181,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ points: 3, durationSeconds: 300 })
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification token' })
@@ -181,6 +190,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ points: 5, durationSeconds: 900 })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset token email' })
@@ -195,6 +205,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ points: 5, durationSeconds: 900 })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset account password with valid token' })

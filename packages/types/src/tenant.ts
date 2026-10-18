@@ -68,6 +68,18 @@ export const RESERVED_SUBDOMAINS = [
   'ns2',
   'mailgun',
   'razorpay',
+  'settings',
+  'config',
+  'workspace',
+  'workspaces',
+  'pricing',
+  'checkout',
+  'invitation',
+  'invitations',
+  'onboarding',
+  'terms',
+  'privacy',
+  'contact',
 ] as const;
 
 export type ReservedSubdomain = (typeof RESERVED_SUBDOMAINS)[number];

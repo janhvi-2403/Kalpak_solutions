@@ -42,6 +42,7 @@ import {
 } from '@kalpak/types';
 import { getConfig } from '@kalpak/config';
 import { SubdomainResolverService } from '../../core/tenant/subdomain-resolver.service';
+import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 @Injectable()
 export class AuthService {
@@ -287,7 +288,15 @@ export class AuthService {
     const email = dto.email.trim().toLowerCase();
     const slug = dto.slug.trim().toLowerCase();
 
-    // 1. Check if email already registered
+    // 1. Authoritative backend validation for organization slug format and reserved names
+    if (!this.subdomainResolver.isValidSubdomainSlug(slug) || slug.length < 3 || slug.length > 60) {
+      if (this.subdomainResolver.isReserved(slug)) {
+        throw new BadRequestException(`Organization slug "${slug}" is reserved by the platform. Please choose another.`);
+      }
+      throw new BadRequestException('Organization slug must be 3-60 characters and contain only lowercase letters, numbers, and single hyphens without leading or trailing hyphens.');
+    }
+
+    // 2. Pre-check if email already registered
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -295,7 +304,7 @@ export class AuthService {
       throw new ConflictException('An account with this email address already exists');
     }
 
-    // 2. Check if slug already in use
+    // 3. Pre-check if slug already in use
     const existingTenant = await this.prisma.tenant.findUnique({
       where: { slug },
     });
@@ -303,10 +312,34 @@ export class AuthService {
       throw new ConflictException(`The organization slug "${slug}" is already taken. Please choose another.`);
     }
 
-    // 3. Hash password
+    // 4. Validate optional timezone
+    let timezoneToSave = 'UTC';
+    if (dto.timezone && dto.timezone.trim()) {
+      const cleanTz = dto.timezone.trim();
+      if (!isValidIanaTimezone(cleanTz)) {
+        throw new BadRequestException(
+          `Invalid timezone identifier "${cleanTz}". Please provide a valid IANA timezone identifier (e.g. "Asia/Kolkata", "America/New_York").`
+        );
+      }
+      timezoneToSave = cleanTz;
+    }
+
+    // 5. Validate and normalize optional phone number to E.164
+    let normalizedPhone: string | null = null;
+    if (dto.phoneNumber && dto.phoneNumber.trim()) {
+      const phoneResult = normalizePhoneNumber(dto.phoneNumber.trim());
+      if (!phoneResult.isValid) {
+        throw new BadRequestException(
+          phoneResult.error || `Invalid international phone number format: "${dto.phoneNumber}".`
+        );
+      }
+      normalizedPhone = phoneResult.e164;
+    }
+
+    // 6. Hash password with Argon2id
     const passwordHash = await hashPassword(dto.password);
 
-    // 4. Retrieve or auto-provision Client Admin system role definition
+    // 7. Retrieve or auto-provision Client Admin system role definition
     let clientAdminRole = await this.prisma.role.findFirst({
       where: { name: SystemRole.CLIENT_ADMIN, tenantId: null },
       include: {
@@ -336,84 +369,86 @@ export class AuthService {
       throw new InternalServerErrorException('System role CLIENT_ADMIN could not be initialized');
     }
 
-    // 5. Create Tenant, User, and Membership in transaction
-    const { tenant, user, token } = await this.prisma.$transaction(async (tx) => {
-      const newTenant = await tx.tenant.create({
-        data: {
-          name: dto.companyName.trim(),
-          slug,
-          status: TenantStatus.TRIAL,
-          settings: {
-            businessEmail: dto.businessEmail || email,
-            phoneNumber: dto.phoneNumber || null,
-            country: dto.country || null,
-            timezone: dto.timezone || 'UTC',
-            onboarding: {
-              completed: false,
-              currentStep: 1,
+    // 8. Create Tenant, User, and Membership inside transaction with P2002 collision safety
+    let creationResult: { tenant: any; user: any; token: string };
+    try {
+      creationResult = await this.prisma.$transaction(async (tx) => {
+        const newTenant = await tx.tenant.create({
+          data: {
+            name: dto.companyName.trim(),
+            slug,
+            status: TenantStatus.TRIAL,
+            settings: {
+              businessEmail: dto.businessEmail || email,
+              phoneNumber: normalizedPhone,
+              country: dto.country || null,
+              timezone: timezoneToSave,
+              onboarding: {
+                completed: false,
+                currentStep: 1,
+              },
             },
           },
-        },
+        });
+
+        // Initialize user with emailVerified = false (mandatory email verification)
+        const newUser = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            fullName: dto.fullName.trim(),
+            phoneNumber: normalizedPhone,
+            isActive: true,
+            emailVerified: false,
+            emailVerifiedAt: null,
+            isSuperAdmin: false,
+          },
+        });
+
+        await tx.tenantMembership.create({
+          data: {
+            tenantId: newTenant.id,
+            userId: newUser.id,
+            roleId: clientAdminRole.id,
+            isDefault: true,
+          },
+        });
+
+        // Generate verification token (expires in 24 hours)
+        const rawVerificationToken = generateSessionToken();
+        const tokenHash = hashToken(rawVerificationToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await tx.emailVerificationToken.create({
+          data: {
+            userId: newUser.id,
+            email,
+            tokenHash,
+            expiresAt,
+          },
+        });
+
+        return { tenant: newTenant, user: newUser, token: rawVerificationToken };
       });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const target = err?.meta?.target;
+        const targetStr = Array.isArray(target) ? target.join(',') : String(target || '');
+        if (targetStr.includes('slug') || targetStr.includes('tenants_slug_key')) {
+          throw new ConflictException(`The organization slug "${slug}" is already taken. Please choose another.`);
+        }
+        if (targetStr.includes('email') || targetStr.includes('users_email_key')) {
+          throw new ConflictException('An account with this email address already exists');
+        }
+        throw new ConflictException('A duplicate record already exists.');
+      }
+      throw err;
+    }
 
-      const newUser = await tx.user.create({
-        data: {
-          email,
-          passwordHash,
-          fullName: dto.fullName.trim(),
-          phoneNumber: dto.phoneNumber || null,
-          isActive: true,
-          emailVerified: true,
-          isSuperAdmin: false,
-        },
-      });
+    const { tenant, user, token } = creationResult;
 
-      await tx.tenantMembership.create({
-        data: {
-          tenantId: newTenant.id,
-          userId: newUser.id,
-          roleId: clientAdminRole.id,
-          isDefault: true,
-        },
-      });
-
-      // Generate verification token (expires in 24 hours)
-      const rawVerificationToken = generateSessionToken();
-      const tokenHash = hashToken(rawVerificationToken);
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      await tx.emailVerificationToken.create({
-        data: {
-          userId: newUser.id,
-          email,
-          tokenHash,
-          expiresAt,
-        },
-      });
-
-      return { tenant: newTenant, user: newUser, token: rawVerificationToken };
-    });
-
-    // 6. Send verification / welcome email via MailService
+    // 7. Dispatch verification email via MailService
     await this.mailService.sendVerificationEmail(email, token, tenant.name);
-
-    // 7. Generate active session token so user can immediately proceed to payment checkout
-    const rawToken = generateSessionToken();
-    const sessionTokenHash = hashToken(rawToken);
-    const ttlHours = this.config.SESSION_TTL_HOURS;
-    const sessionExpiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        activeTenantId: tenant.id,
-        sessionTokenHash,
-        ipAddress,
-        userAgent,
-        mfaVerified: true,
-        expiresAt: sessionExpiresAt,
-      },
-    });
 
     // 8. Record audit logs
     await this.auditService.record({
@@ -423,7 +458,7 @@ export class AuthService {
       resourceType: 'TENANT',
       resourceId: tenant.id,
       action: 'ORGANIZATION_SIGNUP',
-      metadata: { slug: tenant.slug, companyName: tenant.name, sessionId: session.id },
+      metadata: { slug: tenant.slug, companyName: tenant.name },
       ipAddress,
       userAgent,
     });
@@ -447,7 +482,7 @@ export class AuthService {
       isActive: true,
       isSuperAdmin: false,
       mfaEnabled: false,
-      emailVerified: true,
+      emailVerified: false,
     };
 
     const membershipsInfo: TenantMembershipInfo[] = [
@@ -462,16 +497,15 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'Organization registered successfully.',
-      rawToken,
-      token: rawToken,
+      message: 'Organization registered successfully. Please verify your email address to activate your account.',
       user: userPrincipal,
       activeTenantId: tenant.id,
       memberships: membershipsInfo,
       mfaRequired: false,
       tenantSelectionRequired: false,
       tenantSlug: tenant.slug,
-      redirectUrl: '/checkout/starter',
+      emailVerificationRequired: true,
+      redirectUrl: `/verify-email?email=${encodeURIComponent(email)}`,
     };
   }
 

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { emailSchema, passwordSchema, uuidSchema } from './common';
+import { isValidIanaTimezone } from './timezone';
+import { normalizePhoneNumber } from './phone';
 
 export const loginSchema = z.object({
   email: emailSchema,
@@ -38,9 +40,27 @@ export const registerOrganizationSchema = z.object({
     .max(60, 'Organization slug must not exceed 60 characters')
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must only contain lowercase alphanumeric characters and hyphens'),
   businessEmail: emailSchema.optional(),
-  phoneNumber: z.string().trim().max(30).optional(),
+  phoneNumber: z
+    .string()
+    .trim()
+    .max(30)
+    .refine(
+      (val) => {
+        if (!val) return true;
+        return normalizePhoneNumber(val).isValid;
+      },
+      { message: 'Invalid international phone number' }
+    )
+    .optional(),
   country: z.string().trim().max(100).optional(),
-  timezone: z.string().trim().max(50).optional(),
+  timezone: z
+    .string()
+    .trim()
+    .max(50)
+    .refine((val) => !val || isValidIanaTimezone(val), {
+      message: 'Invalid IANA timezone identifier (e.g. Asia/Kolkata, America/New_York)',
+    })
+    .optional(),
   fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').max(150),
   email: emailSchema,
   password: passwordSchema,
