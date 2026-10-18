@@ -1372,6 +1372,18 @@ export class TenantsService {
       timestamp: new Date().toISOString(),
     };
   }
+
+  /**
+   * Super Admin: Permanently delete any tenant organization and its data by slug or name or ID.
+   */
+  async purgeTenant(identifier: string) {
+    const result = await this.prisma.purgeTarget(identifier);
+    return {
+      success: true,
+      message: `Permanently purged ${result.purgedTenants} tenant(s) and ${result.purgedUsers} user(s) matching "${identifier}"`,
+      ...result,
+    };
+  }
 }
 
 
