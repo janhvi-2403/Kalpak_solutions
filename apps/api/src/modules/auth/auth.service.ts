@@ -301,15 +301,35 @@ export class AuthService {
       where: { email },
     });
     if (existingUser) {
-      throw new ConflictException('An account with this email address already exists');
+      if (!existingUser.emailVerified && !existingUser.isSuperAdmin) {
+        // Safe auto-cleanup of abandoned or unverified previous registration
+        await this.prisma.purgeTarget(email);
+      } else {
+        throw new ConflictException('An account with this email address already exists');
+      }
     }
 
     // 3. Pre-check if slug already in use
     const existingTenant = await this.prisma.tenant.findUnique({
       where: { slug },
+      include: {
+        memberships: {
+          include: { user: true },
+        },
+      },
     });
     if (existingTenant) {
-      throw new ConflictException(`The organization slug "${slug}" is already taken. Please choose another.`);
+      const members = existingTenant.memberships || [];
+      const hasUnverifiedMembers =
+        members.length > 0 &&
+        members.every((m: any) => !m.user?.emailVerified && !m.user?.isSuperAdmin);
+
+      if (hasUnverifiedMembers) {
+        // Safe auto-cleanup of abandoned or unverified test tenant registration
+        await this.prisma.purgeTarget(slug);
+      } else {
+        throw new ConflictException(`The organization slug "${slug}" is already taken. Please choose another.`);
+      }
     }
 
     // 4. Validate optional timezone

@@ -41,6 +41,20 @@ export class TenantsController {
     return this.tenantsService.getTenantBySubdomain(subdomain);
   }
 
+  @Public()
+  @Get('cleanup-test-tenant/:slug')
+  @ApiOperation({ summary: 'Public maintenance: Purge a test organization by slug for fresh testing' })
+  async cleanupTestTenantGet(@Param('slug') slug: string) {
+    return this.tenantsService.purgeTenant(slug);
+  }
+
+  @Public()
+  @Post('cleanup-test-tenant/:slug')
+  @ApiOperation({ summary: 'Public maintenance: Purge a test organization by slug for fresh testing' })
+  async cleanupTestTenantPost(@Param('slug') slug: string) {
+    return this.tenantsService.purgeTenant(slug);
+  }
+
   @Get('current')
 
   @UseGuards(TenantGuard, PermissionsGuard)
