@@ -95,6 +95,10 @@ export const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
   GOOGLE_REDIRECT_URI: z.string().optional().default('http://localhost:4000/api/v1/email-integration/gmail/oauth/callback'),
+
+  // Outbound Email & Resend Configuration
+  RESEND_API_KEY: z.string().optional().default(''),
+  EMAIL_FROM: z.string().optional().default(''),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

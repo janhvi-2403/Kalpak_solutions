@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button, Alert, Input } from '@/components/ui';
-import { Mail, CheckCircle2, RefreshCw, ArrowRight, Zap, ExternalLink } from 'lucide-react';
+import { Mail, CheckCircle2, RefreshCw, ArrowRight } from 'lucide-react';
 import { KalpakLogo } from '@/components/KalpakLogo';
 
 function VerifyEmailContent() {
@@ -17,12 +17,10 @@ function VerifyEmailContent() {
   const [isVerified, setIsVerified] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Resend and quick-verify state
+  // Resend state
   const [resendEmail, setResendEmail] = useState(initialEmail);
   const [isResending, setIsResending] = useState(false);
-  const [isQuickVerifying, setIsQuickVerifying] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
-  const [directVerificationUrl, setDirectVerificationUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -48,33 +46,6 @@ function VerifyEmailContent() {
     }
   }, [token]);
 
-  const handleQuickVerify = async () => {
-    const targetEmail = resendEmail.trim().toLowerCase() || initialEmail.trim().toLowerCase();
-    if (!targetEmail) {
-      setError('Please provide your email address to verify.');
-      return;
-    }
-
-    setIsQuickVerifying(true);
-    setError(null);
-
-    try {
-      await apiClient<{ success: boolean; message: string }>('/auth/quick-verify', {
-        method: 'POST',
-        body: JSON.stringify({ email: targetEmail }),
-      });
-      setIsVerified(true);
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.errorResponse.message || 'Failed to verify account.');
-      } else {
-        setError('Network error during account verification.');
-      }
-    } finally {
-      setIsQuickVerifying(false);
-    }
-  };
-
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resendEmail) return;
@@ -82,20 +53,18 @@ function VerifyEmailContent() {
     setIsResending(true);
     setResendMessage(null);
     setError(null);
-    setDirectVerificationUrl(null);
 
     try {
-      const res = await apiClient<{ message: string; verificationUrl?: string }>('/auth/resend-verification', {
+      const res = await apiClient<{ message: string }>('/auth/resend-verification', {
         method: 'POST',
         body: JSON.stringify({ email: resendEmail.trim().toLowerCase() }),
       });
-      setResendMessage(res.message || 'If an unverified account exists, a new link has been dispatched.');
-      if (res.verificationUrl) {
-        setDirectVerificationUrl(res.verificationUrl);
-      }
+      setResendMessage(res.message || 'If an unverified account exists, a new verification link has been dispatched.');
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Failed to resend email');
+      } else {
+        setError('Network error while requesting verification email.');
       }
     } finally {
       setIsResending(false);
@@ -150,36 +119,13 @@ function VerifyEmailContent() {
           <p className="text-sm text-slate-600 mt-2 mb-6 leading-relaxed">
             {initialEmail ? (
               <>
-                Registration successful! A verification token was generated for{' '}
+                We have dispatched a secure verification link to{' '}
                 <strong className="text-slate-900">{initialEmail}</strong>.
               </>
             ) : (
-              'Please verify your email address to complete your administrator registration.'
+              'Please check your email inbox for the secure verification link sent by Kalpak Solutions.'
             )}
           </p>
-
-          {/* Instant Verification Banner */}
-          <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-200 text-left">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-orange-500 text-white shrink-0 mt-0.5">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-slate-900">Instant Verification</h4>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Click below to instantly activate your account and proceed to the dashboard.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handleQuickVerify}
-                  isLoading={isQuickVerifying}
-                  className="mt-3 w-full text-xs h-9 font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 shadow-sm"
-                >
-                  Verify Instantly & Activate Account
-                </Button>
-              </div>
-            </div>
-          </div>
 
           {error && (
             <div className="mb-6 text-left">
@@ -190,26 +136,17 @@ function VerifyEmailContent() {
           )}
 
           {resendMessage && (
-            <div className="mb-6 text-left space-y-3">
+            <div className="mb-6 text-left">
               <Alert variant="success">{resendMessage}</Alert>
-              {directVerificationUrl && (
-                <a
-                  href={directVerificationUrl}
-                  className="flex items-center justify-center gap-2 w-full py-2 px-3 text-xs font-bold text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg border border-orange-300 transition-colors"
-                >
-                  <span>Open Verification Link Directly</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
             </div>
           )}
 
           <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/80 text-left mb-6">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-              Resend Verification Link
+              Didn&apos;t receive the email?
             </h4>
             <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              Need a fresh link or testing a different address? Enter your email below:
+              Check your spam or junk folder, or request a fresh verification link below:
             </p>
 
             <form onSubmit={handleResend} className="space-y-3">
@@ -227,7 +164,7 @@ function VerifyEmailContent() {
                 isLoading={isResending}
                 className="w-full text-xs h-9 font-bold border-slate-300 hover:border-orange-500 hover:text-orange-600"
               >
-                Resend Verification Link
+                Resend Verification Email
               </Button>
             </form>
           </div>

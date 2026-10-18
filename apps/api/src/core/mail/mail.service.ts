@@ -1,12 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { getConfig } from '@kalpak/config';
 import { logger } from '@kalpak/logger';
-
+import { Resend } from 'resend';
 import * as nodemailer from 'nodemailer';
 
+export interface EmailDispatchOptions {
+  to: string | string[];
+  subject: string;
+  text: string;
+  html: string;
+  from?: string;
+  replyTo?: string;
+}
+
+export interface EmailDispatchResult {
+  success: boolean;
+  messageId?: string;
+  provider?: 'resend' | 'smtp' | 'none';
+  error?: string;
+}
+
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly config = getConfig();
+  private resend: Resend | null = null;
+
+  onModuleInit() {
+    this.initResend();
+  }
 
   public getWebBaseUrl(): string {
     const configured = this.config.WEB_BASE_URL;
@@ -16,8 +37,65 @@ export class MailService {
     return configured || 'https://kalpak-web.onrender.com';
   }
 
+  /**
+   * Initializes official Resend SDK client using server-side RESEND_API_KEY.
+   */
+  private initResend(): Resend | null {
+    if (this.resend) {
+      return this.resend;
+    }
+
+    const resendKey = (
+      process.env.RESEND_API_KEY ||
+      this.config.RESEND_API_KEY ||
+      (process.env.EMAIL_PROVIDER === 'resend' ? process.env.EMAIL_PROVIDER_API_KEY : '') ||
+      ''
+    ).trim();
+
+    if (resendKey) {
+      try {
+        this.resend = new Resend(resendKey);
+        logger.info('[MailService] Resend email delivery service successfully initialized');
+        return this.resend;
+      } catch (err: any) {
+        logger.error({ error: err.message }, '[MailService] Failed to initialize Resend client');
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns authorized sender address.
+   * Uses EMAIL_FROM if set; defaults to onboarding@resend.dev for Resend sandbox testing.
+   */
+  public getFromAddress(customSender?: string): string {
+    if (customSender && customSender.trim()) {
+      return customSender.trim();
+    }
+
+    const configuredFrom = (process.env.EMAIL_FROM || this.config.EMAIL_FROM || '').trim();
+    if (configuredFrom) {
+      return configuredFrom;
+    }
+
+    // Default sender authorized for Resend accounts before custom domain verification
+    if (this.resend || process.env.RESEND_API_KEY) {
+      return 'Kalpak Solutions <onboarding@resend.dev>';
+    }
+
+    return (
+      process.env.SMTP_FROM ||
+      process.env.SMTP_USER ||
+      process.env.GMAIL_USER ||
+      `Kalpak Solutions <noreply@${this.config.APP_BASE_DOMAIN || 'kalpak.solutions'}>`
+    );
+  }
+
+  /**
+   * Secondary fallback transporter for standard SMTP / Gmail / SendGrid
+   */
   private getTransporter(): nodemailer.Transporter | null {
-    // 1. Standard SMTP configuration (compatible with Mailgun, Brevo, AWS SES, SendGrid, Resend SMTP)
     if (process.env.SMTP_HOST) {
       return nodemailer.createTransport({
         host: process.env.SMTP_HOST,
@@ -33,22 +111,7 @@ export class MailService {
       });
     }
 
-    // 2. Resend API Key via SMTP
-    const resendKey = process.env.RESEND_API_KEY || (process.env.EMAIL_PROVIDER === 'resend' ? process.env.EMAIL_PROVIDER_API_KEY : '');
-    if (resendKey) {
-      return nodemailer.createTransport({
-        host: 'smtp.resend.com',
-        port: 465,
-        secure: true,
-        auth: {
-          user: 'resend',
-          pass: resendKey,
-        },
-      });
-    }
-
-    // 3. SendGrid API Key via SMTP
-    const sendgridKey = process.env.SENDGRID_API_KEY || (process.env.EMAIL_PROVIDER === 'sendgrid' ? process.env.EMAIL_PROVIDER_API_KEY : '');
+    const sendgridKey = process.env.SENDGRID_API_KEY || '';
     if (sendgridKey) {
       return nodemailer.createTransport({
         host: 'smtp.sendgrid.net',
@@ -61,7 +124,6 @@ export class MailService {
       });
     }
 
-    // 4. Gmail App Password
     if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
       return nodemailer.createTransport({
         service: 'gmail',
@@ -75,14 +137,106 @@ export class MailService {
     return null;
   }
 
-  async sendVerificationEmail(email: string, token: string, organizationName?: string): Promise<void> {
+  /**
+   * Unified email dispatcher: sends via Resend first, falls back to SMTP if configured.
+   */
+  async sendEmail(options: EmailDispatchOptions): Promise<EmailDispatchResult> {
+    const { to, subject, text, html, replyTo } = options;
+    const recipients = Array.isArray(to) ? to : [to];
+    const fromAddress = this.getFromAddress(options.from);
+
+    // 1. Primary Email Provider: Official Resend SDK
+    const resendClient = this.initResend();
+    if (resendClient) {
+      try {
+        const { data, error } = await resendClient.emails.send({
+          from: fromAddress,
+          to: recipients,
+          subject,
+          text,
+          html,
+          replyTo: replyTo || undefined,
+        });
+
+        if (error) {
+          logger.error(
+            { error: error.message, to: recipients, subject },
+            '[MailService] Resend email delivery failed'
+          );
+          return { success: false, provider: 'resend', error: error.message };
+        }
+
+        logger.info(
+          { id: data?.id, to: recipients, subject },
+          '[MailService] Email delivered successfully via Resend'
+        );
+        return { success: true, messageId: data?.id, provider: 'resend' };
+      } catch (err: any) {
+        logger.error(
+          { error: err.message, to: recipients },
+          '[MailService] Unexpected error sending via Resend SDK'
+        );
+        return { success: false, provider: 'resend', error: err.message };
+      }
+    }
+
+    // 2. Secondary Provider: SMTP Transporter (if configured)
+    const transporter = this.getTransporter();
+    if (transporter) {
+      try {
+        const info = await transporter.sendMail({
+          from: fromAddress.includes('<') ? fromAddress : `"Kalpak Solutions" <${fromAddress}>`,
+          to: recipients.join(', '),
+          subject,
+          text,
+          html,
+          replyTo: replyTo || undefined,
+        });
+
+        logger.info(
+          { messageId: info.messageId, to: recipients, subject },
+          '[MailService] Email sent successfully via SMTP'
+        );
+        return { success: true, messageId: info.messageId, provider: 'smtp' };
+      } catch (err: any) {
+        logger.error(
+          { error: err.message, to: recipients },
+          '[MailService] Failed to send email via SMTP'
+        );
+        return { success: false, provider: 'smtp', error: err.message };
+      }
+    }
+
+    // 3. Fallback when no outbound mail provider is configured
+    logger.warn(
+      { to: recipients, subject },
+      '[MailService] No outbound email provider configured. Please set RESEND_API_KEY or SMTP_HOST'
+    );
+    return { success: false, provider: 'none', error: 'No email provider configured' };
+  }
+
+  /**
+   * Dispatches authentic account verification email containing secure single-use token link.
+   */
+  async sendVerificationEmail(
+    email: string,
+    token: string,
+    organizationName?: string
+  ): Promise<EmailDispatchResult> {
     const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
     const subject = `Verify your email address - ${organizationName || 'Kalpak Solutions'}`;
-    const textContent = `Please verify your email by clicking: ${verificationUrl}`;
+    const textContent = `Please verify your email address to complete your registration${
+      organizationName ? ` with ${organizationName}` : ''
+    } by visiting:\n\n${verificationUrl}\n\nThis verification link is valid for 24 hours.`;
+
     const htmlContent = `
 <!DOCTYPE html>
 <html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b;">
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
   <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 24px; color: #ffffff;">
       <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Kalpak Solutions</h1>
@@ -91,213 +245,172 @@ export class MailService {
     <div style="padding: 24px;">
       <p style="font-size: 15px; margin-top: 0;">Hello,</p>
       <p style="font-size: 14px; line-height: 1.6; color: #475569;">
-        Please confirm your email address to complete your registration${organizationName ? ` with <strong>${organizationName}</strong>` : ''}.
+        Please confirm your email address to complete your registration${
+          organizationName ? ` with <strong>${organizationName}</strong>` : ''
+        }.
       </p>
       <div style="margin: 24px 0; text-align: center;">
         <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
           Verify Email Address
         </a>
       </div>
-      <p style="font-size: 11px; word-break: break-all; color: #64748b; font-family: monospace;">${verificationUrl}</p>
+      <p style="font-size: 12px; color: #64748b;">This verification link will expire in 24 hours.</p>
+      <p style="font-size: 11px; word-break: break-all; color: #94a3b8; font-family: monospace;">${verificationUrl}</p>
     </div>
   </div>
 </body>
 </html>`;
 
-    const transporter = this.getTransporter();
-    if (transporter) {
-      try {
-        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || `noreply@${this.config.APP_BASE_DOMAIN}`;
-        await transporter.sendMail({
-          from: `"Kalpak Solutions" <${fromAddress}>`,
-          to: email,
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
-        logger.info({ to: email, subject }, '[MailService] Verification email sent via SMTP');
-      } catch (err: any) {
-        logger.error({ error: err.message, to: email }, '[MailService] Failed to send verification email via SMTP');
-      }
-    }
-
-    logger.info(
-      {
-        to: email,
-        organizationName,
-        actionUrl: verificationUrl,
-      },
-      `[MailService] EMAIL VERIFICATION LINK: ${verificationUrl}`
-    );
-
-    // Development Console Output for ease of testing
-    console.log('\n======================================================');
-    console.log(`[TRANSACTIONAL EMAIL] Verify Your Email Address`);
-    console.log(`Recipient: ${email}`);
-    if (organizationName) console.log(`Organization: ${organizationName}`);
-    console.log(`Verification URL: ${verificationUrl}`);
-    console.log('======================================================\n');
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
   }
 
+  /**
+   * Dispatches password reset email with secure expiring reset link.
+   */
+  async sendPasswordResetEmail(email: string, token: string): Promise<EmailDispatchResult> {
+    const resetUrl = `${this.getWebBaseUrl()}/reset-password?token=${token}`;
+    const subject = 'Reset your password - Kalpak Solutions';
+    const textContent = `You recently requested to reset the password for your Kalpak Solutions account. Use the following link to choose a new password:\n\n${resetUrl}\n\nThis link will expire in 1 hour. If you did not request a password reset, please ignore this email.`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 24px; color: #ffffff;">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Kalpak Solutions</h1>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Password Reset Request</p>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 15px; margin-top: 0;">Hello,</p>
+      <p style="font-size: 14px; line-height: 1.6; color: #475569;">
+        We received a request to reset your password. Click the button below to set a new password:
+      </p>
+      <div style="margin: 24px 0; text-align: center;">
+        <a href="${resetUrl}" style="background-color: #ea580c; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
+          Reset Password
+        </a>
+      </div>
+      <p style="font-size: 12px; color: #64748b;">This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+      <p style="font-size: 11px; word-break: break-all; color: #94a3b8; font-family: monospace;">${resetUrl}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
+  }
+
+  /**
+   * Dispatches support email verification code and link.
+   */
   async sendSupportEmailVerification(options: {
     email: string;
     code: string;
     token: string;
     organizationName: string;
     tenantSlug?: string;
-  }): Promise<void> {
+  }): Promise<EmailDispatchResult> {
     const { email, code, token, organizationName, tenantSlug } = options;
     const verificationUrl = `${this.getWebBaseUrl()}/verify-support-email?token=${token}${
       tenantSlug ? `&tenant=${tenantSlug}` : ''
     }`;
 
     const subject = `Verify support email for ${organizationName}: ${code}`;
-
-    const textContent = `
-Hello,
-
-A request was made to verify "${email}" as an official support email address for ${organizationName}.
-
-Your 6-Digit Verification Code: ${code}
-
-Or verify immediately with this secure link:
-${verificationUrl}
-
-This code and link will expire in 24 hours.
-
-Best regards,
-Kalpak Solutions Platform Team
-`;
+    const textContent = `A request was made to verify "${email}" as an official support email address for ${organizationName}.\n\nYour 6-Digit Verification Code: ${code}\n\nOr verify directly: ${verificationUrl}\n\nExpires in 24 hours.`;
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
-  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
     <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 32px 28px; color: #ffffff;">
-      <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;">Kalpak Solutions</h1>
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800;">Kalpak Solutions</h1>
       <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.95;">Support Email Verification for <strong>${organizationName}</strong></p>
     </div>
     <div style="padding: 28px;">
-      <p style="font-size: 15px; margin-top: 0; color: #334155; line-height: 1.5;">
-        You are receiving this email because <strong>${organizationName}</strong> configured <strong>${email}</strong> as their support channel for service calls and ticket management.
+      <p style="font-size: 15px; margin-top: 0; color: #334155;">
+        You are receiving this email because <strong>${organizationName}</strong> configured <strong>${email}</strong> as their support channel.
       </p>
-
       <div style="background-color: #fff7ed; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #fed7aa; text-align: center;">
-        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #c2410c;">Your Verification Code</span>
+        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #c2410c;">Your Verification Code</span>
         <div style="font-size: 32px; font-weight: 900; letter-spacing: 0.25em; color: #ea580c; font-family: monospace; margin: 8px 0;">
           ${code}
         </div>
-        <p style="margin: 0; font-size: 12px; color: #9a3412;">Enter this 6-digit code in your email settings dialog.</p>
       </div>
-
       <div style="text-align: center; margin: 28px 0;">
-        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 13px 32px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.25);">
-          Confirm & Verify Support Email
+        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 13px 32px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 14px; display: inline-block;">
+          Confirm Support Email
         </a>
       </div>
-
-      <div style="background-color: #f8fafc; border-radius: 8px; padding: 12px; margin-top: 24px; border: 1px dashed #cbd5e1;">
-        <p style="margin: 0 0 4px 0; font-size: 11px; color: #64748b; font-weight: 600;">Or copy this secure link into your browser:</p>
-        <p style="margin: 0; font-size: 11px; word-break: break-all; font-family: monospace; color: #ea580c;">
-          ${verificationUrl}
-        </p>
-      </div>
-
-      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8; line-height: 1.5;">
-        ⏱️ <strong>Time-limited:</strong> This code and single-use verification link will expire in <strong>24 hours</strong>.<br/>
-        🔒 Only verified email addresses can be activated for email-to-ticket ingestion and outbound customer replies.
-      </div>
+      <p style="font-size: 11px; color: #94a3b8; font-family: monospace;">${verificationUrl}</p>
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 
-    const transporter = this.getTransporter();
-    if (transporter) {
-      try {
-        const fromAddress =
-          process.env.SMTP_FROM ||
-          process.env.SMTP_USER ||
-          process.env.GMAIL_USER ||
-          `noreply@${this.config.APP_BASE_DOMAIN}`;
-        await transporter.sendMail({
-          from: `"${organizationName} Support" <${fromAddress}>`,
-          to: email,
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
-
-        logger.info(
-          { to: email, subject, organizationName },
-          `[MailService] Support email verification successfully dispatched via SMTP`
-        );
-      } catch (err: any) {
-        logger.error(
-          { error: err.message, to: email },
-          `[MailService] Failed to dispatch support email verification via SMTP: ${err.message}`
-        );
-      }
-    }
-
-    logger.info(
-      {
-        to: email,
-        organizationName,
-        code,
-        actionUrl: verificationUrl,
-      },
-      `[MailService] SUPPORT EMAIL VERIFICATION CODE: ${code} | LINK: ${verificationUrl}`
-    );
-
-    console.log('\n======================================================');
-    console.log(`📧 [REAL SUPPORT EMAIL VERIFICATION DISPATCHED]`);
-    console.log(`Recipient: ${email}`);
-    console.log(`Organization: ${organizationName}`);
-    console.log(`6-Digit Verification Code: ${code}`);
-    console.log(`Verification URL: ${verificationUrl}`);
-    console.log('======================================================\n');
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
   }
 
-  async sendBootstrapVerificationOtp(email: string, otpCode: string, token: string): Promise<void> {
+  /**
+   * Dispatches Super Admin bootstrap installation OTP code.
+   */
+  async sendBootstrapVerificationOtp(
+    email: string,
+    otpCode: string,
+    token: string
+  ): Promise<EmailDispatchResult> {
     const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
+    const subject = `Super Admin Email Verification Code: ${otpCode}`;
+    const textContent = `Your 6-Digit Super Admin Setup Code is: ${otpCode}\n\nOr verify directly at: ${verificationUrl}\n\nValid for 15 minutes.`;
 
-    logger.info(
-      {
-        to: email,
-        actionUrl: verificationUrl,
-      },
-      `[MailService] SUPER ADMIN EMAIL OTP: ${otpCode} | LINK: ${verificationUrl}`
-    );
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 24px; color: #ffffff;">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Kalpak Solutions</h1>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Super Admin Security Verification</p>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 15px; margin-top: 0;">Hello Administrator,</p>
+      <p style="font-size: 14px; color: #475569;">Enter this 6-digit confirmation code to complete system initialization:</p>
+      <div style="background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border: 1px solid #fed7aa; text-align: center;">
+        <span style="font-size: 32px; font-weight: 900; letter-spacing: 0.25em; color: #ea580c; font-family: monospace;">${otpCode}</span>
+      </div>
+      <p style="font-size: 12px; color: #64748b;">Valid for 15 minutes.</p>
+    </div>
+  </div>
+</body>
+</html>`;
 
-    console.log('\n======================================================');
-    console.log(`[TRANSACTIONAL EMAIL] Super Admin Email Verification Code`);
-    console.log(`Recipient: ${email}`);
-    console.log(`6-Digit Verification Code: ${otpCode}`);
-    console.log(`Verification URL: ${verificationUrl}`);
-    console.log('======================================================\n');
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
   }
 
-  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-    const resetUrl = `${this.getWebBaseUrl()}/reset-password?token=${token}`;
-
-    logger.info(
-      {
-        to: email,
-        actionUrl: resetUrl,
-      },
-      `[MailService] PASSWORD RESET LINK: ${resetUrl}`
-    );
-
-    console.log('\n======================================================');
-    console.log(`[TRANSACTIONAL EMAIL] Reset Your Password`);
-    console.log(`Recipient: ${email}`);
-    console.log(`Reset URL: ${resetUrl}`);
-    console.log('======================================================\n');
-  }
-
+  /**
+   * Dispatches employee workspace invitation email.
+   */
   async sendInvitationEmail(
     email: string,
     token: string,
@@ -305,8 +418,8 @@ Kalpak Solutions Platform Team
     role: string,
     department?: string,
     fullName?: string,
-    phone?: string
-  ): Promise<void> {
+    _phone?: string
+  ): Promise<EmailDispatchResult> {
     const inviteUrl = `${this.getWebBaseUrl()}/accept-invitation?token=${token}`;
     const isCustomer = role === 'CUSTOMER';
     const roleTitle = role === 'DEPARTMENT_ADMIN' ? 'Department Head' : isCustomer ? 'Customer' : role;
@@ -317,249 +430,234 @@ Kalpak Solutions Platform Team
       ? `Invitation to join ${organizationName} Customer Portal`
       : `You are invited to join ${organizationName} as ${roleTitle}${deptInfo}`;
 
-    const textContent = isCustomer
-      ? `
-${greeting}
-
-You have been invited by ${organizationName} to access their Kalpak Service Operations Customer Portal.
-
-Through the customer portal, you can raise service tickets, monitor ticket progress, manage your equipment assets, and communicate with service teams.
-
-To activate your account and set your password, please use the secure link below:
-${inviteUrl}
-
-Security Note:
-This is a secure, single-use activation invitation valid for 7 days. If you did not anticipate this invitation, please contact ${organizationName}.
-
-Best regards,
-The ${organizationName} Team
-Powered by Kalpak Solutions
-`
-      : `
+    const textContent = `
 ${greeting}
 
 You have been invited by ${organizationName} to join their Kalpak Service Operations workspace as ${roleTitle}${deptInfo}.
 
-To activate your account and access your dashboard, please complete your setup using the secure link below:
+To activate your account and access your dashboard, please complete your setup using the link below:
 ${inviteUrl}
 
-Setup Requirements:
-1. Create a secure password for your account
-2. Verify your contact phone number ${phone ? `(${phone})` : ''}
-3. Configure Multi-Factor Authentication (2FA) with an Authenticator app (Google Authenticator / Authy)
-
-Security Note:
-This is a secure, single-use activation invitation valid for 7 days. If you did not anticipate this invitation, please contact your organization administrator.
-
-Best regards,
-The ${organizationName} Team
-Powered by Kalpak Solutions
+This invitation is valid for 7 days.
 `;
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>${subject}</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 32px 16px; color: #1e293b;">
-  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 32px 16px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
     <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
-      <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Kalpak Service Operations</h1>
+      <h1 style="margin: 0; font-size: 24px; font-weight: 800;">Kalpak Service Operations</h1>
       <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Official Workspace Invitation</p>
     </div>
-    
     <div style="padding: 32px 24px;">
       <p style="font-size: 16px; font-weight: 600; margin-top: 0;">${greeting}</p>
-      
       <p style="font-size: 14px; line-height: 1.6; color: #475569;">
-        You have been officially appointed and invited by <strong>${organizationName}</strong> to join as:
+        You have been officially invited by <strong>${organizationName}</strong> to join as <strong>${roleTitle}</strong>${deptInfo}.
       </p>
-
-      <div style="background-color: #fff7ed; border: 1px solid #ffedd5; border-radius: 12px; padding: 16px; margin: 20px 0;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <tr>
-            <td style="padding: 4px 0; color: #9a3412; font-weight: 600; width: 140px;">Organization:</td>
-            <td style="padding: 4px 0; color: #1e293b; font-weight: 700;">${organizationName}</td>
-          </tr>
-          <tr>
-            <td style="padding: 4px 0; color: #9a3412; font-weight: 600;">Assigned Role:</td>
-            <td style="padding: 4px 0; color: #1e293b; font-weight: 700;">${roleTitle}</td>
-          </tr>
-          ${department ? `
-          <tr>
-            <td style="padding: 4px 0; color: #9a3412; font-weight: 600;">Department:</td>
-            <td style="padding: 4px 0; color: #ea580c; font-weight: 700;">${department}</td>
-          </tr>
-          ` : ''}
-          ${phone ? `
-          <tr>
-            <td style="padding: 4px 0; color: #9a3412; font-weight: 600;">Assigned Phone:</td>
-            <td style="padding: 4px 0; color: #1e293b; font-mono;">${phone}</td>
-          </tr>
-          ` : ''}
-        </table>
-      </div>
-
-      <p style="font-size: 14px; line-height: 1.6; color: #475569;">
-        Click the button below to accept your invitation, create your password, and activate multi-factor authentication:
-      </p>
-
-      <div style="text-align: center; margin: 28px 0;">
-        <a href="${inviteUrl}" style="background-color: #ea580c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 15px; font-weight: 700; border-radius: 10px; display: inline-block; box-shadow: 0 2px 4px rgba(234, 88, 12, 0.3);">
-          Accept Invitation & Activate Login →
+      <div style="margin: 28px 0; text-align: center;">
+        <a href="${inviteUrl}" style="background-color: #ea580c; color: #ffffff; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 14px; display: inline-block;">
+          Accept Invitation & Setup Account
         </a>
       </div>
-
-      <div style="background-color: #f8fafc; border-radius: 8px; padding: 12px; margin-top: 24px; border: 1px dashed #cbd5e1;">
-        <p style="margin: 0 0 6px 0; font-size: 11px; color: #64748b; font-weight: 600;">Or copy this secure link into your browser:</p>
-        <p style="margin: 0; font-size: 11px; word-break: break-all; font-family: monospace; color: #0284c7;">
-          ${inviteUrl}
-        </p>
-      </div>
-
-      <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8; line-height: 1.5;">
-        🔒 <strong>Security Notice:</strong> This single-use invitation will expire in 7 days. Multi-factor authentication is required upon first login to protect your organization's service operations.
-      </div>
+      <p style="font-size: 12px; color: #64748b;">This invitation link will expire in 7 days.</p>
+      <p style="font-size: 11px; word-break: break-all; color: #94a3b8; font-family: monospace;">${inviteUrl}</p>
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 
-    // Try real SMTP delivery if configured
-    const transporter = this.getTransporter();
-    if (transporter) {
-      try {
-        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || `noreply@${this.config.APP_BASE_DOMAIN}`;
-        await transporter.sendMail({
-          from: `"${organizationName}" <${fromAddress}>`,
-          to: email,
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
-
-        logger.info(
-          { to: email, subject },
-          `[MailService] Real invitation email successfully dispatched via SMTP`
-        );
-      } catch (err: any) {
-        logger.error(
-          { error: err.message, to: email },
-          `[MailService] Failed to dispatch via SMTP, logging fallback link`
-        );
-      }
-    }
-
-    logger.info(
-      {
-        to: email,
-        organizationName,
-        role,
-        department,
-        actionUrl: inviteUrl,
-      },
-      `[MailService] EMPLOYEE INVITATION LINK: ${inviteUrl}`
-    );
-
-    console.log('\n======================================================');
-    console.log(`📧 [REAL INVITATION EMAIL DISPATCHED]`);
-    console.log(`Recipient: ${email} ${fullName ? `(${fullName})` : ''}`);
-    console.log(`Organization: ${organizationName}`);
-    console.log(`Role: ${roleTitle}`);
-    if (department) console.log(`Department: ${department}`);
-    if (phone) console.log(`Phone: ${phone}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Accept Invitation URL: ${inviteUrl}`);
-    console.log('======================================================\n');
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
   }
 
+  /**
+   * Dispatches customer self-service portal invitation.
+   */
   async sendCustomerPortalInvitationEmail(
     email: string,
     customerName: string,
     organizationName: string,
     portalUrl: string,
     tempPassword?: string
-  ): Promise<void> {
-    const greeting = customerName ? `Hello ${customerName},` : 'Hello,';
-    const subject = `Welcome to the ${organizationName} Customer Support Portal`;
-
-    const textContent = `
-${greeting}
-
-You have been invited by ${organizationName} to access their dedicated self-service customer support portal.
-
-Using your portal account, you can:
-- Raise service requests and tickets directly 24/7
-- Monitor live technician assignment and work orders
-- Track equipment warranties and maintenance records
-
-Portal Access Link: ${portalUrl}
-Login Email: ${email}
-${tempPassword ? `Temporary Access Password: ${tempPassword}\n(Please update your password after initial sign in)` : ''}
-
-Best regards,
-${organizationName} Support Team
-`;
+  ): Promise<EmailDispatchResult> {
+    const subject = `Your Customer Support Portal Access - ${organizationName}`;
+    const textContent = `Hello ${customerName},\n\nYou now have self-service access to the ${organizationName} Customer Support Portal.\n\nSign in here: ${portalUrl}\nLogin Email: ${email}${
+      tempPassword ? `\nTemporary Password: ${tempPassword}` : ''
+    }`;
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b;">
-  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-    <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); padding: 28px 24px; color: #ffffff;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 28px 24px; color: #ffffff;">
       <h1 style="margin: 0; font-size: 20px; font-weight: 700;">${organizationName}</h1>
-      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Customer Self-Service Support Portal</p>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Customer Portal Access</p>
     </div>
     <div style="padding: 24px;">
-      <p style="font-size: 15px; margin-top: 0;">${greeting}</p>
+      <p style="font-size: 15px; margin-top: 0;">Hello <strong>${customerName}</strong>,</p>
       <p style="font-size: 14px; line-height: 1.6; color: #475569;">
-        You have been granted access to the official <strong>${organizationName}</strong> customer portal. You can now log service calls, track repair progress, and view equipment history anytime.
+        You can now track your support tickets, review service contracts, and request maintenance through your customer portal.
       </p>
       <div style="background: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0; border: 1px solid #cbd5e1;">
-        <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase;">Portal Login Details</p>
-        <p style="margin: 0 0 6px 0; font-size: 13px;"><strong>Login Email:</strong> <span style="font-family: monospace; color: #1e293b;">${email}</span></p>
-        ${tempPassword ? `<p style="margin: 0; font-size: 13px;"><strong>Temporary Password:</strong> <span style="font-family: monospace; color: #2563eb; font-weight: bold; background: #ffffff; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1;">${tempPassword}</span></p>` : ''}
+        <p style="margin: 0 0 6px 0; font-size: 13px;"><strong>Login Email:</strong> <span style="font-family: monospace;">${email}</span></p>
+        ${tempPassword ? `<p style="margin: 0; font-size: 13px;"><strong>Temporary Password:</strong> <span style="font-family: monospace; color: #2563eb; font-weight: bold;">${tempPassword}</span></p>` : ''}
       </div>
       <div style="margin: 24px 0; text-align: center;">
         <a href="${portalUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
           Sign In to Customer Portal
         </a>
       </div>
-      <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-        If you have questions or encounter any issues, reach out to your ${organizationName} account manager.
-      </p>
     </div>
   </div>
 </body>
-</html>
-`;
+</html>`;
 
-    const transporter = this.getTransporter();
-    if (transporter) {
-      try {
-        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || `noreply@${this.config.APP_BASE_DOMAIN}`;
-        await transporter.sendMail({
-          from: `"${organizationName}" <${fromAddress}>`,
-          to: email,
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
-        logger.info({ to: email, subject }, `[MailService] Customer portal invite sent via SMTP`);
-      } catch (err: any) {
-        logger.error({ error: err.message, to: email }, `[MailService] Failed to dispatch customer invite via SMTP`);
-      }
-    }
+    return this.sendEmail({
+      to: email,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
+  }
 
-    console.log('\n======================================================');
-    console.log(`📧 [CUSTOMER PORTAL INVITATION DISPATCHED]`);
-    console.log(`Recipient: ${email} (${customerName})`);
-    console.log(`Organization: ${organizationName}`);
-    console.log(`Portal URL: ${portalUrl}`);
-    if (tempPassword) console.log(`Temporary Password: ${tempPassword}`);
-    console.log('======================================================\n');
+  /**
+   * Transactional Notification: New ticket created
+   */
+  async sendTicketCreatedNotification(options: {
+    to: string;
+    ticketNumber: string;
+    title: string;
+    organizationName: string;
+    priority: string;
+    status: string;
+  }): Promise<EmailDispatchResult> {
+    const { to, ticketNumber, title, organizationName, priority, status } = options;
+    const subject = `[${ticketNumber}] Service Request Received: ${title}`;
+    const textContent = `Hello,\n\nA new service request #${ticketNumber} has been logged with ${organizationName}.\n\nTitle: ${title}\nPriority: ${priority}\nStatus: ${status}\n\nOur service team will update you on progress.`;
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 24px; color: #ffffff;">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 700;">Service Ticket Logged</h2>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Ticket #${ticketNumber}</p>
+    </div>
+    <div style="padding: 24px;">
+      <h3 style="margin: 0 0 12px 0; font-size: 16px;">${title}</h3>
+      <p style="font-size: 13px; color: #64748b; margin: 0 0 16px 0;">Organization: <strong>${organizationName}</strong> | Priority: <strong>${priority}</strong> | Status: <strong>${status}</strong></p>
+      <p style="font-size: 14px; color: #334155; line-height: 1.5;">Our support team is actively reviewing your request. You will receive updates as progress is made.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return this.sendEmail({ to, subject, text: textContent, html: htmlContent });
+  }
+
+  /**
+   * Transactional Notification: Ticket assigned to technician
+   */
+  async sendTicketAssignedNotification(options: {
+    to: string;
+    ticketNumber: string;
+    title: string;
+    assigneeName: string;
+    organizationName: string;
+  }): Promise<EmailDispatchResult> {
+    const { to, ticketNumber, title, assigneeName, organizationName } = options;
+    const subject = `[${ticketNumber}] Ticket Assigned to ${assigneeName}`;
+    const textContent = `Service ticket #${ticketNumber} (${title}) has been assigned to technician ${assigneeName} at ${organizationName}.`;
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: #0f172a; padding: 20px 24px; color: #ffffff;">
+      <h3 style="margin: 0; font-size: 16px;">Ticket Assignment Notice</h3>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 14px; color: #334155;">Ticket <strong>#${ticketNumber}</strong> has been assigned to <strong>${assigneeName}</strong>.</p>
+      <p style="font-size: 13px; color: #64748b;">Subject: ${title}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return this.sendEmail({ to, subject, text: textContent, html: htmlContent });
+  }
+
+  /**
+   * Transactional Notification: Ticket status updated / resolved / closed
+   */
+  async sendTicketStatusNotification(options: {
+    to: string;
+    ticketNumber: string;
+    title: string;
+    newStatus: string;
+    organizationName: string;
+  }): Promise<EmailDispatchResult> {
+    const { to, ticketNumber, title, newStatus, organizationName } = options;
+    const subject = `[${ticketNumber}] Status Updated: ${newStatus}`;
+    const textContent = `Your ticket #${ticketNumber} (${title}) with ${organizationName} is now marked as ${newStatus}.`;
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: ${newStatus === 'RESOLVED' || newStatus === 'CLOSED' ? '#059669' : '#ea580c'}; padding: 20px 24px; color: #ffffff;">
+      <h3 style="margin: 0; font-size: 16px;">Ticket Status: ${newStatus}</h3>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 14px; color: #334155;">Ticket <strong>#${ticketNumber}</strong> (${title}) has been updated to <strong>${newStatus}</strong>.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return this.sendEmail({ to, subject, text: textContent, html: htmlContent });
+  }
+
+  /**
+   * Transactional Notification: SLA Escalation Warning
+   */
+  async sendSlaEscalationNotification(options: {
+    to: string;
+    ticketNumber: string;
+    title: string;
+    organizationName: string;
+    hoursOverdue?: number;
+  }): Promise<EmailDispatchResult> {
+    const { to, ticketNumber, title, organizationName, hoursOverdue } = options;
+    const subject = `⚠️ [URGENT SLA ESCALATION] Ticket #${ticketNumber}`;
+    const textContent = `Urgent: Ticket #${ticketNumber} (${title}) at ${organizationName} has breached or is nearing its SLA resolution deadline${
+      hoursOverdue ? ` (overdue by ${hoursOverdue} hours)` : ''
+    }.`;
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #fee2e2; overflow: hidden;">
+    <div style="background: #dc2626; padding: 20px 24px; color: #ffffff;">
+      <h3 style="margin: 0; font-size: 16px;">SLA Escalation Alert</h3>
+    </div>
+    <div style="padding: 24px;">
+      <p style="font-size: 14px; color: #991b1b; font-weight: 700;">Immediate action required for ticket #${ticketNumber}${
+        hoursOverdue ? ` (overdue by ${hoursOverdue} hours)` : ''
+      }.</p>
+      <p style="font-size: 13px; color: #475569;">Title: ${title}</p>
+      <p style="font-size: 12px; color: #64748b;">Organization: ${organizationName}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    return this.sendEmail({ to, subject, text: textContent, html: htmlContent });
   }
 }
