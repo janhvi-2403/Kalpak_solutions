@@ -61,7 +61,7 @@ export default function DashboardLayout({
     if (isAuthenticated && activeTenant) {
       const onboardingCompleted = (activeTenant.settings as any)?.onboarding?.completed;
       if (onboardingCompleted === false && !user?.isSuperAdmin) {
-        router.replace('/checkout/starter');
+        router.replace('/plans');
         return;
       }
 

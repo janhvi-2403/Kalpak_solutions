@@ -67,18 +67,18 @@ export function LoginForm() {
     }
 
     const defaultDest = getDefaultDashboardForRole(userRole, false, tenantSlug);
-    let dest =
-      searchParams?.get('plan') === 'starter'
-        ? '/checkout/starter'
-        : sanitizeReturnUrl(searchParams?.get('returnUrl'), defaultDest);
+    const planParam = searchParams?.get('plan');
+    let dest = planParam
+      ? `/checkout?plan=${planParam}`
+      : sanitizeReturnUrl(searchParams?.get('returnUrl'), defaultDest);
 
-    // If Client Admin has not finished onboarding, enforce the payment & company configuration flow
+    // If Client Admin has not finished onboarding, route to all plans page
     const onboardingCompleted = (tenantSettings as any)?.onboarding?.completed;
     if (userRole === 'CLIENT_ADMIN' && onboardingCompleted === false && dest === '/dashboard') {
-      dest = '/checkout/starter';
+      dest = '/plans';
     }
 
-    if (tenantSlug && !dest.startsWith('/checkout') && !dest.startsWith('/onboarding') && userRole !== 'CUSTOMER') {
+    if (tenantSlug && !dest.startsWith('/plans') && !dest.startsWith('/checkout') && !dest.startsWith('/onboarding') && userRole !== 'CUSTOMER') {
       window.location.href = buildTenantSubdomainUrl(tenantSlug, dest);
     } else {
       window.location.href = dest;

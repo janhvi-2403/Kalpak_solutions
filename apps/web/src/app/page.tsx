@@ -52,7 +52,7 @@ export default function HomePage() {
   const formatPriceINR = (amt: number) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
 
-  const starterCheckoutUrl = '/signup?plan=starter&returnUrl=/checkout/starter';
+  const starterCheckoutUrl = '/signup?plan=starter&returnUrl=/checkout?plan=starter';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-orange-500 selection:text-white">
@@ -702,7 +702,7 @@ export default function HomePage() {
                   plan.code === 'STARTER'
                     ? starterCheckoutUrl
                     : plan.isFreeTrialAllowed
-                    ? `/signup?plan=${plan.code.toLowerCase()}&returnUrl=/checkout/${plan.code.toLowerCase()}`
+                    ? `/signup?plan=${plan.code.toLowerCase()}&returnUrl=/checkout?plan=${plan.code.toLowerCase()}`
                     : `/signup?plan=${plan.code.toLowerCase()}`;
                 const ctaText =
                   plan.code === 'STARTER'

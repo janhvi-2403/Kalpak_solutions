@@ -11,8 +11,8 @@ import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 function SignupContent() {
   const searchParams = useSearchParams();
-  const plan = searchParams?.get('plan') || 'starter';
-  const returnUrl = searchParams?.get('returnUrl') || '/checkout/starter';
+  const plan = searchParams?.get('plan') || '';
+  const returnUrl = searchParams?.get('returnUrl') || (plan ? `/checkout?plan=${plan}` : '/plans');
 
   // Organization Fields
   const [companyName, setCompanyName] = useState('');

@@ -12,9 +12,9 @@ function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const initialEmail = searchParams.get('email') || '';
-  const plan = searchParams.get('plan') || 'starter';
-  const returnUrl = searchParams.get('returnUrl') || '/checkout/starter';
-  const checkoutUrl = `/login?returnUrl=${encodeURIComponent(returnUrl)}&plan=${encodeURIComponent(plan)}`;
+  const plan = searchParams.get('plan') || '';
+  const returnUrl = searchParams.get('returnUrl') || '/plans';
+  const checkoutUrl = `/login?returnUrl=${encodeURIComponent(returnUrl)}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`;
 
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
@@ -99,13 +99,13 @@ function VerifyEmailContent() {
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Email Verified Successfully</h2>
           <p className="text-sm text-slate-600 mt-2 mb-6 leading-relaxed">
-            Your official email address has been verified. Now proceed to your subscription plan checkout and complete your basic company configuration.
+            Your official email address has been verified. Now proceed to select your subscription plan and complete your company configuration.
           </p>
 
           <div className="space-y-3">
             <Link href={checkoutUrl} className="block">
               <Button className="w-full h-11 text-sm font-extrabold text-white bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 shadow-lg shadow-orange-500/25">
-                <span>Proceed to Payment & Company Setup</span>
+                <span>View All Plans & Choose</span>
                 <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </Link>
