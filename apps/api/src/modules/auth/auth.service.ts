@@ -495,6 +495,17 @@ export class AuthService {
       },
     ];
 
+    const hasSmtpConfigured = Boolean(
+      process.env.SMTP_HOST ||
+      process.env.RESEND_API_KEY ||
+      process.env.SENDGRID_API_KEY ||
+      (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+    );
+
+    const redirectUrl = hasSmtpConfigured
+      ? `/verify-email?email=${encodeURIComponent(email)}`
+      : `/verify-email?email=${encodeURIComponent(email)}&token=${token}&auto=1`;
+
     return {
       success: true,
       message: 'Organization registered successfully. Please verify your email address to activate your account.',
@@ -505,7 +516,51 @@ export class AuthService {
       tenantSelectionRequired: false,
       tenantSlug: tenant.slug,
       emailVerificationRequired: true,
-      redirectUrl: `/verify-email?email=${encodeURIComponent(email)}`,
+      verificationToken: token,
+      redirectUrl,
+    };
+  }
+
+  async quickVerifyEmail(rawEmail: string) {
+    const email = rawEmail.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`No account found with email '${email}'`);
+    }
+
+    if (user.emailVerified) {
+      return { success: true, message: 'Email is already verified. You can sign in now.' };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+        },
+      }),
+      this.prisma.emailVerificationToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    await this.auditService.record({
+      actorId: user.id,
+      eventType: AuditEventType.AUTH_EMAIL_VERIFIED,
+      resourceType: 'USER',
+      resourceId: user.id,
+      action: 'EMAIL_VERIFIED_QUICK',
+      metadata: { email: user.email },
+    });
+
+    return {
+      success: true,
+      message: 'Email successfully verified! You can now sign in to your dashboard.',
     };
   }
 
@@ -615,9 +670,20 @@ export class AuthService {
     const tenantName = user.memberships[0]?.tenant?.name;
     await this.mailService.sendVerificationEmail(user.email, rawToken, tenantName);
 
+    const hasSmtpConfigured = Boolean(
+      process.env.SMTP_HOST ||
+      process.env.RESEND_API_KEY ||
+      process.env.SENDGRID_API_KEY ||
+      (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+    );
+
     return {
       success: true,
-      message: 'If an unverified account exists with this email, a new verification link has been sent.',
+      message: hasSmtpConfigured
+        ? 'If an unverified account exists with this email, a new verification link has been sent.'
+        : 'Verification link created. You can verify your account immediately.',
+      verificationToken: !hasSmtpConfigured ? rawToken : undefined,
+      verificationUrl: !hasSmtpConfigured ? `${this.mailService.getWebBaseUrl()}/verify-email?token=${rawToken}` : undefined,
     };
   }
 

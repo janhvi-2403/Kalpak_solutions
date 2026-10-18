@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -187,6 +188,17 @@ export class AuthController {
   @ApiOperation({ summary: 'Resend email verification token' })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
+  }
+
+  @Public()
+  @Post('quick-verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Instant verification helper when SMTP email delivery is unconfigured or in testing mode' })
+  async quickVerify(@Body('email') email: string) {
+    if (!email) {
+      throw new BadRequestException('Email address is required');
+    }
+    return this.authService.quickVerifyEmail(email);
   }
 
   @Public()
