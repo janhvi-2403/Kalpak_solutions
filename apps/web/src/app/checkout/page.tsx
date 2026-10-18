@@ -356,9 +356,14 @@ function CheckoutContent() {
         }),
       });
 
+      // Mark onboarding completed in tenant settings so companies enter dashboard directly
+      await apiClient('/tenants/onboarding/complete', {
+        method: 'POST',
+      }).catch(() => {});
+
       const updated = await refetchSession();
       const targetSlug = updated?.activeTenant?.slug || activeTenant?.slug;
-      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/onboarding') : '/onboarding';
+      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/dashboard') : '/dashboard';
       window.location.href = targetUrl;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
@@ -366,6 +371,23 @@ function CheckoutContent() {
       } else {
         setSetupError('An unexpected error occurred while saving company details. Please try again.');
       }
+    } finally {
+      setIsSavingSetup(false);
+    }
+  };
+
+  const handleSkipToDashboard = async () => {
+    setIsSavingSetup(true);
+    try {
+      await apiClient('/tenants/onboarding/complete', {
+        method: 'POST',
+      }).catch(() => {});
+      const updated = await refetchSession();
+      const targetSlug = updated?.activeTenant?.slug || activeTenant?.slug;
+      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/dashboard') : '/dashboard';
+      window.location.href = targetUrl;
+    } catch {
+      window.location.href = '/dashboard';
     } finally {
       setIsSavingSetup(false);
     }
@@ -622,6 +644,15 @@ function CheckoutContent() {
                 <span>Proceed to Company Basic Configuration</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <button
+                type="button"
+                onClick={handleSkipToDashboard}
+                disabled={isSavingSetup}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-slate-700 hover:text-slate-900 text-xs bg-white hover:bg-slate-50 border border-slate-200 transition-all cursor-pointer"
+              >
+                <span>Direct to Dashboard &rarr;</span>
+              </button>
             </div>
           </div>
         </main>
@@ -806,23 +837,34 @@ function CheckoutContent() {
                   &larr; Back to Order Confirmation
                 </button>
 
-                <Button
-                  type="submit"
-                  disabled={isSavingSetup}
-                  className="w-full sm:w-auto h-11 px-8 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md transition-all cursor-pointer"
-                >
-                  {isSavingSetup ? (
-                    <span className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Saving Configuration...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <span>Save & Continue to Platform Setup</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </span>
-                  )}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSkipToDashboard}
+                    disabled={isSavingSetup}
+                    className="text-xs font-bold text-slate-500 hover:text-orange-600 transition-colors"
+                  >
+                    Skip Setup & Enter Dashboard &rarr;
+                  </button>
+
+                  <Button
+                    type="submit"
+                    disabled={isSavingSetup}
+                    className="w-full sm:w-auto h-11 px-8 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md transition-all cursor-pointer"
+                  >
+                    {isSavingSetup ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Saving Configuration...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span>Save & Enter Dashboard</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </span>
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>

@@ -142,14 +142,14 @@ export function Header() {
 
       {/* Right side: Onboarding quick action, notifications, user avatar, logout */}
       <div className="flex items-center space-x-4">
-        {/* Onboarding Banner / Quick Link */}
+        {/* Onboarding / Setup Quick Link */}
         {isOnboardingPending && (
           <Link
-            href="/onboarding"
+            href="/dashboard/settings"
             className="hidden sm:inline-flex items-center space-x-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-            <span>Complete Setup</span>
+            <span>Configure Settings</span>
           </Link>
         )}
 
