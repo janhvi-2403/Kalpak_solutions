@@ -41,7 +41,11 @@ services:
       - key: EMAIL_INBOUND_PROVIDER
         value: cloudmailin
       - key: EMAIL_OUTBOUND_PROVIDER
-        value: smtp
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "Kalpak Solutions <onboarding@resend.dev>"
       - key: CLOUDMAILIN_FORWARD_TARGET
         value: support@kalpak.solutions
       - key: WEB_BASE_URL

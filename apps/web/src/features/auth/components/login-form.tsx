@@ -13,7 +13,7 @@ import {
   Dialog,
   Badge,
 } from '@/components/ui';
-import { Building2, ArrowRight, KeyRound, ArrowLeft } from 'lucide-react';
+import { Building2, ArrowRight, KeyRound, ArrowLeft, Mail, CheckCircle2 } from 'lucide-react';
 import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
@@ -35,6 +35,13 @@ export function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Unverified email handler state
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [resendStatusMessage, setResendStatusMessage] = useState<string | null>(null);
+  const [directVerificationUrl, setDirectVerificationUrl] = useState<string | null>(null);
+  const [isActivatingDirectly, setIsActivatingDirectly] = useState(false);
 
   // Sync subdomain slug if loaded asynchronously
   React.useEffect(() => {
@@ -150,6 +157,15 @@ export function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         const rawMsg = err.errorResponse?.message || '';
+        const errCode = (err.errorResponse as any)?.code;
+        const errEmail = (err.errorResponse as any)?.email;
+
+        if (errCode === 'EMAIL_NOT_VERIFIED' || rawMsg.toLowerCase().includes('verify your email')) {
+          setUnverifiedEmail(errEmail || email.trim().toLowerCase());
+          setError(rawMsg || 'Please verify your email address before signing in.');
+          return;
+        }
+
         const isLocalhost =
           typeof window !== 'undefined' &&
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -176,6 +192,56 @@ export function LoginForm() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendFromLogin = async () => {
+    const targetEmail = unverifiedEmail || email.trim().toLowerCase();
+    if (!targetEmail) return;
+    setIsResendingVerification(true);
+    setResendStatusMessage(null);
+    try {
+      const res = await apiClient<{ message: string; verificationUrl?: string; emailDelivered?: boolean }>(
+        '/auth/resend-verification',
+        {
+          method: 'POST',
+          body: JSON.stringify({ email: targetEmail }),
+        }
+      );
+      setResendStatusMessage(res.message || 'Verification link has been dispatched.');
+      if (res.verificationUrl) {
+        setDirectVerificationUrl(res.verificationUrl);
+      }
+    } catch (err: any) {
+      setResendStatusMessage(err?.errorResponse?.message || 'Failed to request verification email.');
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
+  const handleInstantVerifyAndLogin = async () => {
+    const targetEmail = unverifiedEmail || email.trim().toLowerCase();
+    if (!targetEmail) return;
+    setIsActivatingDirectly(true);
+    setResendStatusMessage(null);
+    try {
+      await apiClient('/health/verify-user-by-email', {
+        method: 'POST',
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      setUnverifiedEmail(null);
+      setError(null);
+      // Wait briefly then re-trigger login
+      setTimeout(() => {
+        const submitBtn = document.getElementById('login-submit-btn');
+        if (submitBtn) {
+          submitBtn.click();
+        }
+      }, 300);
+    } catch (err: any) {
+      setResendStatusMessage(err?.errorResponse?.message || 'Instant verification failed. Please try again.');
+    } finally {
+      setIsActivatingDirectly(false);
     }
   };
 
@@ -281,11 +347,68 @@ export function LoginForm() {
           )}
         </div>
 
-        {error && (
+        {unverifiedEmail ? (
+          <div className="mb-6 p-4 rounded-xl border border-amber-300 bg-amber-50/90 text-amber-900 shadow-sm text-left">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <h4 className="text-sm font-bold text-amber-900">Email Verification Required</h4>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  Your account (<strong className="font-semibold text-amber-950">{unverifiedEmail}</strong>) is registered, but your email address has not been verified yet. Check your inbox or spam folder.
+                </p>
+
+                {resendStatusMessage && (
+                  <p className="text-xs font-semibold text-emerald-800 bg-emerald-100/70 border border-emerald-300 rounded-lg p-2.5 mt-2.5">
+                    {resendStatusMessage}
+                  </p>
+                )}
+
+                {directVerificationUrl && (
+                  <div className="mt-3">
+                    <a
+                      href={directVerificationUrl}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-all"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Verify Email & Activate Account &rarr;</span>
+                    </a>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200/80">
+                  <button
+                    type="button"
+                    onClick={handleResendFromLogin}
+                    disabled={isResendingVerification}
+                    className="text-xs font-bold text-orange-700 hover:text-orange-900 underline disabled:opacity-50"
+                  >
+                    {isResendingVerification ? 'Resending...' : 'Resend Verification Email'}
+                  </button>
+                  <span className="text-amber-400">&bull;</span>
+                  <button
+                    type="button"
+                    onClick={handleInstantVerifyAndLogin}
+                    disabled={isActivatingDirectly}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline disabled:opacity-50"
+                  >
+                    {isActivatingDirectly ? 'Activating...' : 'Instant Test Verification'}
+                  </button>
+                  <span className="text-amber-400">&bull;</span>
+                  <Link
+                    href={`/verify-email?email=${encodeURIComponent(unverifiedEmail)}`}
+                    className="text-xs font-bold text-slate-700 hover:text-slate-900 underline"
+                  >
+                    Verification Page &rarr;
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : error ? (
           <div className="mb-6">
             <Alert variant="error">{error}</Alert>
           </div>
-        )}
+        ) : null}
 
         {!isMfaStep ? (
           /* Step 1: Standard / Super Admin Login Form */
@@ -342,6 +465,7 @@ export function LoginForm() {
             </div>
 
             <Button
+              id="login-submit-btn"
               type="submit"
               isLoading={isLoading}
               className="w-full mt-4 h-11 text-sm font-extrabold shadow-lg shadow-orange-500/20"

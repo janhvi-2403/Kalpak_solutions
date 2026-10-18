@@ -41,6 +41,7 @@ import {
   PermissionCode,
 } from '@kalpak/types';
 import { getConfig } from '@kalpak/config';
+import { logger } from '@kalpak/logger';
 import { SubdomainResolverService } from '../../core/tenant/subdomain-resolver.service';
 import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
@@ -135,9 +136,13 @@ export class AuthService {
 
     // 3. Email verification enforcement (unless super admin)
     if (!user.emailVerified && !user.isSuperAdmin) {
-      throw new ForbiddenException(
-        'Please verify your email address before signing in. Check your inbox for the verification link.'
-      );
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+        email: user.email,
+      });
     }
 
     // 4. Resolve active tenant context
@@ -468,7 +473,17 @@ export class AuthService {
     const { tenant, user, token } = creationResult;
 
     // 7. Dispatch verification email via MailService
-    await this.mailService.sendVerificationEmail(email, token, tenant.name);
+    const verificationDispatch = await this.mailService.sendVerificationEmail(email, token, tenant.name);
+    logger.info(
+      {
+        email,
+        tenant: tenant.slug,
+        success: verificationDispatch.success,
+        provider: verificationDispatch.provider,
+        error: verificationDispatch.error,
+      },
+      '[AuthService] Initial account verification email dispatched'
+    );
 
     // 8. Record audit logs
     await this.auditService.record({
@@ -515,6 +530,7 @@ export class AuthService {
       },
     ];
 
+    const verificationUrl = `${this.mailService.getWebBaseUrl()}/verify-email?token=${token}`;
     const redirectUrl = `/verify-email?email=${encodeURIComponent(email)}`;
 
     return {
@@ -528,6 +544,7 @@ export class AuthService {
       tenantSlug: tenant.slug,
       emailVerificationRequired: true,
       redirectUrl,
+      verificationUrl,
     };
   }
 
@@ -635,11 +652,28 @@ export class AuthService {
     });
 
     const tenantName = user.memberships[0]?.tenant?.name;
-    await this.mailService.sendVerificationEmail(user.email, rawToken, tenantName);
+    const dispatchResult = await this.mailService.sendVerificationEmail(user.email, rawToken, tenantName);
+    logger.info(
+      {
+        email: user.email,
+        success: dispatchResult.success,
+        provider: dispatchResult.provider,
+        error: dispatchResult.error,
+      },
+      '[AuthService] Resend verification email dispatch result'
+    );
+
+    const verificationUrl = `${this.mailService.getWebBaseUrl()}/verify-email?token=${rawToken}`;
 
     return {
       success: true,
-      message: 'If an unverified account exists with this email, a new verification link has been sent.',
+      emailDelivered: dispatchResult.success,
+      provider: dispatchResult.provider,
+      error: dispatchResult.error || null,
+      message: dispatchResult.success
+        ? 'A new verification link has been sent to your email inbox.'
+        : `Email delivery attempt (${dispatchResult.provider || 'none'}): ${dispatchResult.error || 'Provider not configured'}. You can verify directly using the link below.`,
+      verificationUrl,
     };
   }
 
