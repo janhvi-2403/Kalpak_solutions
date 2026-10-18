@@ -330,7 +330,7 @@ export default function StarterCheckoutPage() {
 
       const updated = await refetchSession();
       const targetSlug = updated?.activeTenant?.slug || activeTenant?.slug;
-      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/dashboard') : '/dashboard';
+      const targetUrl = targetSlug ? buildTenantSubdomainUrl(targetSlug, '/onboarding') : '/onboarding';
       window.location.href = targetUrl;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
@@ -415,12 +415,27 @@ export default function StarterCheckoutPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                href="/dashboard"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md transition-all"
+              <button
+                type="button"
+                onClick={() => {
+                  setCompanyName(activeTenant?.name || '');
+                  setCompanyAddress([streetAddress, city, stateName, pincode].filter(Boolean).join(', '));
+                  setCompanyPhone((activeTenant?.settings as any)?.companyProfile?.phone || '');
+                  setCompanyWebsite((activeTenant?.settings as any)?.companyProfile?.website || '');
+                  setCompanySupportEmail((activeTenant?.settings as any)?.companyProfile?.supportEmail || user?.email || '');
+                  setCompanyLogo((activeTenant?.settings as any)?.companyProfile?.logoUrl || (activeTenant?.settings as any)?.logoUrl || '');
+                  setSetupStep('COMPANY_SETUP');
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 shadow-md transition-all cursor-pointer"
               >
-                <span>Go to Dashboard</span>
+                <span>Configure Company Profile</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+              <Link
+                href="/onboarding"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-700 hover:text-slate-900 text-sm bg-slate-100 hover:bg-slate-200 transition-all"
+              >
+                <span>Setup Wizard &rarr;</span>
               </Link>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button, Input, PasswordInput, Alert, PhoneInput, TimezoneSelect } from '@/components/ui';
 import { ArrowRight } from 'lucide-react';
@@ -9,6 +10,10 @@ import { KalpakLogo } from '@/components/KalpakLogo';
 import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 function SignupContent() {
+  const searchParams = useSearchParams();
+  const plan = searchParams?.get('plan') || 'starter';
+  const returnUrl = searchParams?.get('returnUrl') || '/checkout/starter';
+
   // Organization Fields
   const [companyName, setCompanyName] = useState('');
   const [slug, setSlug] = useState('');
@@ -143,7 +148,7 @@ function SignupContent() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient<any>('/auth/signup', {
+      await apiClient<any>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           companyName: companyName.trim(),
@@ -158,12 +163,11 @@ function SignupContent() {
         }),
       });
 
-      // Redirect client admin directly to verify email screen or returned redirect URL
-      if (response?.redirectUrl) {
-        window.location.href = response.redirectUrl;
-      } else {
-        window.location.href = `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`;
-      }
+      // Redirect client admin directly to verify email screen with plan and returnUrl preserved
+      const verifyTarget = `/verify-email?email=${encodeURIComponent(
+        email.trim().toLowerCase()
+      )}&plan=${encodeURIComponent(plan)}&returnUrl=${encodeURIComponent(returnUrl)}`;
+      window.location.href = verifyTarget;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         const res = err.errorResponse;

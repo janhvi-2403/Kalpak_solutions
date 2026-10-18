@@ -58,7 +58,13 @@ export default function DashboardLayout({
   }, [isLoading, isAuthenticated, router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && activeTenant) {
+      const onboardingCompleted = (activeTenant.settings as any)?.onboarding?.completed;
+      if (onboardingCompleted === false && !user?.isSuperAdmin) {
+        router.replace('/checkout/starter');
+        return;
+      }
+
       apiClient<any>('/payments/current')
         .then((res) => {
           if (res?.expiryNotification && res.expiryNotification.alertLevel !== 'NONE') {
@@ -67,7 +73,7 @@ export default function DashboardLayout({
         })
         .catch(() => {});
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, activeTenant, user, router]);
 
   if (isLoading) {
     return (

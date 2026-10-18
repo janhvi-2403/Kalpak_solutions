@@ -57,7 +57,8 @@ export function LoginForm() {
   const navigateAfterAuth = (
     isSuperAdmin: boolean,
     userRole: string | null | undefined,
-    tenantSlug: string | null | undefined
+    tenantSlug: string | null | undefined,
+    tenantSettings?: any
   ) => {
     if (isSuperAdmin) {
       const dest = sanitizeReturnUrl(searchParams?.get('returnUrl'), '/super-admin/dashboard');
@@ -66,12 +67,18 @@ export function LoginForm() {
     }
 
     const defaultDest = getDefaultDashboardForRole(userRole, false, tenantSlug);
-    const dest =
+    let dest =
       searchParams?.get('plan') === 'starter'
         ? '/checkout/starter'
         : sanitizeReturnUrl(searchParams?.get('returnUrl'), defaultDest);
 
-    if (tenantSlug && !dest.startsWith('/checkout') && userRole !== 'CUSTOMER') {
+    // If Client Admin has not finished onboarding, enforce the payment & company configuration flow
+    const onboardingCompleted = (tenantSettings as any)?.onboarding?.completed;
+    if (userRole === 'CLIENT_ADMIN' && onboardingCompleted === false && dest === '/dashboard') {
+      dest = '/checkout/starter';
+    }
+
+    if (tenantSlug && !dest.startsWith('/checkout') && !dest.startsWith('/onboarding') && userRole !== 'CUSTOMER') {
       window.location.href = buildTenantSubdomainUrl(tenantSlug, dest);
     } else {
       window.location.href = dest;
@@ -120,7 +127,7 @@ export function LoginForm() {
       const userRole = freshSession?.activeRole;
       const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug, freshSession?.activeTenant?.settings);
     } catch (err) {
       if (err instanceof ApiClientError) {
         const rawMsg = err.errorResponse?.message || '';
@@ -173,7 +180,7 @@ export function LoginForm() {
       const userRole = freshSession?.activeRole;
       const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug, freshSession?.activeTenant?.settings);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Invalid verification code or backup code');
@@ -203,7 +210,7 @@ export function LoginForm() {
       const userRole = freshSession?.activeRole;
       const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug);
+      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug, freshSession?.activeTenant?.settings);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Failed to select organization');
