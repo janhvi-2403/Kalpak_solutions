@@ -68,6 +68,16 @@ export class TenantsController {
     return this.tenantsService.getPlatformOverview(user.isSuperAdmin);
   }
 
+  @Post('system/reset-test-data')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Super Admin: Clean wipe all test tenants, customers, users, tickets, and sessions for fresh onboarding testing' })
+  async resetTestData(
+    @CurrentUser() user: UserPrincipal,
+    @Body() body?: { recreateAcmeDemo?: boolean }
+  ) {
+    return this.tenantsService.resetTestData(user.id, body?.recreateAcmeDemo ?? false);
+  }
+
 
 
   @Post('switch')

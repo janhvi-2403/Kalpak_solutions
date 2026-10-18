@@ -1236,6 +1236,142 @@ export class TenantsService {
       message: `Successfully transitioned ${tenant.name} to ${dto.status}`,
     };
   }
+
+  /**
+   * Super Admin: Completely wipe all test data (tenants, customers, users, tickets, sessions)
+   * to allow fresh end-to-end testing from scratch.
+   */
+  async resetTestData(actorUserId: string, recreateAcmeDemo: boolean = false) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { isSuperAdmin: true, email: true },
+    });
+
+    if (!actor?.isSuperAdmin) {
+      throw new ForbiddenException('Only System Super Administrators can reset application test data.');
+    }
+
+    // 1. Delete ticket sub-items & work orders
+    await this.prisma.ticketPartConsumption.deleteMany({});
+    await this.prisma.workOrderChecklistItem.deleteMany({});
+    await this.prisma.workOrder.deleteMany({});
+    await this.prisma.ticketTimeline.deleteMany({});
+    await this.prisma.ticketAssignment.deleteMany({});
+
+    // 2. Delete emails & connections
+    await this.prisma.inboundEmail.deleteMany({});
+    await this.prisma.emailMessage.deleteMany({});
+    await this.prisma.supportEmail.deleteMany({});
+    await this.prisma.emailConnection.deleteMany({});
+    await this.prisma.emailConfiguration.deleteMany({});
+
+    // 3. Delete service tickets
+    await this.prisma.serviceTicket.deleteMany({});
+
+    // 4. Delete contracts, PM schedules, catalogs
+    await this.prisma.contractAsset.deleteMany({});
+    await this.prisma.preventiveMaintenanceSchedule.deleteMany({});
+    await this.prisma.serviceContract.deleteMany({});
+    await this.prisma.serviceCatalog.deleteMany({});
+
+    // 5. Delete customer assets, portal users, contacts, branches, and customers
+    await this.prisma.customerAsset.deleteMany({});
+    await this.prisma.customerUser.deleteMany({});
+    await this.prisma.customerContact.deleteMany({});
+    await this.prisma.customerBranch.deleteMany({});
+    await this.prisma.customer.deleteMany({});
+
+    // 6. Delete inventory & spare parts
+    await this.prisma.inventoryTransaction.deleteMany({});
+    await this.prisma.partInventory.deleteMany({});
+    await this.prisma.sparePart.deleteMany({});
+    await this.prisma.storageLocation.deleteMany({});
+    await this.prisma.product.deleteMany({});
+
+    // 7. Delete employees, departments, invitations
+    await this.prisma.employeeProfile.deleteMany({});
+    await this.prisma.invitation.deleteMany({});
+    await this.prisma.department.deleteMany({});
+
+    // 8. Delete subscriptions, payments, policies, memberships
+    await this.prisma.webhookEvent.deleteMany({});
+    await this.prisma.paymentTransaction.deleteMany({});
+    await this.prisma.subscription.deleteMany({});
+    await this.prisma.tenantPolicy.deleteMany({});
+    await this.prisma.tenantMembership.deleteMany({});
+
+    // 9. Delete custom tenant roles
+    await this.prisma.rolePermission.deleteMany({
+      where: { role: { isSystem: false } },
+    });
+    await this.prisma.role.deleteMany({
+      where: { isSystem: false },
+    });
+
+    // 10. Delete notifications, tokens, and sessions
+    await this.prisma.notification.deleteMany({});
+    await this.prisma.emailVerificationToken.deleteMany({});
+    await this.prisma.passwordResetToken.deleteMany({});
+    await this.prisma.session.deleteMany({});
+
+    // 11. Delete all non-super-admin users
+    await this.prisma.user.deleteMany({
+      where: { isSuperAdmin: false },
+    });
+
+    // 12. Delete audit events and all tenants
+    await this.prisma.auditEvent.deleteMany({});
+    await this.prisma.tenant.deleteMany({});
+
+    // 13. Ensure baseline RBAC roles and permissions
+    await this.prisma.ensureBaselineRbac();
+
+    // 14. Optionally recreate clean Acme demo organization
+    if (recreateAcmeDemo) {
+      const { hashPassword } = await import('@kalpak/auth');
+      const acme = await this.prisma.tenant.create({
+        data: {
+          name: 'Acme Corporation',
+          slug: 'acme-corp',
+          status: 'ACTIVE',
+        },
+      });
+
+      const clientAdminPass = await hashPassword('AcmeAdmin123!');
+      const clientAdmin = await this.prisma.user.create({
+        data: {
+          email: 'clientadmin@acme.com',
+          fullName: 'Alice Johnson (Client Admin)',
+          passwordHash: clientAdminPass,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      const clientAdminRole = await this.prisma.role.findFirst({
+        where: { name: 'CLIENT_ADMIN', tenantId: null },
+      });
+
+      if (clientAdminRole) {
+        await this.prisma.tenantMembership.create({
+          data: {
+            tenantId: acme.id,
+            userId: clientAdmin.id,
+            roleId: clientAdminRole.id,
+          },
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: 'All old test data successfully removed. Database is fresh and ready for clean testing.',
+      recreatedAcmeDemo: recreateAcmeDemo,
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 
 

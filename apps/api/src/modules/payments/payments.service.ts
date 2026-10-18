@@ -125,9 +125,11 @@ export class PaymentsService {
     }
 
     // B. Server-side price calculation (ground truth from Database or canonical fallback)
-    const fallbackTier: PlanTier = (['STARTER', 'PROFESSIONAL', 'ENTERPRISE'].includes(String(dto.plan).toUpperCase())
-      ? String(dto.plan).toUpperCase()
-      : 'STARTER') as PlanTier;
+    const planUpper = String(dto.plan).toUpperCase();
+    if (!['STARTER', 'PROFESSIONAL', 'ENTERPRISE'].includes(planUpper)) {
+      throw new BadRequestException(`Invalid subscription plan: '${dto.plan}'`);
+    }
+    const fallbackTier: PlanTier = planUpper as PlanTier;
     let pricing: any = (PLAN_PRICING as any)[fallbackTier];
     try {
       const dbPlan = await (this.prisma as any).subscriptionPlan.findFirst({
