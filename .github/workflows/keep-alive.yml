@@ -1,0 +1,34 @@
+name: Keep-Alive Heartbeat
+
+on:
+  schedule:
+    # Trigger every 10 minutes (Render sleeps after 15 minutes of inactivity)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Keep Render Services Awake
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Kalpak Backend API
+        run: |
+          echo "Pinging Kalpak Backend API health check..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://kalpak-api.onrender.com/health)
+          echo "API Health Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Backend is warm and active."
+          else
+            echo "Backend ping returned status $HTTP_STATUS"
+          fi
+
+      - name: Ping Kalpak Web Frontend
+        run: |
+          echo "Pinging Kalpak Web Frontend..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://kalpak-web.onrender.com)
+          echo "Web Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Frontend is warm and active."
+          else
+            echo "Frontend ping returned status $HTTP_STATUS"
+          fi

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient, clearAuthToken } from './api-client';
+import { apiClient, clearAuthToken, prewarmServer } from './api-client';
 
 import { getTenantSubdomain } from './subdomain';
 import { TenantSubdomainInfo } from '@kalpak/types';
@@ -84,15 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
   const fetchSession = useCallback(async (): Promise<SessionData | null> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
     try {
       setIsLoading(true);
       setError(null);
-      const data = await apiClient<SessionData>('/auth/me', {
-        signal: controller.signal,
-      });
+      const data = await apiClient<SessionData>('/auth/me');
       setSession(data);
       return data;
     } catch (err: any) {
@@ -111,12 +106,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     } finally {
-      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    // Proactively prewarm backend server on load
+    prewarmServer();
+
+    // Setup 4-minute heartbeat keep-alive while user has app open
+    const heartbeatTimer = setInterval(() => {
+      prewarmServer();
+    }, 4 * 60 * 1000);
+
     const slug = getTenantSubdomain();
     if (slug) {
       setSubdomainSlug(slug);
@@ -132,6 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
     }
     fetchSession();
+
+    return () => {
+      clearInterval(heartbeatTimer);
+    };
   }, [fetchSession]);
 
   const switchTenant = useCallback(

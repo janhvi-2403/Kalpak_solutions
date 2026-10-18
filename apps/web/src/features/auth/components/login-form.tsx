@@ -53,6 +53,25 @@ export function LoginForm() {
   const [showOrgPicker, setShowOrgPicker] = useState(false);
   const [availableMemberships, setAvailableMemberships] = useState<TenantMembershipInfo[]>([]);
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
+  const [warmingStatus, setWarmingStatus] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleWarming = (e: Event) => {
+      const customEvent = e as CustomEvent<{ retryCount: number; maxRetries: number }>;
+      const attempt = customEvent.detail?.retryCount || 1;
+      setWarmingStatus(`Waking up cloud server (attempt ${attempt}/5)... please wait`);
+    };
+    const handleReady = () => {
+      setWarmingStatus(null);
+    };
+
+    window.addEventListener('kalpak:server-warming', handleWarming);
+    window.addEventListener('kalpak:server-ready', handleReady);
+    return () => {
+      window.removeEventListener('kalpak:server-warming', handleWarming);
+      window.removeEventListener('kalpak:server-ready', handleReady);
+    };
+  }, []);
 
   const navigateAfterAuth = (
     isSuperAdmin: boolean,
@@ -327,9 +346,14 @@ export function LoginForm() {
               isLoading={isLoading}
               className="w-full mt-4 h-11 text-sm font-extrabold shadow-lg shadow-orange-500/20"
             >
-              <span>Sign In to Workspace</span>
-              <ArrowRight className="ml-2 w-4 h-4" />
+              <span>{warmingStatus ? 'Connecting to Cloud...' : 'Sign In to Workspace'}</span>
+              {!warmingStatus && <ArrowRight className="ml-2 w-4 h-4" />}
             </Button>
+            {warmingStatus && (
+              <p className="text-center text-xs text-orange-600 font-semibold animate-pulse mt-2">
+                {warmingStatus}
+              </p>
+            )}
           </form>
         ) : (
           /* Step 2: Inline MFA Verification Challenge */

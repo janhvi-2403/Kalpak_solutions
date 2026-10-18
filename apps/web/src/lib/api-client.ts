@@ -67,14 +67,17 @@ export async function apiClient<T>(
     }
   }
 
-  // Setup safety timeout to accommodate cloud cold starts (35s)
+  // Setup safety timeout to accommodate cloud cold starts (up to 75s)
   let timeoutId: NodeJS.Timeout | undefined;
   let signal = restOptions.signal;
   if (!signal) {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 35000);
+    timeoutId = setTimeout(() => controller.abort(), 75000);
     signal = controller.signal;
   }
+
+  const RETRY_DELAYS = [2000, 3000, 4500, 6000, 8000];
+  const MAX_COLD_START_RETRIES = 5;
 
   let response: Response;
   try {
@@ -88,9 +91,20 @@ export async function apiClient<T>(
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
-    // Auto-retry once on network glitch or aborted connection if under max retries
-    if (_retryCount < 2 && (fetchErr?.name === 'TypeError' || fetchErr?.name === 'AbortError')) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Auto-retry on network glitch, cold start abort, or connection dropped during boot
+    if (
+      _retryCount < MAX_COLD_START_RETRIES &&
+      (fetchErr?.name === 'TypeError' || fetchErr?.name === 'AbortError' || fetchErr?.message?.includes('fetch failed'))
+    ) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('kalpak:server-warming', {
+            detail: { retryCount: _retryCount + 1, maxRetries: MAX_COLD_START_RETRIES },
+          })
+        );
+      }
+      const delay = RETRY_DELAYS[_retryCount] || 5000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
       return apiClient<T>(endpoint, { ...options, _retryCount: _retryCount + 1 });
     }
     throw fetchErr;
@@ -100,11 +114,22 @@ export async function apiClient<T>(
     }
   }
 
-  // Handle Render / Cloud cold-start (502 Bad Gateway / 503 / 504) with auto-retry
-  if ([502, 503, 504].includes(response.status) && _retryCount < 2) {
-    const delay = (_retryCount + 1) * 2500;
+  // Handle Render / Cloud cold-start (502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout) with auto-retry
+  if ([502, 503, 504].includes(response.status) && _retryCount < MAX_COLD_START_RETRIES) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('kalpak:server-warming', {
+          detail: { retryCount: _retryCount + 1, maxRetries: MAX_COLD_START_RETRIES },
+        })
+      );
+    }
+    const delay = RETRY_DELAYS[_retryCount] || 5000;
     await new Promise((resolve) => setTimeout(resolve, delay));
     return apiClient<T>(endpoint, { ...options, _retryCount: _retryCount + 1 });
+  }
+
+  if (typeof window !== 'undefined' && _retryCount > 0 && response.ok) {
+    window.dispatchEvent(new CustomEvent('kalpak:server-ready'));
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -241,3 +266,13 @@ export function getAuthToken(): string | null {
   }
   return null;
 }
+
+/**
+ * Pre-warms the backend server on initial page visit
+ * to wake up Render free-tier containers asynchronously.
+ */
+export function prewarmServer(): void {
+  if (typeof window === 'undefined') return;
+  fetch('/health', { method: 'GET', credentials: 'omit' }).catch(() => {});
+}
+
