@@ -23,6 +23,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.$connect();
       logger.info('Database connection established successfully');
       await this.ensureBaselineRbac();
+      await this.ensureDemoLogins();
       await this.purgeTarget('infosys');
     } catch (error) {
       logger.error({ error }, 'Failed to connect to PostgreSQL database');
@@ -336,4 +337,212 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       return { purgedTenants: 0, purgedUsers: 0 };
     }
   }
+
+  /**
+   * Automatically guarantees that official company testing accounts exist and are verified.
+   */
+  async ensureDemoLogins() {
+    try {
+      const { hashPassword } = await import('@kalpak/auth');
+
+      const acmeTenant = await this.tenant.upsert({
+        where: { slug: 'acme-corp' },
+        update: {
+          name: 'Acme Corporation',
+          status: 'ACTIVE' as any,
+          settings: {
+            onboarding: { completed: true },
+            industry: 'Precision Manufacturing & Industrial Machinery',
+            contactPhone: '+91 20 2687 4000',
+            supportEmail: 'support@acme.com',
+          },
+          deletedAt: null,
+        },
+        create: {
+          name: 'Acme Corporation',
+          slug: 'acme-corp',
+          status: 'ACTIVE' as any,
+          settings: {
+            onboarding: { completed: true },
+            industry: 'Precision Manufacturing & Industrial Machinery',
+            contactPhone: '+91 20 2687 4000',
+            supportEmail: 'support@acme.com',
+          },
+        },
+      });
+
+      const clientAdminRole = await this.role.findFirst({
+        where: { name: SystemRole.CLIENT_ADMIN, tenantId: null },
+      });
+      const deptAdminRole = await this.role.findFirst({
+        where: { name: SystemRole.DEPARTMENT_ADMIN, tenantId: null },
+      });
+      const technicianRole = await this.role.findFirst({
+        where: { name: SystemRole.SUPPORT_EMPLOYEE, tenantId: null },
+      });
+
+      // 1. Super Admin
+      const superAdminPasswordHash = await hashPassword('KalpakAdmin123!');
+      await this.user.upsert({
+        where: { email: 'admin@kalpak.com' },
+        update: {
+          fullName: 'System Super Administrator',
+          passwordHash: superAdminPasswordHash,
+          isActive: true,
+          isSuperAdmin: true,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+          deletedAt: null,
+        },
+        create: {
+          email: 'admin@kalpak.com',
+          fullName: 'System Super Administrator',
+          passwordHash: superAdminPasswordHash,
+          isActive: true,
+          isSuperAdmin: true,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+        },
+      });
+
+      // 2. Client Admin
+      const clientAdminPasswordHash = await hashPassword('AcmeAdmin123!');
+      const clientAdminUser = await this.user.upsert({
+        where: { email: 'clientadmin@acme.com' },
+        update: {
+          fullName: 'Alice Johnson (Client Admin)',
+          passwordHash: clientAdminPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+          deletedAt: null,
+        },
+        create: {
+          email: 'clientadmin@acme.com',
+          fullName: 'Alice Johnson (Client Admin)',
+          passwordHash: clientAdminPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+        },
+      });
+
+      if (clientAdminRole) {
+        await this.tenantMembership.upsert({
+          where: {
+            uq_membership_tenant_user: {
+              tenantId: acmeTenant.id,
+              userId: clientAdminUser.id,
+            },
+          },
+          update: { roleId: clientAdminRole.id, isDefault: true },
+          create: {
+            tenantId: acmeTenant.id,
+            userId: clientAdminUser.id,
+            roleId: clientAdminRole.id,
+            isDefault: true,
+          },
+        });
+      }
+
+      // 3. Department Head
+      const deptHeadPasswordHash = await hashPassword('AcmeDept123!');
+      const deptHeadUser = await this.user.upsert({
+        where: { email: 'depthead@acme.com' },
+        update: {
+          fullName: 'Rajesh Nair (Dept Head)',
+          passwordHash: deptHeadPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+          deletedAt: null,
+        },
+        create: {
+          email: 'depthead@acme.com',
+          fullName: 'Rajesh Nair (Dept Head)',
+          passwordHash: deptHeadPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+        },
+      });
+
+      if (deptAdminRole) {
+        await this.tenantMembership.upsert({
+          where: {
+            uq_membership_tenant_user: {
+              tenantId: acmeTenant.id,
+              userId: deptHeadUser.id,
+            },
+          },
+          update: { roleId: deptAdminRole.id, isDefault: true },
+          create: {
+            tenantId: acmeTenant.id,
+            userId: deptHeadUser.id,
+            roleId: deptAdminRole.id,
+            isDefault: true,
+          },
+        });
+      }
+
+      // 4. Support Field Technician
+      const techPasswordHash = await hashPassword('AcmeTech123!');
+      const techUser = await this.user.upsert({
+        where: { email: 'tech@acme.com' },
+        update: {
+          fullName: 'Vikram Singh (Field Technician)',
+          passwordHash: techPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+          deletedAt: null,
+        },
+        create: {
+          email: 'tech@acme.com',
+          fullName: 'Vikram Singh (Field Technician)',
+          passwordHash: techPasswordHash,
+          isActive: true,
+          isSuperAdmin: false,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          mfaEnabled: false,
+        },
+      });
+
+      if (technicianRole) {
+        await this.tenantMembership.upsert({
+          where: {
+            uq_membership_tenant_user: {
+              tenantId: acmeTenant.id,
+              userId: techUser.id,
+            },
+          },
+          update: { roleId: technicianRole.id, isDefault: true },
+          create: {
+            tenantId: acmeTenant.id,
+            userId: techUser.id,
+            roleId: technicianRole.id,
+            isDefault: true,
+          },
+        });
+      }
+
+      logger.info('[PrismaService] Official demo logins provisioned/verified successfully');
+    } catch (error) {
+      logger.warn({ error }, '[PrismaService] ensureDemoLogins warning');
+    }
+  }
 }
+
