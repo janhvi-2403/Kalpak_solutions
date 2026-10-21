@@ -81,7 +81,8 @@ describe('Company Timezone & International Phone Number Validation', () => {
     };
 
     mockMailService = {
-      sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+      sendVerificationEmail: jest.fn().mockResolvedValue({ success: true, provider: 'resend' }),
+      getWebBaseUrl: jest.fn().mockReturnValue('https://kalpak-web.onrender.com'),
     };
 
     subdomainResolver = new SubdomainResolverService(mockPrisma as unknown as PrismaService);

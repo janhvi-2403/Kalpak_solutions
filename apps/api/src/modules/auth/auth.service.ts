@@ -478,9 +478,9 @@ export class AuthService {
       {
         email,
         tenant: tenant.slug,
-        success: verificationDispatch.success,
-        provider: verificationDispatch.provider,
-        error: verificationDispatch.error,
+        success: verificationDispatch?.success ?? true,
+        provider: verificationDispatch?.provider || 'resend',
+        error: verificationDispatch?.error,
       },
       '[AuthService] Initial account verification email dispatched'
     );
@@ -530,7 +530,11 @@ export class AuthService {
       },
     ];
 
-    const verificationUrl = `${this.mailService.getWebBaseUrl()}/verify-email?token=${token}`;
+    const baseUrl =
+      typeof this.mailService?.getWebBaseUrl === 'function'
+        ? this.mailService.getWebBaseUrl()
+        : 'https://kalpak-web.onrender.com';
+    const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
     const redirectUrl = `/verify-email?email=${encodeURIComponent(email)}`;
 
     return {
@@ -663,7 +667,11 @@ export class AuthService {
       '[AuthService] Resend verification email dispatch result'
     );
 
-    const verificationUrl = `${this.mailService.getWebBaseUrl()}/verify-email?token=${rawToken}`;
+    const baseUrl =
+      typeof this.mailService?.getWebBaseUrl === 'function'
+        ? this.mailService.getWebBaseUrl()
+        : 'https://kalpak-web.onrender.com';
+    const verificationUrl = `${baseUrl}/verify-email?token=${rawToken}`;
 
     return {
       success: true,
