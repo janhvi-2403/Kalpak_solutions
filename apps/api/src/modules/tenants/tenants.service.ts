@@ -12,22 +12,11 @@ import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { UpdateOnboardingDto } from './dto/update-onboarding.dto';
 import { AuditEventType, TenantStatus } from '@kalpak/types';
 import { generateSessionToken, hashToken } from '@kalpak/auth';
-import { getConfig } from '@kalpak/config';
 import { PLAN_PRICING } from '../payments/payments.service';
 import { isValidIanaTimezone, normalizePhoneNumber } from '@kalpak/validation';
 
 @Injectable()
 export class TenantsService {
-  private readonly config = getConfig();
-
-  private getWebBaseUrl(): string {
-    const configured = this.config.WEB_BASE_URL;
-    if (process.env.NODE_ENV === 'production' && (!configured || configured.includes('localhost'))) {
-      return 'https://kalpak-web.onrender.com';
-    }
-    return configured || 'https://kalpak-web.onrender.com';
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -530,8 +519,8 @@ export class TenantsService {
       },
     });
 
-    // 6. Send Invitation Email
-    await this.mailService.sendInvitationEmail(
+    // 6. Send Invitation Email in real time
+    const delivery = await this.mailService.sendInvitationEmail(
       email,
       rawToken,
       tenant.name,
@@ -541,6 +530,8 @@ export class TenantsService {
       dto.phone
     );
 
+    const inviteUrl = `${this.mailService.getWebBaseUrl()}/accept-invitation?token=${rawToken}`;
+
     // 7. Audit log
     await this.auditService.record({
       tenantId,
@@ -549,12 +540,20 @@ export class TenantsService {
       resourceType: 'INVITATION',
       resourceId: invitation.id,
       action: 'INVITE_EMPLOYEE',
-      metadata: { email, role: roleRecord.name, department: dto.department },
+      metadata: {
+        email,
+        role: roleRecord.name,
+        department: dto.department,
+        emailDelivered: delivery.success,
+        emailProvider: delivery.provider,
+      },
     });
 
     return {
       success: true,
-      message: `Invitation sent successfully to ${email}`,
+      message: delivery.success
+        ? `Official invitation sent in real time to ${email}`
+        : `Invitation created for ${email}. Outbound email delivery (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}. You can copy the activation link directly.`,
       invitation: {
         id: invitation.id,
         email: invitation.email,
@@ -564,7 +563,9 @@ export class TenantsService {
         phone: invitation.phone,
         expiresAt: invitation.expiresAt,
         token: rawToken,
-        inviteUrl: `${this.getWebBaseUrl()}/accept-invitation?token=${rawToken}`,
+        inviteUrl,
+        emailProvider: delivery.provider,
+        emailDelivered: delivery.success,
       },
     };
   }
@@ -662,7 +663,7 @@ export class TenantsService {
       },
     });
 
-    await this.mailService.sendInvitationEmail(
+    const delivery = await this.mailService.sendInvitationEmail(
       invitation.email,
       rawToken,
       invitation.tenant.name,
@@ -672,6 +673,8 @@ export class TenantsService {
       invitation.phone || undefined
     );
 
+    const inviteUrl = `${this.mailService.getWebBaseUrl()}/accept-invitation?token=${rawToken}`;
+
     await this.auditService.record({
       tenantId,
       actorId,
@@ -679,15 +682,23 @@ export class TenantsService {
       resourceType: 'INVITATION',
       resourceId: invitationId,
       action: 'RESEND_INVITATION',
-      metadata: { email: invitation.email },
+      metadata: {
+        email: invitation.email,
+        emailDelivered: delivery.success,
+        provider: delivery.provider,
+      },
     });
 
     return {
       success: true,
-      message: `Invitation resent successfully to ${invitation.email}`,
+      message: delivery.success
+        ? `Invitation resent in real time to ${invitation.email}`
+        : `Fresh invitation token generated. Email delivery attempt (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`,
       expiresAt: updated.expiresAt,
       token: rawToken,
-      inviteUrl: `${this.getWebBaseUrl()}/accept-invitation?token=${rawToken}`,
+      inviteUrl,
+      emailProvider: delivery.provider,
+      emailDelivered: delivery.success,
     };
   }
 
@@ -1385,5 +1396,3 @@ export class TenantsService {
     };
   }
 }
-
-

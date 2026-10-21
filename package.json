@@ -21,6 +21,7 @@
     "db:generate": "npm run db:generate --workspace=@kalpak/database",
     "db:migrate": "npm run db:migrate --workspace=@kalpak/database",
     "db:seed": "npm run db:seed --workspace=@kalpak/database",
+    "db:restore-logins": "npm run db:restore-logins --workspace=@kalpak/database",
     "docker:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
     "docker:logs": "docker compose -f infrastructure/docker/docker-compose.yml logs -f"

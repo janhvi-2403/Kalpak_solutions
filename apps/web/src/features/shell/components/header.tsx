@@ -67,7 +67,7 @@ export function Header() {
     <header className="h-16 bg-white border-b border-slate-200/90 px-6 flex items-center justify-between z-30 sticky top-0">
       {/* Left side: Tenant Switcher / Active Tenant */}
       <div className="flex items-center space-x-3">
-        {memberships.length > 1 ? (
+        {memberships.length > 1 || (!activeTenant && memberships.length === 1) ? (
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}

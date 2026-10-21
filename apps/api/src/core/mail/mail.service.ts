@@ -163,20 +163,27 @@ export class MailService implements OnModuleInit {
             { error: error.message, to: recipients, subject },
             '[MailService] Resend email delivery failed'
           );
-          return { success: false, provider: 'resend', error: error.message };
+          // If Resend failed and no secondary transporter is configured, return the error
+          if (!this.getTransporter()) {
+            return { success: false, provider: 'resend', error: error.message };
+          }
+          logger.warn('[MailService] Falling back to secondary SMTP transporter...');
+        } else {
+          logger.info(
+            { id: data?.id, to: recipients, subject },
+            '[MailService] Email delivered successfully via Resend'
+          );
+          return { success: true, messageId: data?.id, provider: 'resend' };
         }
-
-        logger.info(
-          { id: data?.id, to: recipients, subject },
-          '[MailService] Email delivered successfully via Resend'
-        );
-        return { success: true, messageId: data?.id, provider: 'resend' };
       } catch (err: any) {
         logger.error(
           { error: err.message, to: recipients },
           '[MailService] Unexpected error sending via Resend SDK'
         );
-        return { success: false, provider: 'resend', error: err.message };
+        if (!this.getTransporter()) {
+          return { success: false, provider: 'resend', error: err.message };
+        }
+        logger.warn('[MailService] Falling back to secondary SMTP transporter after Resend exception...');
       }
     }
 
@@ -444,6 +451,10 @@ This invitation is valid for 7 days.
     const htmlContent = `
 <!DOCTYPE html>
 <html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+</head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 32px 16px; color: #1e293b; margin: 0;">
   <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
     <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 32px 24px; text-align: center; color: #ffffff;">

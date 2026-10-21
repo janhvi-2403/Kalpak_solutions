@@ -24,6 +24,10 @@ import {
   RefreshCw,
   Info,
   Filter,
+  UserPlus,
+  Send,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Button,
@@ -161,6 +165,89 @@ export default function DepartmentsPage() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  // Department Head Invite Modal State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteDeptName, setInviteDeptName] = useState('');
+  const [inviteFullName, setInviteFullName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
+  const [inviteDesignation, setInviteDesignation] = useState('Department Head & POC');
+  const [isInvitingHead, setIsInvitingHead] = useState(false);
+  const [sentInviteData, setSentInviteData] = useState<{
+    email: string;
+    fullName: string;
+    department: string;
+    inviteUrl?: string;
+    emailDelivered?: boolean;
+    emailProvider?: string;
+  } | null>(null);
+
+  const openInviteModal = (deptName?: string) => {
+    setInviteDeptName(deptName || departments[0]?.name || '');
+    setInviteFullName('');
+    setInviteEmail('');
+    setInvitePhone('');
+    setInviteDesignation('Department Head & POC');
+    setIsInviteModalOpen(true);
+  };
+
+  const handleSendDepartmentHeadInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !inviteDeptName.trim()) return;
+
+    try {
+      setIsInvitingHead(true);
+      const res = await apiClient<{
+        success: boolean;
+        message: string;
+        invitation: {
+          id: string;
+          email: string;
+          fullName?: string;
+          department?: string;
+          inviteUrl?: string;
+          token?: string;
+          emailDelivered?: boolean;
+          emailProvider?: string;
+        };
+      }>('/tenants/invitations', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: inviteEmail.trim().toLowerCase(),
+          role: 'DEPARTMENT_ADMIN',
+          department: inviteDeptName,
+          fullName: inviteFullName.trim() || undefined,
+          phone: invitePhone.trim() || undefined,
+          designation: inviteDesignation.trim() || undefined,
+        }),
+      });
+
+      setFeedbackMsg({
+        type: 'success',
+        text: res?.message || `Official invitation dispatched in real time to ${inviteEmail} for ${inviteDeptName}!`,
+      });
+
+      setSentInviteData({
+        email: inviteEmail.trim(),
+        fullName: inviteFullName.trim() || 'Department Head Candidate',
+        department: inviteDeptName,
+        inviteUrl: res?.invitation?.inviteUrl || (res?.invitation?.token ? `${window.location.origin}/accept-invitation?token=${res.invitation.token}` : ''),
+        emailDelivered: res?.invitation?.emailDelivered ?? true,
+        emailProvider: res?.invitation?.emailProvider || 'resend',
+      });
+
+      setIsInviteModalOpen(false);
+      await fetchDepartments(true);
+    } catch (err) {
+      setFeedbackMsg({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to send department head invitation',
+      });
+    } finally {
+      setIsInvitingHead(false);
+    }
+  };
 
   // Auto-dismiss feedback message after 5 seconds
   useEffect(() => {
@@ -431,6 +518,15 @@ export default function DepartmentsPage() {
           </Button>
 
           <Button
+            onClick={() => openInviteModal(departments[0]?.name || '')}
+            size="sm"
+            className="gap-2 bg-orange-600 hover:bg-orange-700 text-white shadow-sm shadow-orange-600/20 font-bold"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Invite Department Head</span>
+          </Button>
+
+          <Button
             onClick={openAddModal}
             size="sm"
             className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20"
@@ -660,7 +756,20 @@ export default function DepartmentsPage() {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">Unassigned</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400 italic text-[11px]">Unassigned</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openInviteModal(dept.name);
+                            }}
+                            className="text-[10px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded transition-colors inline-flex items-center gap-1"
+                          >
+                            <UserPlus className="w-2.5 h-2.5" />
+                            <span>Invite</span>
+                          </button>
+                        </div>
                       )}
                     </td>
 
@@ -874,7 +983,18 @@ export default function DepartmentsPage() {
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic">No Department Head assigned</p>
+                        <div className="space-y-2">
+                          <p className="text-xs text-slate-400 italic">No Department Head assigned</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => openInviteModal(deptDetails.department.name)}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5 text-xs h-8"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span>Invite Department Head</span>
+                          </Button>
+                        </div>
                       )}
                     </div>
 
@@ -1505,6 +1625,190 @@ export default function DepartmentsPage() {
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* ===================================================================== */}
+      {/* MODAL: INVITE DEPARTMENT HEAD / POC                                   */}
+      {/* ===================================================================== */}
+      <Dialog
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        title="Invite Department Head / POC"
+        description="Send an authentic invitation with secure single-use activation link to appoint an operational Department Head."
+      >
+        <form onSubmit={handleSendDepartmentHeadInvite} className="space-y-4 mt-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Target Department (Scope Locked)
+            </label>
+            <select
+              value={inviteDeptName}
+              onChange={(e) => setInviteDeptName(e.target.value)}
+              className="w-full text-xs rounded-xl border border-slate-200 p-2.5 bg-slate-50 font-bold text-slate-800 focus:outline-none"
+            >
+              {departments.map((d) => (
+                <option key={d.id} value={d.name}>
+                  {d.name} ({d.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Backend strictly enforces departmental scope. The invitee will govern operations and tickets for this department.
+            </p>
+          </div>
+
+          <Input
+            id="dept-invite-fullname"
+            label="Full Name"
+            required
+            value={inviteFullName}
+            onChange={(e) => setInviteFullName(e.target.value)}
+            placeholder="e.g. Rajesh Kumar"
+          />
+
+          <Input
+            id="dept-invite-email"
+            label="Official Work Email"
+            type="email"
+            required
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="rajesh@company.com"
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Input
+              id="dept-invite-phone"
+              label="Contact Phone"
+              value={invitePhone}
+              onChange={(e) => setInvitePhone(e.target.value)}
+              placeholder="+91 98765 43210"
+            />
+            <Input
+              id="dept-invite-designation"
+              label="Designation / Title"
+              value={inviteDesignation}
+              onChange={(e) => setInviteDesignation(e.target.value)}
+              placeholder="e.g. Head of Maintenance"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsInviteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              isLoading={isInvitingHead}
+              className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-2"
+            >
+              <Send className="w-4 h-4" />
+              <span>Send Invitation</span>
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* ===================================================================== */}
+      {/* MODAL: INVITATION DISPATCHED CONFIRMATION                             */}
+      {/* ===================================================================== */}
+      <Dialog
+        isOpen={!!sentInviteData}
+        onClose={() => setSentInviteData(null)}
+        title="Department Head Invitation Dispatched!"
+        description="The real invitation has been created and dispatched to the candidate's email address."
+      >
+        {sentInviteData && (
+          <div className="space-y-4 mt-3">
+            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-bold">Real-Time Email Dispatched</p>
+                <p className="text-[11px] text-emerald-800">
+                  {sentInviteData.emailDelivered !== false
+                    ? `An authentic invitation email was dispatched in real time to ${sentInviteData.email} via ${sentInviteData.emailProvider || 'Resend'}.`
+                    : `Invitation created in system for ${sentInviteData.email}. Use the single-use activation link below.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-orange-50/70 rounded-xl border border-orange-200 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Invitee:</span>
+                <span className="font-bold text-slate-900">{sentInviteData.fullName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Work Email:</span>
+                <span className="font-mono text-slate-800">{sentInviteData.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Department:</span>
+                <span className="font-bold text-orange-700 bg-orange-100/70 px-2 py-0.5 rounded border border-orange-200">
+                  {sentInviteData.department}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Role:</span>
+                <span className="font-bold text-slate-900">Department Head (DEPARTMENT_ADMIN)</span>
+              </div>
+            </div>
+
+            {sentInviteData.inviteUrl && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>Single-Use Activation Link</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Valid for 7 days</span>
+                </label>
+                <div className="p-2.5 bg-slate-900 text-slate-100 font-mono text-xs rounded-lg break-all select-all">
+                  {sentInviteData.inviteUrl}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  💡 The candidate will receive this link directly in their email inbox. You can also copy it immediately if needed.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              {sentInviteData.inviteUrl && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(sentInviteData.inviteUrl!);
+                      setFeedbackMsg({ type: 'success', text: 'Activation link copied to clipboard!' });
+                    }}
+                    className="gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy Link</span>
+                  </Button>
+                  <a
+                    href={sentInviteData.inviteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5">
+                      <span>Open Link</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Button>
+                  </a>
+                </>
+              )}
+              <Button
+                type="button"
+                onClick={() => setSentInviteData(null)}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

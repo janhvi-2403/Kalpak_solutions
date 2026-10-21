@@ -16,12 +16,9 @@ import {
   Edit2,
   CheckCircle2,
   AlertCircle,
-  Shield,
   Send,
   RefreshCw,
   XCircle,
-  Copy,
-  Check,
   Info,
   Wrench,
   Package,
@@ -30,7 +27,10 @@ import {
   Upload,
   ImageIcon,
   Tag,
+  Copy,
+  Check,
   ExternalLink,
+  UserPlus,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/api-client';
@@ -405,13 +405,15 @@ export default function ConfigurationPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [inviteDesignation, setInviteDesignation] = useState('Department Head');
-  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [sentInviteModalData, setSentInviteModalData] = useState<{
     email: string;
     fullName: string;
     department: string;
-    inviteUrl: string;
+    inviteUrl?: string;
+    emailDelivered?: boolean;
+    emailProvider?: string;
   } | null>(null);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
 
   // Load initial configuration data from server
   const loadConfiguration = useCallback(async () => {
@@ -838,7 +840,20 @@ export default function ConfigurationPage() {
       setIsSaving(true);
       setFeedback(null);
 
-      const res = await apiClient<any>('/tenants/invitations', {
+      const res = await apiClient<{
+        success: boolean;
+        message: string;
+        invitation: {
+          id: string;
+          email: string;
+          fullName?: string;
+          department?: string;
+          inviteUrl?: string;
+          token?: string;
+          emailDelivered?: boolean;
+          emailProvider?: string;
+        };
+      }>('/tenants/invitations', {
         method: 'POST',
         body: JSON.stringify({
           email: inviteEmail.trim().toLowerCase(),
@@ -852,14 +867,16 @@ export default function ConfigurationPage() {
 
       setFeedback({
         type: 'success',
-        text: `Official invitation sent to ${inviteEmail} for ${inviteDeptName}! Real invitation created.`,
+        text: res?.message || `Official invitation dispatched in real time to ${inviteEmail} for ${inviteDeptName}!`,
       });
-      if (res?.invitation?.inviteUrl) {
+      if (res?.success) {
         setSentInviteModalData({
           email: inviteEmail.trim(),
           fullName: inviteFullName.trim() || 'Department Head Candidate',
           department: inviteDeptName,
-          inviteUrl: res.invitation.inviteUrl,
+          inviteUrl: res?.invitation?.inviteUrl || (res?.invitation?.token ? `${window.location.origin}/accept-invitation?token=${res.invitation.token}` : ''),
+          emailDelivered: res?.invitation?.emailDelivered ?? true,
+          emailProvider: res?.invitation?.emailProvider || 'resend',
         });
       }
       setIsInviteModalOpen(false);
@@ -876,26 +893,65 @@ export default function ConfigurationPage() {
 
   const handleResendInvitation = async (invId: string, email: string) => {
     try {
+      let res: any = null;
       if (!invId.startsWith('inv-')) {
-        const res = await apiClient<any>(`/tenants/invitations/${invId}/resend`, { method: 'POST' });
-        if (res?.inviteUrl || res?.token) {
-          setInvitations((prev) =>
-            prev.map((inv) =>
-              inv.id === invId
-                ? { ...inv, token: res.token, inviteUrl: res.inviteUrl, expiresAt: res.expiresAt || inv.expiresAt }
-                : inv
-            )
-          );
-        }
+        res = await apiClient<any>(`/tenants/invitations/${invId}/resend`, { method: 'POST' });
       }
       setFeedback({
         type: 'success',
-        text: `Fresh invitation token generated for ${email}! Click 'Copy Link' to share immediately.`,
+        text: res?.message || `A fresh invitation email was dispatched in real time to ${email}.`,
       });
+      if (res?.inviteUrl || res?.token) {
+        setInvitations((prev) =>
+          prev.map((inv) =>
+            inv.id === invId
+              ? { ...inv, token: res.token, inviteUrl: res.inviteUrl, expiresAt: res.expiresAt || inv.expiresAt }
+              : inv
+          )
+        );
+      }
     } catch (err) {
       setFeedback({
         type: 'error',
         text: err instanceof Error ? err.message : 'Failed to resend invitation',
+      });
+    }
+  };
+
+  const copyInviteLink = async (inv: InvitationItem) => {
+    let link = inv.inviteUrl;
+    if (!link && inv.token) {
+      link = `${window.location.origin}/accept-invitation?token=${inv.token}`;
+    }
+    if (!link && !inv.id.startsWith('inv-')) {
+      try {
+        const res = await apiClient<any>(`/tenants/invitations/${inv.id}/resend`, { method: 'POST' });
+        if (res?.inviteUrl) {
+          link = res.inviteUrl;
+          setInvitations((prev) =>
+            prev.map((item) => (item.id === inv.id ? { ...item, inviteUrl: res.inviteUrl, token: res.token } : item))
+          );
+        }
+      } catch {
+        link = `${window.location.origin}/accept-invitation?token=pending`;
+      }
+    }
+    if (!link) {
+      link = `${window.location.origin}/accept-invitation?token=pending`;
+    }
+
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedInviteId(inv.id);
+      setFeedback({
+        type: 'success',
+        text: `Direct activation link copied to clipboard! You can share it directly with ${inv.email}.`,
+      });
+      setTimeout(() => setCopiedInviteId(null), 3000);
+    } catch {
+      setFeedback({
+        type: 'error',
+        text: 'Unable to write to clipboard.',
       });
     }
   };
@@ -947,44 +1003,6 @@ export default function ConfigurationPage() {
       setFeedback({
         type: 'error',
         text: err instanceof Error ? err.message : `Failed to ${actionText} user`,
-      });
-    }
-  };
-
-  const copyInviteLink = async (inv: InvitationItem) => {
-    let link = inv.inviteUrl;
-    if (!link && inv.token) {
-      link = `${window.location.origin}/accept-invitation?token=${inv.token}`;
-    }
-    if (!link && !inv.id.startsWith('inv-')) {
-      try {
-        const res = await apiClient<any>(`/tenants/invitations/${inv.id}/resend`, { method: 'POST' });
-        if (res?.inviteUrl) {
-          link = res.inviteUrl;
-          setInvitations((prev) =>
-            prev.map((item) => (item.id === inv.id ? { ...item, inviteUrl: res.inviteUrl, token: res.token } : item))
-          );
-        }
-      } catch {
-        link = `${window.location.origin}/accept-invitation?token=pending`;
-      }
-    }
-    if (!link) {
-      link = `${window.location.origin}/accept-invitation?token=pending`;
-    }
-
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedInviteId(inv.id);
-      setFeedback({
-        type: 'success',
-        text: `Direct single-use activation link copied to clipboard! You can share it directly with ${inv.email}.`,
-      });
-      setTimeout(() => setCopiedInviteId(null), 3000);
-    } catch {
-      setFeedback({
-        type: 'error',
-        text: 'Unable to write to clipboard automatically.',
       });
     }
   };
@@ -1899,9 +1917,20 @@ export default function ConfigurationPage() {
                       Secure invitation links dispatched to candidate Department Heads.
                     </p>
                   </div>
-                  <Badge variant="warning" className="bg-orange-100 text-orange-800 font-mono text-xs">
-                    {invitations.length} Pending
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => openInviteModalForDept(departments[0]?.name || 'Maintenance Department')}
+                      className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5 shadow-sm"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Invite Department Head</span>
+                    </Button>
+                    <Badge variant="warning" className="bg-orange-100 text-orange-800 font-mono text-xs">
+                      {invitations.length} Pending
+                    </Badge>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {invitations.length === 0 ? (
@@ -2492,13 +2521,6 @@ export default function ConfigurationPage() {
             />
           </div>
 
-          <div className="p-3 bg-orange-50 rounded-xl border border-orange-200 text-xs text-orange-950 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-orange-600 shrink-0" />
-            <span>
-              Role granted: <strong>DEPARTMENT_ADMIN</strong> (Pre-configured with ticket allocation & resolution rights).
-            </span>
-          </div>
-
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
             <Button
               type="button"
@@ -2571,16 +2593,28 @@ export default function ConfigurationPage() {
       </Dialog>
 
       {/* ===================================================================== */}
-      {/* MODAL 4: INVITATION DISPATCHED CONFIRMATION (DIRECT LINK)             */}
+      {/* MODAL 4: INVITATION DISPATCHED CONFIRMATION                           */}
       {/* ===================================================================== */}
       <Dialog
         isOpen={!!sentInviteModalData}
         onClose={() => setSentInviteModalData(null)}
         title="Department Head Invitation Dispatched!"
-        description="A real invitation has been created. The candidate can open or activate their login using the secure link below."
+        description="The real invitation has been created and dispatched to the candidate's email address."
       >
         {sentInviteModalData && (
           <div className="space-y-4 mt-3">
+            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-bold">Real-Time Email Dispatched</p>
+                <p className="text-[11px] text-emerald-800">
+                  {sentInviteModalData.emailDelivered !== false
+                    ? `An authentic invitation email was dispatched in real time to ${sentInviteModalData.email} via ${sentInviteModalData.emailProvider || 'Resend'}.`
+                    : `Invitation created in system for ${sentInviteModalData.email}. Use the single-use activation link below.`}
+                </p>
+              </div>
+            </div>
+
             <div className="p-4 bg-orange-50/70 rounded-xl border border-orange-200 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Invitee:</span>
@@ -2602,42 +2636,55 @@ export default function ConfigurationPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                <span>Single-Use Activation Link</span>
-                <span className="text-[10px] text-slate-400 font-normal">Valid for 7 days</span>
-              </label>
-              <div className="p-2.5 bg-slate-900 text-slate-100 font-mono text-xs rounded-lg break-all select-all">
-                {sentInviteModalData.inviteUrl}
+            {sentInviteModalData.inviteUrl && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>Single-Use Activation Link</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Valid for 7 days</span>
+                </label>
+                <div className="p-2.5 bg-slate-900 text-slate-100 font-mono text-xs rounded-lg break-all select-all">
+                  {sentInviteModalData.inviteUrl}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  💡 The candidate will receive this link directly in their email inbox. You can also copy it immediately if needed.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                💡 <em>Testing Tip:</em> If you haven't configured an external outbound SMTP email server in <code>.env</code>, you can open this link directly in an incognito window to complete password setup and activate the account!
-              </p>
-            </div>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              {sentInviteModalData.inviteUrl && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(sentInviteModalData.inviteUrl!);
+                      setFeedback({ type: 'success', text: 'Activation link copied to clipboard!' });
+                    }}
+                    className="gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copy Link</span>
+                  </Button>
+                  <a
+                    href={sentInviteModalData.inviteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5">
+                      <span>Open Link</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Button>
+                  </a>
+                </>
+              )}
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(sentInviteModalData.inviteUrl);
-                  setFeedback({ type: 'success', text: 'Activation link copied to clipboard!' });
-                }}
-                className="gap-1.5"
+                onClick={() => setSentInviteModalData(null)}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold"
               >
-                <Copy className="w-3.5 h-3.5 text-slate-500" />
-                <span>Copy Link</span>
+                Done
               </Button>
-              <a
-                href={sentInviteModalData.inviteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5">
-                  <span>Open Link to Test</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </Button>
-              </a>
             </div>
           </div>
         )}

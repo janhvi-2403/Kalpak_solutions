@@ -94,8 +94,8 @@ export function buildTenantSubdomainUrl(subdomain: string, path = '/'): string {
     return cleanPath;
   }
 
-  // If accessing directly by IP (e.g. 127.0.0.1 or server loopback), preserve host without mangling
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname === '::1') {
+  // If accessing directly by IP (e.g. 127.0.0.1 or server loopback) or plain localhost, preserve host without mangling
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname === '::1' || hostname === 'localhost') {
     return cleanPath;
   }
 

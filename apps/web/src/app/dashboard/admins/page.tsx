@@ -14,8 +14,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Trash2,
-  Copy,
-  Check,
   KeyRound,
   UserX,
   Shield,
@@ -57,8 +55,6 @@ interface PendingInvitation {
   invitedBy: string;
   expiresAt: string;
   createdAt: string;
-  token?: string;
-  inviteUrl?: string;
 }
 
 export default function ClientAdminsPage() {
@@ -75,7 +71,7 @@ export default function ClientAdminsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [isInviting, setIsInviting] = useState(false);
-  const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
+  const [createdInviteUrl, setCreatedInviteUrl] = useState<boolean>(false);
 
   // Deactivate / Status Action State
   const [confirmUser, setConfirmUser] = useState<AdminUser | null>(null);
@@ -87,9 +83,7 @@ export default function ClientAdminsPage() {
 
   // Resend State
   const [resendingId, setResendingId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [resentModalInfo, setResentModalInfo] = useState<{ email: string; inviteUrl: string } | null>(null);
-  const [resentTokens, setResentTokens] = useState<Record<string, string>>({});
+  const [resentModalInfo, setResentModalInfo] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -141,10 +135,10 @@ export default function ClientAdminsPage() {
       setIsInviting(true);
       setFeedback(null);
 
-      const res = await apiClient<{
+      await apiClient<{
         success: boolean;
         message: string;
-        invitation: { inviteUrl?: string; token?: string };
+        invitation: { emailProvider?: string };
       }>('/tenants/invitations', {
         method: 'POST',
         body: JSON.stringify({
@@ -156,10 +150,7 @@ export default function ClientAdminsPage() {
         }),
       });
 
-      const url =
-        res.invitation?.inviteUrl ||
-        `${window.location.origin}/accept-invitation?token=${res.invitation?.token || ''}`;
-      setCreatedInviteUrl(url);
+      setCreatedInviteUrl(true);
 
       setFeedback({
         type: 'success',
@@ -183,7 +174,7 @@ export default function ClientAdminsPage() {
     setInviteName('');
     setInviteEmail('');
     setInvitePhone('');
-    setCreatedInviteUrl(null);
+    setCreatedInviteUrl(false);
   };
 
   // Handle Toggle User Active/Inactive
@@ -235,27 +226,15 @@ export default function ClientAdminsPage() {
       setResendingId(invitationId);
       setFeedback(null);
 
-      const res = await apiClient<{ success: boolean; message: string; inviteUrl?: string; token?: string }>(
+      await apiClient<{ success: boolean; message: string; emailProvider?: string }>(
         `/tenants/invitations/${invitationId}/resend`,
         { method: 'POST' }
       );
-
-      const url =
-        res.inviteUrl ||
-        `${window.location.origin}/accept-invitation?token=${res.token || ''}`;
-
-      if (res.token) {
-        setResentTokens((prev) => ({ ...prev, [invitationId]: res.token! }));
-      }
-
-      setResentModalInfo({
-        email,
-        inviteUrl: url,
-      });
+      setResentModalInfo(email);
 
       setFeedback({
         type: 'success',
-        message: `Fresh invitation email sent to ${email} with a renewed 7-day token.`,
+        message: `Fresh invitation email sent to ${email}.`,
       });
 
       await fetchData();
@@ -298,12 +277,6 @@ export default function ClientAdminsPage() {
     } finally {
       setIsRevoking(false);
     }
-  };
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
   };
 
   return (
@@ -690,12 +663,6 @@ export default function ClientAdminsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {invitations.map((inv) => {
-                    const token = inv.token || resentTokens[inv.id];
-                    const inviteUrl =
-                      inv.inviteUrl ||
-                      (token ? `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${token}` : '');
-                    const isCopied = copiedId === inv.id;
-
                     return (
                       <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
                         {/* Invited Person */}
@@ -737,24 +704,6 @@ export default function ClientAdminsPage() {
 
                         {/* Actions: Resend & Revoke */}
                         <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
-                          {/* Copy Link */}
-                          {inviteUrl ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => copyToClipboard(inviteUrl, inv.id)}
-                              className="h-8 text-xs text-slate-600"
-                              title="Copy direct invitation link"
-                            >
-                              {isCopied ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600 mr-1" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5 mr-1" />
-                              )}
-                              <span>{isCopied ? 'Copied' : 'Copy Link'}</span>
-                            </Button>
-                          ) : null}
-
                           {/* Resend Invite */}
                           <Button
                             size="sm"
@@ -806,28 +755,6 @@ export default function ClientAdminsPage() {
               </div>
               <p className="text-emerald-800">
                 An invitation email has been sent to <strong>{inviteEmail}</strong>. They will set their password and pair their authenticator app.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Direct Invitation Link</label>
-              <div className="flex items-center gap-2">
-                <input
-                  readOnly
-                  value={createdInviteUrl}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-700"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyToClipboard(createdInviteUrl, 'modal-copy')}
-                  className="shrink-0"
-                >
-                  {copiedId === 'modal-copy' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                </Button>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                You can copy and send this link directly if the recipient cannot access their email inbox.
               </p>
             </div>
 
@@ -979,12 +906,12 @@ export default function ClientAdminsPage() {
         </div>
       </Dialog>
 
-      {/* MODAL 4: Resent Invitation Link Dialog */}
+      {/* MODAL 4: Resent Invitation Dialog */}
       <Dialog
         isOpen={resentModalInfo !== null}
         onClose={() => setResentModalInfo(null)}
         title="Invitation Resent Successfully"
-        description="A renewed 7-day security token has been generated and dispatched."
+        description="A renewed 7-day invitation email has been delivered."
       >
         {resentModalInfo && (
           <div className="space-y-4 py-2">
@@ -994,33 +921,7 @@ export default function ClientAdminsPage() {
                 <span>Invitation Email Sent!</span>
               </div>
               <p className="text-emerald-800">
-                A fresh invitation link was sent to <strong>{resentModalInfo.email}</strong>. The previous link has been invalidated and replaced with this new link.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Renewed Direct Invitation Link</label>
-              <div className="flex items-center gap-2">
-                <input
-                  readOnly
-                  value={resentModalInfo.inviteUrl}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-700 select-all"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyToClipboard(resentModalInfo.inviteUrl, 'resent-modal-copy')}
-                  className="shrink-0"
-                >
-                  {copiedId === 'resent-modal-copy' ? (
-                    <Check className="w-4 h-4 text-emerald-600" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                You can copy and send this link directly to the administrator.
+                A fresh invitation email was sent to <strong>{resentModalInfo}</strong>. The previous link has been invalidated and replaced with this new link.
               </p>
             </div>
 
