@@ -20,9 +20,6 @@ import {
   ArrowLeft,
   Mail,
   CheckCircle2,
-  Sparkles,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
@@ -33,60 +30,6 @@ import {
   sanitizeReturnUrl,
   getDefaultDashboardForRole,
 } from '@/lib/subdomain';
-
-export interface TestingAccount {
-  id: string;
-  roleTitle: string;
-  badge: string;
-  email: string;
-  password: string;
-  tenantSlug: string;
-  targetUrl: string;
-  features: string;
-}
-
-export const TESTING_ACCOUNTS: TestingAccount[] = [
-  {
-    id: 'super-admin',
-    roleTitle: 'Super Admin',
-    badge: 'Platform Owner',
-    email: 'admin@kalpak.com',
-    password: 'KalpakAdmin123!',
-    tenantSlug: '',
-    targetUrl: '/super-admin/dashboard',
-    features: 'Executive business telemetry, tenant activation/suspension, plan pricing catalogue.',
-  },
-  {
-    id: 'client-admin',
-    roleTitle: 'Client Admin',
-    badge: 'Acme Admin',
-    email: 'clientadmin@acme.com',
-    password: 'AcmeAdmin123!',
-    tenantSlug: 'acme-corp',
-    targetUrl: '/dashboard',
-    features: '5-Staff quota meter, ticket lifecycle, department routing, customer assets, CSV export.',
-  },
-  {
-    id: 'dept-head',
-    roleTitle: 'Department Head',
-    badge: 'Mechanical Head',
-    email: 'depthead@acme.com',
-    password: 'AcmeDept123!',
-    tenantSlug: 'acme-corp',
-    targetUrl: '/dashboard/department',
-    features: 'Department-specific ticket triage queue, SLA monitoring, workload overview.',
-  },
-  {
-    id: 'field-tech',
-    roleTitle: 'Field Technician',
-    badge: 'Electrical Support',
-    email: 'tech@acme.com',
-    password: 'AcmeTech123!',
-    tenantSlug: 'acme-corp',
-    targetUrl: '/dashboard/employee',
-    features: 'Field ticket assignments, work orders, spare parts consumption, SLA milestone tracking.',
-  },
-];
 
 export function LoginForm() {
   const { refetchSession, subdomainSlug, subdomainTenant } = useAuth();
@@ -172,30 +115,6 @@ export function LoginForm() {
       window.location.href = buildTenantSubdomainUrl(tenantSlug, dest);
     } else {
       window.location.href = dest;
-    }
-  };
-
-  const [selectedQuickRole, setSelectedQuickRole] = useState<string | null>(null);
-  const [copiedAccount, setCopiedAccount] = useState<string | null>(null);
-
-  const handleCopyCredentials = (acc: TestingAccount, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(`Email: ${acc.email}\nPassword: ${acc.password}\nRole: ${acc.roleTitle}`);
-    }
-    setCopiedAccount(acc.id);
-    setTimeout(() => setCopiedAccount(null), 2000);
-  };
-
-  const handleSelectQuickAccount = (acc: TestingAccount, autoSubmit = false) => {
-    setSelectedQuickRole(acc.id);
-    setEmail(acc.email);
-    setPassword(acc.password);
-    setTenantSlug(acc.tenantSlug);
-    setError(null);
-
-    if (autoSubmit) {
-      triggerLogin(acc.email, acc.password, acc.tenantSlug);
     }
   };
 
@@ -400,8 +319,6 @@ export function LoginForm() {
     }
   };
 
-  const selectedAccount = TESTING_ACCOUNTS.find((a) => a.id === selectedQuickRole || a.email === email);
-
   return (
     <div className="w-full max-w-xl">
       <div className="bg-white p-8 sm:p-10 rounded-2xl border border-slate-200/80 shadow-xl shadow-orange-500/5">
@@ -509,98 +426,6 @@ export function LoginForm() {
 
         {!isMfaStep ? (
           <>
-            {/* Official Company Testing Logins Quick Selector */}
-            {!subdomainSlug && (
-              <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 text-white shadow-lg">
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-orange-400" />
-                    <h3 className="text-xs font-black tracking-wider uppercase text-slate-100">
-                      Testing &amp; QA Logins (Company Review)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                    4 Roles Active
-                  </span>
-                </div>
-
-                <p className="text-[11px] text-slate-400 mb-3">
-                  Click any card to autofill, or use <strong>1-Click Sign In</strong> to test that persona:
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {TESTING_ACCOUNTS.map((acc) => {
-                    const isSelected = selectedQuickRole === acc.id || email === acc.email;
-                    return (
-                      <div
-                        key={acc.id}
-                        onClick={() => handleSelectQuickAccount(acc, false)}
-                        className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-orange-500/15 border-orange-500 shadow-sm shadow-orange-500/20'
-                            : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className="text-xs font-black text-white">{acc.roleTitle}</span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-700 text-orange-300 shrink-0">
-                            {acc.badge}
-                          </span>
-                        </div>
-
-                        <div className="text-[11px] font-mono text-slate-300 truncate">
-                          {acc.email}
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
-                          Password: <span className="text-orange-300 font-bold">{acc.password}</span>
-                        </div>
-
-                        <div className="mt-2.5 pt-2 border-t border-slate-700/50 flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            disabled={isLoading}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectQuickAccount(acc, true);
-                            }}
-                            className="inline-flex items-center gap-1 text-[11px] font-black text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50"
-                          >
-                            <span>1-Click Sign In</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            type="button"
-                            title="Copy credentials"
-                            onClick={(e) => handleCopyCredentials(acc, e)}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors"
-                          >
-                            {copiedAccount === acc.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {selectedAccount && (
-                  <div className="mt-3 p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs">
-                    <div className="flex items-center justify-between text-[11px] text-orange-300 font-bold mb-1">
-                      <span>Direct Dashboard:</span>
-                      <span className="font-mono text-slate-200">http://localhost:3000{selectedAccount.targetUrl}</span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-snug">
-                      <strong className="text-slate-300">Features:</strong> {selectedAccount.features}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Step 1: Standard / Super Admin Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
             <Input
