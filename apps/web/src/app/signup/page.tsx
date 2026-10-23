@@ -148,7 +148,7 @@ function SignupContent() {
     setIsLoading(true);
 
     try {
-      await apiClient<any>('/auth/signup', {
+      const response = await apiClient<any>('/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           companyName: companyName.trim(),
@@ -163,10 +163,10 @@ function SignupContent() {
         }),
       });
 
-      // Redirect client admin directly to verify email screen with plan and returnUrl preserved
-      const verifyTarget = `/verify-email?email=${encodeURIComponent(
-        email.trim().toLowerCase()
-      )}&plan=${encodeURIComponent(plan)}&returnUrl=${encodeURIComponent(returnUrl)}`;
+      // Redirect client admin directly to verify email screen or backend redirectUrl with plan and returnUrl preserved
+      const baseRedirect = response?.redirectUrl || `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`;
+      const separator = baseRedirect.includes('?') ? '&' : '?';
+      const verifyTarget = `${baseRedirect}${separator}plan=${encodeURIComponent(plan)}&returnUrl=${encodeURIComponent(returnUrl)}`;
       window.location.href = verifyTarget;
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {

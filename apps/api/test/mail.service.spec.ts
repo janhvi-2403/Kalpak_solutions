@@ -44,13 +44,13 @@ describe('MailService with Resend Integration', () => {
       expect(fromAddress).toBe('Kalpak Support <notifications@kalpak.solutions>');
     });
 
-    it('should fall back to authorized Resend onboarding domain when EMAIL_FROM is not explicitly set', () => {
+    it('should fall back to authorized domain when EMAIL_FROM is not explicitly set', () => {
       process.env.RESEND_API_KEY = 're_test_key_12345';
       delete process.env.EMAIL_FROM;
       mailService.onModuleInit();
 
       const fromAddress = mailService.getFromAddress();
-      expect(fromAddress).toBe('Kalpak Solutions <onboarding@resend.dev>');
+      expect(fromAddress).toBe('Kalpak Solutions <support@kalpak.solutions>');
     });
   });
 
@@ -75,7 +75,7 @@ describe('MailService with Resend Integration', () => {
       expect(result.provider).toBe('resend');
       expect(result.messageId).toBe('resend_msg_abc123');
       expect(mockResendSend).toHaveBeenCalledWith({
-        from: 'Kalpak Solutions <onboarding@resend.dev>',
+        from: 'Kalpak Solutions <support@kalpak.solutions>',
         to: ['user@example.com'],
         subject: 'Verify Your Email',
         text: 'Please verify your email address.',

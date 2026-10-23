@@ -67,7 +67,7 @@ export class MailService implements OnModuleInit {
 
   /**
    * Returns authorized sender address.
-   * Uses EMAIL_FROM if set; defaults to onboarding@resend.dev for Resend sandbox testing.
+   * Uses EMAIL_FROM if set; defaults to support@kalpak.solutions.
    */
   public getFromAddress(customSender?: string): string {
     if (customSender && customSender.trim()) {
@@ -79,17 +79,8 @@ export class MailService implements OnModuleInit {
       return configuredFrom;
     }
 
-    // Default sender authorized for Resend accounts before custom domain verification
-    if (this.resend || process.env.RESEND_API_KEY) {
-      return 'Kalpak Solutions <onboarding@resend.dev>';
-    }
-
-    return (
-      process.env.SMTP_FROM ||
-      process.env.SMTP_USER ||
-      process.env.GMAIL_USER ||
-      `Kalpak Solutions <noreply@${this.config.APP_BASE_DOMAIN || 'kalpak.solutions'}>`
-    );
+    // Default authorized sender for Kalpak Solutions
+    return 'Kalpak Solutions <support@kalpak.solutions>';
   }
 
   /**
