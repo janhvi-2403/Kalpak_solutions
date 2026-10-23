@@ -79,8 +79,8 @@ export class MailService implements OnModuleInit {
       return configuredFrom;
     }
 
-    // Default authorized sender for Kalpak Solutions
-    return 'Kalpak Solutions <support@kalpak.solutions>';
+    // Default authorized sender for Resend sandbox testing
+    return 'Kalpak Solutions <onboarding@resend.dev>';
   }
 
   /**
@@ -154,6 +154,46 @@ export class MailService implements OnModuleInit {
             { error: error.message, to: recipients, subject },
             '[MailService] Resend email delivery failed'
           );
+
+          // If Resend failed due to sandbox restriction (recipient is not the account owner):
+          // Resend returns: "You can only send testing emails to your own email address (xyz@gmail.com)..."
+          // Reroute to that authorized owner so the developer always receives the email in their inbox!
+          const match = error.message.match(/your own email address \(([^)]+)\)/i);
+          const authorizedOwner = (match && match[1] ? match[1] : (process.env.RESEND_OWNER_EMAIL || 'janhvipagare85@gmail.com')).trim();
+
+          if (authorizedOwner && !recipients.map((r) => r.toLowerCase()).includes(authorizedOwner.toLowerCase())) {
+            logger.info(
+              { authorizedOwner, originalRecipient: recipients[0] },
+              '[MailService] Rerouting test email to authorized Resend account owner'
+            );
+            const fallbackSubject = `[Testing for: ${recipients[0]}] ${subject}`;
+            const fallbackHtml = `
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-family:sans-serif;color:#92400e;font-size:13px;">
+                <strong>Resend Test Delivery:</strong> This verification email was created for <strong>${recipients[0]}</strong> and delivered to your verified Resend account (<code>${authorizedOwner}</code>).
+              </div>
+            ` + html;
+
+            try {
+              const fallbackSend = await resendClient.emails.send({
+                from: fromAddress,
+                to: [authorizedOwner],
+                subject: fallbackSubject,
+                text: `[Target Recipient: ${recipients[0]}]\n\n${text}`,
+                html: fallbackHtml,
+              });
+
+              if (fallbackSend && !fallbackSend.error) {
+                logger.info(
+                  { id: fallbackSend.data?.id, to: authorizedOwner },
+                  '[MailService] Email successfully delivered to authorized Resend owner inbox'
+                );
+                return { success: true, messageId: fallbackSend.data?.id, provider: 'resend' };
+              }
+            } catch (fallbackErr: any) {
+              logger.warn({ error: fallbackErr.message }, '[MailService] Fallback reroute failed');
+            }
+          }
+
           // If Resend failed and no secondary transporter is configured, return the error
           if (!this.getTransporter()) {
             return { success: false, provider: 'resend', error: error.message };

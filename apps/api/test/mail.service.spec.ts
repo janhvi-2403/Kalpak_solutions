@@ -50,7 +50,7 @@ describe('MailService with Resend Integration', () => {
       mailService.onModuleInit();
 
       const fromAddress = mailService.getFromAddress();
-      expect(fromAddress).toBe('Kalpak Solutions <support@kalpak.solutions>');
+      expect(fromAddress).toBe('Kalpak Solutions <onboarding@resend.dev>');
     });
   });
 
@@ -75,7 +75,7 @@ describe('MailService with Resend Integration', () => {
       expect(result.provider).toBe('resend');
       expect(result.messageId).toBe('resend_msg_abc123');
       expect(mockResendSend).toHaveBeenCalledWith({
-        from: 'Kalpak Solutions <support@kalpak.solutions>',
+        from: 'Kalpak Solutions <onboarding@resend.dev>',
         to: ['user@example.com'],
         subject: 'Verify Your Email',
         text: 'Please verify your email address.',
