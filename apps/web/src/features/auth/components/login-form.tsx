@@ -93,7 +93,7 @@ export function LoginForm() {
     tenantSlug: string | null | undefined,
     tenantSettings?: any
   ) => {
-    if (isSuperAdmin) {
+    if (isSuperAdmin && userRole !== 'CLIENT_ADMIN') {
       const dest = sanitizeReturnUrl(searchParams?.get('returnUrl'), '/super-admin/dashboard');
       window.location.href = dest;
       return;

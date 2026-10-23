@@ -133,7 +133,7 @@ export default function OverallCompanyDashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user?.isSuperAdmin || activeRole === 'SUPER_ADMIN') {
+    if (activeRole === 'SUPER_ADMIN' || (user?.isSuperAdmin && !activeTenant && activeRole !== 'CLIENT_ADMIN')) {
       router.replace('/super-admin/dashboard');
     } else if (activeRole === 'DEPARTMENT_ADMIN') {
       router.replace('/dashboard/department');
