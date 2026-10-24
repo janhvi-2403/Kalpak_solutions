@@ -22,6 +22,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       logger.info('Database connection established successfully');
+      // Automatically purge legacy/demo infosys tenant and associated credentials
+      await this.purgeTarget('infosys');
       await this.ensureBaselineRbac();
       await this.ensureDemoLogins();
     } catch (error) {
@@ -538,106 +540,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         });
       }
 
-      // 5. Janhvi Pagare (Platform Owner & Infosys Client Admin)
-      const janhviPasswordHash = await hashPassword('Infosys@123');
-      const janhviUser = await this.user.upsert({
+      // 5. Janhvi Pagare (Platform Client Admin)
+      const janhviUser = await this.user.findUnique({
         where: { email: 'janhvipagare85@gmail.com' },
-        update: {
-          fullName: 'Janhvi Pagare',
-          passwordHash: janhviPasswordHash,
-          isActive: true,
-          isSuperAdmin: false,
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-          mfaEnabled: false,
-          deletedAt: null,
-        },
-        create: {
-          email: 'janhvipagare85@gmail.com',
-          fullName: 'Janhvi Pagare',
-          passwordHash: janhviPasswordHash,
-          isActive: true,
-          isSuperAdmin: false,
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-          mfaEnabled: false,
-        },
       });
 
-      const infosysTenant = await this.tenant.upsert({
-        where: { slug: 'infosys' },
-        update: {
-          name: 'Infosys',
-          status: 'ACTIVE' as any,
-          settings: {
-            onboarding: { completed: true },
-            industry: 'Information Technology & Engineering Solutions',
-            contactPhone: '+91 20 2687 4000',
-            supportEmail: 'janhvipagare85@gmail.com',
-          },
-          deletedAt: null,
-        },
-        create: {
-          name: 'Infosys',
-          slug: 'infosys',
-          status: 'ACTIVE' as any,
-          settings: {
-            onboarding: { completed: true },
-            industry: 'Information Technology & Engineering Solutions',
-            contactPhone: '+91 20 2687 4000',
-            supportEmail: 'janhvipagare85@gmail.com',
-          },
-        },
-      });
-
-      await this.tenantPolicy.upsert({
-        where: { tenantId: infosysTenant.id },
-        update: {
-          maxUsersQuota: 50,
-          tolerableOpenDays: 3,
-          closureAuthority: 'SUPPORT_EMPLOYEE',
-          assignmentStrategy: 'MANUAL_DEPT_HEAD',
-          businessType: 'BOTH',
-          purposeOfUse: 'BOTH',
-          allowCustomerToRaise: true,
-          allowEmployeeOnBehalf: true,
-          notificationChannels: 'BOTH',
-          platformAccess: 'BOTH',
-          pushNotifications: true,
-        },
-        create: {
-          tenantId: infosysTenant.id,
-          maxUsersQuota: 50,
-          tolerableOpenDays: 3,
-          closureAuthority: 'SUPPORT_EMPLOYEE',
-          assignmentStrategy: 'MANUAL_DEPT_HEAD',
-          businessType: 'BOTH',
-          purposeOfUse: 'BOTH',
-          allowCustomerToRaise: true,
-          allowEmployeeOnBehalf: true,
-          notificationChannels: 'BOTH',
-          platformAccess: 'BOTH',
-          pushNotifications: true,
-        },
-      });
-
-      if (clientAdminRole) {
-        await this.tenantMembership.upsert({
-          where: {
-            uq_membership_tenant_user: {
-              tenantId: infosysTenant.id,
-              userId: janhviUser.id,
-            },
-          },
-          update: { roleId: clientAdminRole.id, isDefault: true },
-          create: {
-            tenantId: infosysTenant.id,
-            userId: janhviUser.id,
-            roleId: clientAdminRole.id,
-            isDefault: true,
-          },
-        });
-
+      if (janhviUser && clientAdminRole && acmeTenant) {
         await this.tenantMembership.upsert({
           where: {
             uq_membership_tenant_user: {
@@ -645,12 +553,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
               userId: janhviUser.id,
             },
           },
-          update: { roleId: clientAdminRole.id, isDefault: false },
+          update: { roleId: clientAdminRole.id, isDefault: true },
           create: {
             tenantId: acmeTenant.id,
             userId: janhviUser.id,
             roleId: clientAdminRole.id,
-            isDefault: false,
+            isDefault: true,
           },
         });
       }
