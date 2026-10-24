@@ -98,6 +98,11 @@ async function bootstrap() {
     ],
   });
 
+  // Redirect root GET / to Web Frontend
+  app.getHttpAdapter().getInstance().get('/', (_req: any, res: any) => {
+    res.redirect(302, config.WEB_BASE_URL || 'https://kalpak-web.onrender.com');
+  });
+
   // Strict Server-side Input Validation
   app.useGlobalPipes(
     new ValidationPipe({
