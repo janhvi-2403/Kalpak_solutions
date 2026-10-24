@@ -10,8 +10,6 @@ import {
   PasswordInput,
   Checkbox,
   Alert,
-  Dialog,
-  Badge,
 } from '@/components/ui';
 import {
   Building2,
@@ -20,7 +18,7 @@ import {
   ArrowLeft,
   Mail,
 } from 'lucide-react';
-import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
+import { AuthLoginResponse } from '@kalpak/types';
 
 import { useAuth } from '@/lib/auth-context';
 import { KalpakLogo } from '@/components/KalpakLogo';
@@ -60,10 +58,6 @@ export function LoginForm() {
   const [isBackupCode, setIsBackupCode] = useState(false);
   const [cachedUser, setCachedUser] = useState<AuthLoginResponse['user'] | null>(null);
 
-  // Multi-tenant organization selection state
-  const [showOrgPicker, setShowOrgPicker] = useState(false);
-  const [availableMemberships, setAvailableMemberships] = useState<TenantMembershipInfo[]>([]);
-  const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
   const [warmingStatus, setWarmingStatus] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -142,12 +136,7 @@ export function LoginForm() {
         return;
       }
 
-      // Handle Multi-Tenant selection when user has multiple organizations and no slug was specified
-      if (response.tenantSelectionRequired && response.memberships && response.memberships.length > 1) {
-        setAvailableMemberships(response.memberships);
-        setShowOrgPicker(true);
-        return;
-      }
+
 
       // Refresh session state and route according to authoritative role and environment
       const freshSession = await refetchSession();
@@ -259,33 +248,7 @@ export function LoginForm() {
     }
   };
 
-  const handleSelectOrganization = async (tenantId: string) => {
-    setIsSwitchingOrg(true);
-    setError(null);
-    try {
-      await apiClient('/tenants/switch', {
-        method: 'POST',
-        body: JSON.stringify({ tenantId }),
-      });
-      setShowOrgPicker(false);
-      const freshSession = await refetchSession();
-      const isSuperAdmin = Boolean(
-        cachedUser?.isSuperAdmin ||
-        freshSession?.user?.isSuperAdmin ||
-        freshSession?.activeRole === 'SUPER_ADMIN'
-      );
-      const userRole = freshSession?.activeRole;
-      const targetTenantSlug = freshSession?.activeTenant?.slug;
 
-      navigateAfterAuth(isSuperAdmin, userRole, targetTenantSlug, freshSession?.activeTenant?.settings);
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.errorResponse.message || 'Failed to select organization');
-      }
-    } finally {
-      setIsSwitchingOrg(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-xl">
@@ -506,41 +469,6 @@ export function LoginForm() {
         </div>
       </div>
 
-      {/* Multi-Tenant Organization Selector Modal */}
-      <Dialog
-        isOpen={showOrgPicker}
-        onClose={() => setShowOrgPicker(false)}
-        title="Select Organization"
-        description="Your account has access to multiple client organizations. Choose which workspace you want to enter:"
-      >
-        <div className="space-y-2 mt-4">
-          {availableMemberships.map((membership) => (
-            <button
-              key={membership.tenantId}
-              type="button"
-              disabled={isSwitchingOrg}
-              onClick={() => handleSelectOrganization(membership.tenantId)}
-              className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50/30 transition-all text-left group disabled:opacity-50"
-            >
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-orange-100 text-slate-700 group-hover:text-orange-700 flex items-center justify-center transition-colors">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm">{membership.tenantName}</h4>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-slate-500 font-mono">@{membership.tenantSlug}</span>
-                    <Badge variant="primary" className="text-[10px] py-0 px-1.5">
-                      {membership.role}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-orange-600 transition-colors" />
-            </button>
-          ))}
-        </div>
-      </Dialog>
     </div>
   );
 }

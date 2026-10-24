@@ -164,11 +164,10 @@ export class AuthService {
     } else if (validMemberships.length === 1) {
       activeMembership = validMemberships[0];
     } else if (validMemberships.length > 1) {
-      // User belongs to multiple tenants and none specified in credentials:
-      // Pick default for session initial state, but prompt frontend to present organization selector
+      // User belongs to multiple tenants: automatically enter default or primary organization directly
       const defaultM = validMemberships.find((m) => m.isDefault);
       activeMembership = defaultM || validMemberships[0];
-      tenantSelectionRequired = true;
+      tenantSelectionRequired = false;
     }
 
     const activeTenantId = activeMembership?.tenantId || null;
