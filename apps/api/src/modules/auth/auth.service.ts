@@ -555,7 +555,8 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto, ipAddress?: string, userAgent?: string) {
-    const tokenHash = hashToken(dto.token);
+    const inputToken = (dto.token || '').trim();
+    const tokenHash = hashToken(inputToken);
 
     const tokenRecord = await this.prisma.emailVerificationToken.findUnique({
       where: { tokenHash },

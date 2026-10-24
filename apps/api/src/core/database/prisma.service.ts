@@ -22,10 +22,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       logger.info('Database connection established successfully');
-      // Automatically purge legacy/demo infosys and mastercard tenant/user data
-      await this.purgeTarget('infosys');
-      await this.purgeTarget('mastercard');
-      await this.purgeUserByEmail('janhvipagare85@gmail.com');
       await this.ensureBaselineRbac();
       await this.ensureDemoLogins();
     } catch (error) {
