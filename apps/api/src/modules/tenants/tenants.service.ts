@@ -430,7 +430,8 @@ export class TenantsService {
   // --------------------------------------------------------------------------
 
   async createInvitation(tenantId: string, actorId: string, dto: CreateInvitationDto) {
-    const email = dto.email.trim().toLowerCase();
+    try {
+      const email = dto.email.trim().toLowerCase();
 
     // 1. Verify tenant exists
     const tenant = await this.prisma.tenant.findUnique({
@@ -591,6 +592,12 @@ export class TenantsService {
         authorizedOwner: delivery.authorizedOwner,
       },
     };
+    } catch (err: any) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException || err instanceof ConflictException) {
+        throw err;
+      }
+      throw new BadRequestException(err?.message || 'Failed to dispatch invitation. Please verify email address.');
+    }
   }
 
   async listInvitations(tenantId: string) {
@@ -660,74 +667,95 @@ export class TenantsService {
   }
 
   async resendInvitation(tenantId: string, invitationId: string, actorId: string) {
-    const invitation = await this.prisma.invitation.findFirst({
-      where: { id: invitationId, tenantId },
-      include: { role: true, tenant: true },
-    });
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationId);
+      if (!isUuid) {
+        throw new NotFoundException('Invitation not found or invalid format');
+      }
 
-    if (!invitation) {
-      throw new NotFoundException('Invitation not found');
-    }
+      const invitation = await this.prisma.invitation.findFirst({
+        where: { id: invitationId, tenantId },
+        include: { role: true, tenant: true },
+      });
 
-    if (invitation.acceptedAt !== null) {
-      throw new BadRequestException('This invitation has already been accepted');
-    }
+      if (!invitation) {
+        throw new NotFoundException('Invitation not found');
+      }
 
-    const rawToken = generateSessionToken();
-    const tokenHash = hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      if (invitation.acceptedAt !== null) {
+        throw new BadRequestException('This invitation has already been accepted');
+      }
 
-    const updated = await this.prisma.invitation.update({
-      where: { id: invitationId },
-      data: {
-        tokenHash,
-        expiresAt,
-        revokedAt: null,
-      },
-    });
+      const rawToken = generateSessionToken();
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const delivery = await this.mailService.sendInvitationEmail(
-      invitation.email,
-      rawToken,
-      invitation.tenant.name,
-      invitation.role.name,
-      invitation.department || undefined,
-      invitation.fullName || undefined,
-      invitation.phone || undefined
-    );
+      const updated = await this.prisma.invitation.update({
+        where: { id: invitationId },
+        data: {
+          tokenHash,
+          expiresAt,
+          revokedAt: null,
+        },
+      });
 
-    const inviteUrl = `${this.mailService.getWebBaseUrl()}/accept-invitation?token=${rawToken}`;
+      const orgName = invitation.tenant?.name || 'Kalpak Solutions';
+      const roleName = invitation.role?.name || 'DEPARTMENT_ADMIN';
 
-    await this.auditService.record({
-      tenantId,
-      actorId,
-      eventType: AuditEventType.INVITATION_CREATED,
-      resourceType: 'INVITATION',
-      resourceId: invitationId,
-      action: 'RESEND_INVITATION',
-      metadata: {
-        email: invitation.email,
+      const delivery = await this.mailService.sendInvitationEmail(
+        invitation.email,
+        rawToken,
+        orgName,
+        roleName,
+        invitation.department || undefined,
+        invitation.fullName || undefined,
+        invitation.phone || undefined
+      );
+
+      const inviteUrl = `${this.mailService.getWebBaseUrl()}/accept-invitation?token=${rawToken}`;
+
+      let validActorId: string | null = null;
+      if (actorId) {
+        const actorExists = await this.prisma.user.findUnique({ where: { id: actorId }, select: { id: true } });
+        if (actorExists) validActorId = actorExists.id;
+      }
+
+      await this.auditService.record({
+        tenantId,
+        actorId: validActorId,
+        eventType: AuditEventType.INVITATION_CREATED,
+        resourceType: 'INVITATION',
+        resourceId: invitationId,
+        action: 'RESEND_INVITATION',
+        metadata: {
+          email: invitation.email,
+          emailDelivered: delivery.success,
+          provider: delivery.provider,
+        },
+      });
+
+      const isSandboxRerouted = Boolean(delivery.sandboxRerouted);
+      return {
+        success: true,
+        message: isSandboxRerouted
+          ? `Resend sandbox notice: test copy delivered to verified account (${delivery.authorizedOwner}).`
+          : (delivery.success
+            ? `Invitation resent in real time to ${invitation.email}`
+            : `Fresh invitation token generated. Email delivery attempt (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`),
+        expiresAt: updated.expiresAt,
+        token: rawToken,
+        inviteUrl,
+        emailProvider: delivery.provider,
         emailDelivered: delivery.success,
-        provider: delivery.provider,
-      },
-    });
-
-    const isSandboxRerouted = Boolean(delivery.sandboxRerouted);
-    return {
-      success: true,
-      message: isSandboxRerouted
-        ? `Resend sandbox restriction: delivered to verified account (${delivery.authorizedOwner}). To send directly to ${invitation.email}, add GMAIL_USER + GMAIL_APP_PASSWORD on Render or verify your domain in Resend.`
-        : (delivery.success
-          ? `Invitation resent in real time to ${invitation.email}`
-          : `Fresh invitation token generated. Email delivery attempt (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`),
-      expiresAt: updated.expiresAt,
-      token: rawToken,
-      inviteUrl,
-      emailProvider: delivery.provider,
-      emailDelivered: delivery.success,
-      sandboxRerouted: isSandboxRerouted,
-      authorizedOwner: delivery.authorizedOwner,
-    };
+        sandboxRerouted: isSandboxRerouted,
+        authorizedOwner: delivery.authorizedOwner,
+      };
+    } catch (err: any) {
+      if (err instanceof NotFoundException || err instanceof BadRequestException || err instanceof ConflictException) {
+        throw err;
+      }
+      throw new BadRequestException(err?.message || 'Failed to resend invitation. Please try again.');
+    }
   }
 
   // --------------------------------------------------------------------------
