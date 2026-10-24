@@ -323,15 +323,6 @@ function VerifyEmailContent() {
                   <ShieldCheck className="mr-2 w-4 h-4" />
                   <span>Verify & Activate 2FA</span>
                 </Button>
-
-                <div className="pt-1 text-center">
-                  <Link
-                    href={checkoutUrl}
-                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    Skip for now and configure in Settings &rarr;
-                  </Link>
-                </div>
               </form>
             </div>
           ) : (
