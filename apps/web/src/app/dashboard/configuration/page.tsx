@@ -18,7 +18,6 @@ import {
   AlertCircle,
   Send,
   XCircle,
-  Info,
   Wrench,
   Package,
   HelpCircle,
