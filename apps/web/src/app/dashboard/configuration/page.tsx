@@ -32,6 +32,7 @@ import {
   ExternalLink,
   UserPlus,
   X,
+  Power,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/api-client';
@@ -481,7 +482,7 @@ export default function ConfigurationPage() {
             name: d.name,
             code: d.code,
             description: d.description || '',
-            status: (d.status || 'ACTIVE') as 'ACTIVE' | 'INACTIVE',
+            status: (d.isActive !== undefined ? (d.isActive ? 'ACTIVE' : 'INACTIVE') : (d.status || 'ACTIVE')) as 'ACTIVE' | 'INACTIVE',
             skills: d.skills || [
               'Gearbox Repair',
               'Motor Repair',
@@ -688,10 +689,14 @@ export default function ConfigurationPage() {
     setDeptCode('');
     setDeptDescription('');
     setDeptStatus('ACTIVE');
-    setSelectedSkills([...availableSkills.slice(0, 4)]);
-    setSelectedProducts([...availableProducts.slice(0, 3)]);
-    setSelectedServices([...availableServices.slice(0, 3)]);
-    setSelectedIssueTypes([...availableIssueTypes.slice(0, 5)]);
+    setAvailableSkills([...DEFAULT_SKILLS]);
+    setSelectedSkills([...DEFAULT_SKILLS.slice(0, 4)]);
+    setAvailableProducts([...DEFAULT_PRODUCTS]);
+    setSelectedProducts([...DEFAULT_PRODUCTS.slice(0, 3)]);
+    setAvailableServices([...DEFAULT_SERVICES]);
+    setSelectedServices([...DEFAULT_SERVICES.slice(0, 3)]);
+    setAvailableIssueTypes([...DEFAULT_ISSUE_TYPES]);
+    setSelectedIssueTypes([...DEFAULT_ISSUE_TYPES.slice(0, 5)]);
     setIsDeptModalOpen(true);
   };
 
@@ -705,18 +710,26 @@ export default function ConfigurationPage() {
     setSelectedProducts(dept.products || []);
     setSelectedServices(dept.services || []);
     setSelectedIssueTypes(dept.issueTypes || []);
-    if (dept.skills && dept.skills.length > 0) {
-      setAvailableSkills((prev) => Array.from(new Set([...prev, ...dept.skills])));
-    }
-    if (dept.products && dept.products.length > 0) {
-      setAvailableProducts((prev) => Array.from(new Set([...prev, ...dept.products])));
-    }
-    if (dept.services && dept.services.length > 0) {
-      setAvailableServices((prev) => Array.from(new Set([...prev, ...dept.services])));
-    }
-    if (dept.issueTypes && dept.issueTypes.length > 0) {
-      setAvailableIssueTypes((prev) => Array.from(new Set([...prev, ...dept.issueTypes])));
-    }
+    setAvailableSkills(
+      dept.skills && dept.skills.length > 0
+        ? Array.from(new Set([...DEFAULT_SKILLS, ...dept.skills]))
+        : [...DEFAULT_SKILLS]
+    );
+    setAvailableProducts(
+      dept.products && dept.products.length > 0
+        ? Array.from(new Set([...DEFAULT_PRODUCTS, ...dept.products]))
+        : [...DEFAULT_PRODUCTS]
+    );
+    setAvailableServices(
+      dept.services && dept.services.length > 0
+        ? Array.from(new Set([...DEFAULT_SERVICES, ...dept.services]))
+        : [...DEFAULT_SERVICES]
+    );
+    setAvailableIssueTypes(
+      dept.issueTypes && dept.issueTypes.length > 0
+        ? Array.from(new Set([...DEFAULT_ISSUE_TYPES, ...dept.issueTypes]))
+        : [...DEFAULT_ISSUE_TYPES]
+    );
     setIsDeptModalOpen(true);
   };
 
@@ -728,6 +741,8 @@ export default function ConfigurationPage() {
       setIsSaving(true);
       setFeedback(null);
 
+      let savedId = editingDeptId;
+
       if (editingDeptId && !editingDeptId.startsWith('dept-demo')) {
         await apiClient(`/departments/${editingDeptId}`, {
           method: 'PATCH',
@@ -735,17 +750,22 @@ export default function ConfigurationPage() {
             name: deptName.trim(),
             code: deptCode.trim().toUpperCase(),
             description: deptDescription.trim() || undefined,
+            isActive: deptStatus === 'ACTIVE',
           }),
         });
       } else if (!editingDeptId) {
-        await apiClient('/departments', {
+        const res = await apiClient<any>('/departments', {
           method: 'POST',
           body: JSON.stringify({
             name: deptName.trim(),
             code: deptCode.trim().toUpperCase(),
             description: deptDescription.trim() || undefined,
+            isActive: deptStatus === 'ACTIVE',
           }),
         });
+        if (res?.id) {
+          savedId = res.id;
+        }
       }
 
       setDepartments((prev) => {
@@ -767,7 +787,7 @@ export default function ConfigurationPage() {
           );
         } else {
           const newDept: DepartmentData = {
-            id: `dept-${Date.now()}`,
+            id: savedId || `dept-${Date.now()}`,
             name: deptName.trim(),
             code: deptCode.trim().toUpperCase(),
             description: deptDescription.trim(),
@@ -787,7 +807,7 @@ export default function ConfigurationPage() {
 
       setFeedback({
         type: 'success',
-        text: `Department "${deptName}" saved successfully with ${selectedSkills.length} skills and ${selectedIssueTypes.length} query types.`,
+        text: `Department "${deptName}" saved successfully as ${deptStatus}.`,
       });
       setIsDeptModalOpen(false);
     } catch (err) {
@@ -797,6 +817,32 @@ export default function ConfigurationPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleToggleDepartmentStatus = async (dept: DepartmentData) => {
+    const nextStatus = dept.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      if (!dept.id.startsWith('dept-demo')) {
+        await apiClient(`/departments/${dept.id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: nextStatus === 'ACTIVE' }),
+        });
+      }
+      setDepartments((prev) =>
+        prev.map((d) => (d.id === dept.id ? { ...d, status: nextStatus } : d))
+      );
+      setFeedback({
+        type: 'success',
+        text: `Department "${dept.name}" moved to ${
+          nextStatus === 'ACTIVE' ? 'Active' : 'Inactive (Paused)'
+        }. Active operations remain isolated and intact.`,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to update department status',
+      });
     }
   };
 
@@ -810,7 +856,7 @@ export default function ConfigurationPage() {
       setDepartments((prev) => prev.filter((d) => d.id !== id));
       setFeedback({
         type: 'success',
-        text: `Department "${name}" deleted.`,
+        text: `Department "${name}" deleted. Other active and inactive departments remain completely unaffected.`,
       });
     } catch (err) {
       setFeedback({
@@ -1755,183 +1801,299 @@ export default function ConfigurationPage() {
                 </div>
               </div>
 
-              {/* Department Cards Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {departments.map((dept) => (
-                  <Card
-                    key={dept.id}
-                    className="border-slate-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
-                  >
-                    {/* Header */}
-                    <CardHeader className="bg-slate-50/70 pb-3 border-b border-slate-100 flex flex-row items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-bold text-slate-900">
-                            {dept.name}
-                          </CardTitle>
-                          <span className="font-mono text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded font-bold border border-orange-200">
-                            {dept.code}
-                          </span>
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                              dept.status === 'ACTIVE'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-200 text-slate-600'
+              {/* Computed Active & Inactive Departments */}
+              {(() => {
+                const activeDepts = departments.filter((d) => d.status === 'ACTIVE');
+                const inactiveDepts = departments.filter((d) => d.status === 'INACTIVE');
+
+                const renderCard = (dept: DepartmentData) => {
+                  const isActive = dept.status === 'ACTIVE';
+                  return (
+                    <Card
+                      key={dept.id}
+                      className={`border shadow-sm transition-all overflow-hidden flex flex-col ${
+                        isActive
+                          ? 'border-slate-200 hover:shadow-md bg-white'
+                          : 'border-slate-300 bg-slate-50/70'
+                      }`}
+                    >
+                      {/* Header */}
+                      <CardHeader className="bg-slate-50/80 pb-3 border-b border-slate-100 flex flex-row items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <CardTitle className="text-base font-bold text-slate-900">
+                              {dept.name}
+                            </CardTitle>
+                            <span className="font-mono text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded font-bold border border-orange-200">
+                              {dept.code}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
+                                isActive
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  : 'bg-slate-200 text-slate-600 border-slate-300'
+                              }`}
+                            >
+                              {isActive ? 'ACTIVE' : 'PAUSED'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 line-clamp-2">
+                            {dept.description || 'General engineering and technical operations department.'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          {/* Toggle Active / Inactive Status */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDepartmentStatus(dept)}
+                            title={isActive ? 'Pause / Deactivate Department' : 'Activate Department'}
+                            className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors flex items-center gap-1 ${
+                              isActive
+                                ? 'border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100'
+                                : 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
                             }`}
                           >
-                            {dept.status}
+                            <Power className="w-3.5 h-3.5" />
+                            <span>{isActive ? 'Pause' : 'Activate'}</span>
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => openEditDepartmentModal(dept)}
+                            title="Edit Department Scope"
+                            className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors border border-transparent hover:border-orange-200"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                            title="Delete Department (Safe, does not affect other departments)"
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                        {/* Section 1: Skills handled */}
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Wrench className="w-3.5 h-3.5 text-orange-500" />
+                            <span>Skills Handled ({dept.skills?.length || 0})</span>
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {dept.skills && dept.skills.length > 0 ? (
+                              dept.skills.map((skill) => (
+                                <span
+                                  key={skill}
+                                  className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md font-medium border border-slate-200"
+                                >
+                                  {skill}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">No skills mapped</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Section 2: Products & Services */}
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 text-xs">
+                          <div>
+                            <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
+                              <Package className="w-3 h-3 text-blue-500" />
+                              <span>Products</span>
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {dept.products && dept.products.length > 0 ? (
+                                dept.products.map((p) => (
+                                  <span key={p} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">
+                                    {p}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">None</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
+                              <Layers className="w-3 h-3 text-emerald-500" />
+                              <span>Services</span>
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {dept.services && dept.services.length > 0 ? (
+                                dept.services.map((s) => (
+                                  <span key={s} className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100">
+                                    {s}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">None</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Section 3: Query / Issue Types ⭐ */}
+                        <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                          <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                            <HelpCircle className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Handled Query / Issue Types ⭐</span>
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {dept.issueTypes && dept.issueTypes.length > 0 ? (
+                              dept.issueTypes.map((issue) => (
+                                <span
+                                  key={issue}
+                                  className="text-[11px] bg-purple-50 text-purple-800 font-semibold px-2.5 py-0.5 rounded-md border border-purple-200"
+                                >
+                                  {issue}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">No issue types configured</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Section 4: Department Head / POC inside department */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <UserCheck className="w-3.5 h-3.5 text-orange-600" />
+                              <span>Department Head / POC</span>
+                            </p>
+
+                            {!dept.headUser && (
+                              <Button
+                                size="sm"
+                                onClick={() => openInviteModalForDept(dept.name)}
+                                className="h-7 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Invite Head</span>
+                              </Button>
+                            )}
+                          </div>
+
+                          {dept.headUser ? (
+                            <div className="mt-2 flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-xs">
+                                  {dept.headUser.fullName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold text-slate-900">
+                                    {dept.headUser.fullName}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">{dept.headUser.email}</p>
+                                </div>
+                              </div>
+
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                                Assigned
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-center py-2 bg-white/60 rounded-lg border border-dashed border-slate-300">
+                              <p className="text-xs font-semibold text-slate-500">
+                                No Department Head assigned
+                              </p>
+                              <p className="text-[11px] text-slate-400">
+                                Invite a POC to oversee technician assignment and SLA resolutions.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                };
+
+                return (
+                  <div className="space-y-8">
+                    {/* 🟢 SECTION 1: ACTIVE DEPARTMENTS */}
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <h3 className="text-sm font-bold text-slate-900">
+                              Active Departments ({activeDepts.length})
+                            </h3>
+                            <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Live
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            Active departments are live and receive automated ticket routing and technician work orders.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={openAddDepartmentModal}
+                          size="sm"
+                          className="bg-orange-500 hover:bg-orange-600 text-white gap-1.5 self-start sm:self-auto shrink-0 shadow-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add Department</span>
+                        </Button>
+                      </div>
+
+                      {activeDepts.length === 0 ? (
+                        <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-2">
+                          <p className="text-sm font-bold text-slate-700">No Active Departments</p>
+                          <p className="text-xs text-slate-500 max-w-md mx-auto">
+                            There are currently no active departments. Click &quot;Add Department&quot; above to create one, or activate a paused department below.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {activeDepts.map((dept) => renderCard(dept))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ⏸️ SECTION 2: INACTIVE / PAUSED DEPARTMENTS */}
+                    <div className="space-y-4 pt-4">
+                      <div className="pb-3 border-b border-slate-200 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                          <h3 className="text-sm font-bold text-slate-800">
+                            Inactive / Paused Departments ({inactiveDepts.length})
+                          </h3>
+                          <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-300">
+                            Paused
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 line-clamp-2">
-                          {dept.description || 'General engineering and technical operations department.'}
+                        <p className="text-xs text-slate-500">
+                          Paused departments do not receive new tickets. All historical ticket records, skills, and configuration remain 100% preserved. Deleting or clearing from this section will <strong>never</strong> touch your active departments.
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditDepartmentModal(dept)}
-                          title="Edit Department"
-                          className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDepartment(dept.id, dept.name)}
-                          title="Delete Department"
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="p-5 space-y-4 flex-1 flex flex-col justify-between">
-                      {/* Section 1: Skills handled */}
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <Wrench className="w-3.5 h-3.5 text-orange-500" />
-                          <span>Skills Handled ({dept.skills?.length || 0})</span>
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {dept.skills && dept.skills.length > 0 ? (
-                            dept.skills.map((skill) => (
-                              <span
-                                key={skill}
-                                className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md font-medium border border-slate-200"
-                              >
-                                {skill}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">No skills mapped</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Section 2: Products & Services */}
-                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 text-xs">
-                        <div>
-                          <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
-                            <Package className="w-3 h-3 text-blue-500" />
-                            <span>Products</span>
+                      {inactiveDepts.length === 0 ? (
+                        <div className="p-6 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                          <p className="text-xs font-semibold text-slate-600">No Inactive Departments</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            When you pause or deactivate a department, it will appear here safely isolated from your active departments.
                           </p>
-                          <div className="flex flex-wrap gap-1">
-                            {dept.products?.map((p) => (
-                              <span key={p} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                                {p}
-                              </span>
-                            ))}
-                          </div>
                         </div>
-
-                        <div>
-                          <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
-                            <Layers className="w-3 h-3 text-emerald-500" />
-                            <span>Services</span>
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {dept.services?.map((s) => (
-                              <span key={s} className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
-                                {s}
-                              </span>
-                            ))}
-                          </div>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {inactiveDepts.map((dept) => renderCard(dept))}
                         </div>
-                      </div>
-
-                      {/* Section 3: Query / Issue Types ⭐ */}
-                      <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <HelpCircle className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Handled Query / Issue Types ⭐</span>
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {dept.issueTypes?.map((issue) => (
-                            <span
-                              key={issue}
-                              className="text-[11px] bg-purple-50 text-purple-800 font-semibold px-2.5 py-0.5 rounded-md border border-purple-200"
-                            >
-                              {issue}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Section 4: Department Head / POC inside department */}
-                      <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                            <UserCheck className="w-3.5 h-3.5 text-orange-600" />
-                            <span>Department Head / POC</span>
-                          </p>
-
-                          {!dept.headUser && (
-                            <Button
-                              size="sm"
-                              onClick={() => openInviteModalForDept(dept.name)}
-                              className="h-7 text-xs bg-orange-500 hover:bg-orange-600 text-white gap-1"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Invite Head</span>
-                            </Button>
-                          )}
-                        </div>
-
-                        {dept.headUser ? (
-                          <div className="mt-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center font-bold text-xs">
-                                {dept.headUser.fullName.charAt(0)}
-                              </div>
-                              <div>
-                                <p className="text-xs font-bold text-slate-900">
-                                  {dept.headUser.fullName}
-                                </p>
-                                <p className="text-[11px] text-slate-500">{dept.headUser.email}</p>
-                              </div>
-                            </div>
-
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                              Assigned
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="mt-2 text-center py-2 bg-white/60 rounded-lg border border-dashed border-slate-300">
-                            <p className="text-xs font-semibold text-slate-500">
-                              No Department Head assigned
-                            </p>
-                            <p className="text-[11px] text-slate-400">
-                              Invite a POC to oversee technician assignment and SLA resolutions.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
