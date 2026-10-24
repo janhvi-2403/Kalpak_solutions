@@ -1994,17 +1994,6 @@ export default function ConfigurationPage() {
           {/* ================================================================= */}
           {activeSubTab === 'heads' && (
             <div className="space-y-6">
-              {/* Sub-Header Notice */}
-              <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-3">
-                <Info className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-900 leading-relaxed">
-                  <p className="font-bold">Department Scope & Deactivation Policy</p>
-                  <p>
-                    Department Heads hold operational governance over ticket queues and routing for their assigned department. When a head leaves or transfers, use <strong>Deactivate</strong> instead of deletion so that all historical ticket actions (e.g. <em>Ticket #TK-1024 Assigned & Closed by Rahul Sharma</em>) remain permanently auditable.
-                  </p>
-                </div>
-              </div>
-
               {/* 1. Pending Invitations */}
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
