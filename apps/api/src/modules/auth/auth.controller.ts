@@ -172,12 +172,29 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify email address with single-use expiring token' })
   async verifyEmail(
     @Body() dto: VerifyEmailDto,
-    @Req() req: Request
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
   ) {
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.get('user-agent');
 
-    return this.authService.verifyEmail(dto, ipAddress, userAgent);
+    const result = await this.authService.verifyEmail(dto, ipAddress, userAgent);
+
+    if (result.token) {
+      const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+      const cookieDomain = this.getCookieDomain(req);
+      const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+      res.cookie(this.config.SESSION_COOKIE_NAME, result.token, {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: isSecure ? 'none' : 'lax',
+        maxAge: maxAgeMs,
+        path: '/',
+        domain: cookieDomain,
+      });
+    }
+
+    return result;
   }
 
   @Public()
@@ -264,6 +281,7 @@ export class AuthController {
   }
 
   @Post('mfa/setup')
+  @AllowUnverifiedMfa()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate TOTP secret and QR code for in-app 2-step authentication configuration' })
   async setupMfa(@CurrentUser() user: UserPrincipal) {
@@ -271,6 +289,7 @@ export class AuthController {
   }
 
   @Post('mfa/enable')
+  @AllowUnverifiedMfa()
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify 6-digit code and activate Two-Factor Authentication' })

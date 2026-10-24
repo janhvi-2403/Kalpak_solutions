@@ -559,50 +559,103 @@ export class AuthService {
 
     const tokenRecord = await this.prisma.emailVerificationToken.findUnique({
       where: { tokenHash },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            memberships: {
+              include: { tenant: true },
+            },
+          },
+        },
+      },
     });
 
     if (!tokenRecord) {
       throw new BadRequestException('Verification link is invalid or has expired');
     }
 
-    if (tokenRecord.usedAt !== null) {
-      return { success: true, message: 'Email has already been verified. You can now sign in.' };
-    }
-
     if (tokenRecord.expiresAt < new Date()) {
       throw new BadRequestException('Verification link has expired. Please request a new verification email.');
     }
 
-    // Mark user verified and token used
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: tokenRecord.userId },
-        data: {
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-        },
-      }),
-      this.prisma.emailVerificationToken.update({
-        where: { id: tokenRecord.id },
-        data: { usedAt: new Date() },
-      }),
-    ]);
+    if (tokenRecord.usedAt !== null) {
+      if (tokenRecord.user.mfaEnabled) {
+        return {
+          success: true,
+          message: 'Email and Two-Factor Authentication have already been verified. You can now sign in.',
+          alreadyConfigured: true,
+        };
+      }
+    } else {
+      // Mark user verified and token used
+      await this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id: tokenRecord.userId },
+          data: {
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+          },
+        }),
+        this.prisma.emailVerificationToken.update({
+          where: { id: tokenRecord.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
 
-    await this.auditService.record({
-      actorId: tokenRecord.userId,
-      eventType: AuditEventType.AUTH_EMAIL_VERIFIED,
-      resourceType: 'USER',
-      resourceId: tokenRecord.userId,
-      action: 'EMAIL_VERIFIED',
-      metadata: { email: tokenRecord.email },
-      ipAddress,
-      userAgent,
+      await this.auditService.record({
+        actorId: tokenRecord.userId,
+        eventType: AuditEventType.AUTH_EMAIL_VERIFIED,
+        resourceType: 'USER',
+        resourceId: tokenRecord.userId,
+        action: 'EMAIL_VERIFIED',
+        metadata: { email: tokenRecord.email },
+        ipAddress,
+        userAgent,
+      });
+    }
+
+    // 1. Resolve user's active tenant if any
+    const memberships = tokenRecord.user.memberships || [];
+    const defaultM = memberships.find((m) => m.isDefault) || memberships[0];
+    const activeTenantId = defaultM?.tenantId || null;
+
+    // 2. Issue authenticated session token so user can configure 2FA immediately
+    const rawToken = generateSessionToken();
+    const sessionTokenHash = hashToken(rawToken);
+    const ttlHours = this.config.SESSION_TTL_HOURS || 24;
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userId: tokenRecord.userId,
+        activeTenantId,
+        sessionTokenHash,
+        ipAddress,
+        userAgent,
+        mfaVerified: false,
+        expiresAt,
+      },
     });
+
+    // 3. Generate fresh TOTP secret & QR Code for Google Authenticator setup
+    const mfaSetup = await this.setupUserMfa(tokenRecord.userId);
 
     return {
       success: true,
-      message: 'Email verified successfully! You can now sign in to your organization.',
+      message: 'Email verified successfully! Please configure Two-Factor Authentication with Google Authenticator to secure your account.',
+      token: rawToken,
+      user: {
+        id: tokenRecord.user.id,
+        email: tokenRecord.user.email,
+        fullName: tokenRecord.user.fullName,
+        mfaEnabled: false,
+      },
+      mfaSetup: {
+        secret: mfaSetup.secret,
+        otpauthUri: mfaSetup.otpauthUri,
+        qrCode: mfaSetup.qrCode,
+        backupCodes: mfaSetup.backupCodes,
+      },
     };
   }
 
