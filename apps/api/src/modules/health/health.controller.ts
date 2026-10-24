@@ -207,5 +207,44 @@ export class HealthController {
       message: `Successfully purged targets from database.`,
     };
   }
+
+  @Public()
+  @Get('list-tenants')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List current tenants for debug' })
+  async listTenants() {
+    const tenants = await this.prisma.tenant.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, slug: true, createdAt: true },
+    });
+    return { count: tenants.length, tenants };
+  }
+
+  @Public()
+  @Post('purge-all-test-data')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Purge all test tenants except the official acme demo tenant' })
+  async purgeAllTestData() {
+    const testTenants = await this.prisma.tenant.findMany({
+      where: {
+        slug: { not: 'acme-corp' },
+        deletedAt: null,
+      },
+      select: { slug: true },
+    });
+
+    let totalPurged = 0;
+    for (const t of testTenants) {
+      const res = await this.prisma.purgeTarget(t.slug);
+      totalPurged += res.purgedTenants;
+    }
+
+    return {
+      success: true,
+      purgedCount: totalPurged,
+      tenants: testTenants.map((t) => t.slug),
+      message: 'All previous test entries have been cleanly purged.',
+    };
+  }
 }
 
