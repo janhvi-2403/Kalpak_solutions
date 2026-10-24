@@ -660,6 +660,81 @@ export class AuthService {
     };
   }
 
+  async getVerificationStatus(email: string, ipAddress?: string, userAgent?: string) {
+    const targetEmail = (email || '').trim().toLowerCase();
+    if (!targetEmail) {
+      return { verified: false, message: 'Email is required' };
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: targetEmail },
+      include: {
+        memberships: {
+          include: { tenant: true },
+        },
+      },
+    });
+
+    if (!user) {
+      return { verified: false, message: 'User not found' };
+    }
+
+    if (!user.emailVerified) {
+      return { verified: false, emailVerified: false };
+    }
+
+    if (user.mfaEnabled) {
+      return {
+        verified: true,
+        emailVerified: true,
+        mfaConfigured: true,
+      };
+    }
+
+    // Email is verified (e.g. via phone), but 2FA is not yet configured
+    const memberships = user.memberships || [];
+    const defaultM = memberships.find((m) => m.isDefault) || memberships[0];
+    const activeTenantId = defaultM?.tenantId || null;
+
+    const rawToken = generateSessionToken();
+    const sessionTokenHash = hashToken(rawToken);
+    const ttlHours = this.config.SESSION_TTL_HOURS || 24;
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+
+    await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        activeTenantId,
+        sessionTokenHash,
+        ipAddress,
+        userAgent,
+        mfaVerified: false,
+        expiresAt,
+      },
+    });
+
+    const mfaSetup = await this.setupUserMfa(user.id);
+
+    return {
+      verified: true,
+      emailVerified: true,
+      mfaConfigured: false,
+      token: rawToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        mfaEnabled: false,
+      },
+      mfaSetup: {
+        secret: mfaSetup.secret,
+        otpauthUri: mfaSetup.otpauthUri,
+        qrCode: mfaSetup.qrCode,
+        backupCodes: mfaSetup.backupCodes,
+      },
+    };
+  }
+
   async resendVerification(dto: ResendVerificationDto) {
     const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({

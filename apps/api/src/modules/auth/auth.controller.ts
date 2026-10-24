@@ -198,6 +198,35 @@ export class AuthController {
   }
 
   @Public()
+  @Get('verification-status')
+  @ApiOperation({ summary: 'Check if user has verified email on mobile device and fetch 2FA QR code for computer screen' })
+  async getVerificationStatus(
+    @Query('email') email: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.get('user-agent');
+    const result = await this.authService.getVerificationStatus(email, ipAddress, userAgent);
+
+    if (result.token) {
+      const maxAgeMs = this.config.SESSION_TTL_HOURS * 60 * 60 * 1000;
+      const cookieDomain = this.getCookieDomain(req);
+      const isSecure = this.config.COOKIE_SECURE || process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+      res.cookie(this.config.SESSION_COOKIE_NAME, result.token, {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: isSecure ? 'none' : 'lax',
+        maxAge: maxAgeMs,
+        path: '/',
+        domain: cookieDomain,
+      });
+    }
+
+    return result;
+  }
+
+  @Public()
   @RateLimit({ points: 3, durationSeconds: 300 })
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)

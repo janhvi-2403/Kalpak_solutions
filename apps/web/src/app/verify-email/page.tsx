@@ -88,6 +88,47 @@ function VerifyEmailContent() {
     }
   }, [token]);
 
+  // Real-time synchronization: Polls verification status so when user taps link on their phone in Gmail,
+  // the main website on their computer screen immediately transitions to the QR Code setup!
+  useEffect(() => {
+    if (token || isVerified || mfaSetup) return;
+    const targetEmail = (resendEmail || initialEmail).trim().toLowerCase();
+    if (!targetEmail) return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiClient<{
+          verified: boolean;
+          emailVerified?: boolean;
+          mfaConfigured?: boolean;
+          token?: string;
+          mfaSetup?: MfaSetupData;
+        }>(`/auth/verification-status?email=${encodeURIComponent(targetEmail)}`);
+
+        if (!isMounted) return;
+
+        if (res.verified) {
+          clearInterval(interval);
+          if (res.token) {
+            setAuthToken(res.token);
+          }
+          if (res.mfaSetup) {
+            setMfaSetup(res.mfaSetup);
+          }
+          setIsVerified(true);
+        }
+      } catch {
+        // Silently continue polling
+      }
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [token, isVerified, mfaSetup, resendEmail, initialEmail]);
+
   const handleEnableMfa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!totpCode.trim() || totpCode.trim().length < 6) {
@@ -244,6 +285,18 @@ function VerifyEmailContent() {
                 Secure your workspace by linking Google Authenticator (or any TOTP app). You will need this code each time you sign in.
               </p>
 
+              {token && (
+                <div className="mb-4 p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-left">
+                  <div className="flex items-center gap-2 text-xs font-bold text-blue-900">
+                    <span>📱</span>
+                    <span>Opened from Gmail on your phone?</span>
+                  </div>
+                  <p className="text-xs text-blue-800 mt-1 leading-relaxed">
+                    Your email is verified! Look at your computer screen—your Google Authenticator QR Code is already displayed there waiting for you to scan right off your monitor.
+                  </p>
+                </div>
+              )}
+
               {mfaError && (
                 <div className="mb-4">
                   <Alert variant="error" title="Activation Error">
@@ -354,15 +407,23 @@ function VerifyEmailContent() {
             <Mail className="w-7 h-7" />
           </div>
 
+          <div className="inline-flex items-center gap-2 mb-4 px-3.5 py-1.5 rounded-full bg-orange-50 border border-orange-200 text-xs font-bold text-orange-700 shadow-sm animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping" />
+            <span>Waiting for email verification on your phone...</span>
+          </div>
+
           <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Verify Your Email Address</h2>
           <p className="text-sm text-slate-600 mt-2 mb-6 leading-relaxed">
             {initialEmail ? (
               <>
                 We have dispatched a secure verification link to{' '}
                 <strong className="text-slate-900">{initialEmail}</strong>.
+                <span className="text-xs text-orange-600 font-semibold block mt-2">
+                  Open Gmail on your phone and tap the verification link. This screen will automatically update to display your Google Authenticator QR Code.
+                </span>
               </>
             ) : (
-              'Please check your email inbox for the secure verification link sent by Kalpak Solutions.'
+              'Please check your email inbox on your phone. This screen will automatically update to show your Google Authenticator QR code once confirmed.'
             )}
           </p>
 
