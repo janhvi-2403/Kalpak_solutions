@@ -963,7 +963,10 @@ export default function ConfigurationPage() {
 
       let res: any = null;
       if (!invId.startsWith('inv-')) {
-        res = await apiClient<any>(`/tenants/invitations/${invId}/resend`, { method: 'POST' });
+        res = await apiClient<any>(`/tenants/invitations/${invId}/resend`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
       }
 
       setResentSuccessId(invId);

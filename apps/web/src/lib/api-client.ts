@@ -37,8 +37,14 @@ export async function apiClient<T>(
     }
   }
 
-  // Prepend API prefix if not present
-  const fullUrl = url.startsWith('/api/v1') ? url : `/api/v1${url}`;
+  // Direct API base resolution to prevent Next.js proxy rewrite timeout/500 errors on Render
+  const isRenderWeb = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
+  const apiHost = isRenderWeb
+    ? 'https://kalpak-api.onrender.com'
+    : (process.env.NEXT_PUBLIC_API_URL || '');
+
+  const normalizedPath = url.startsWith('/api/v1') ? url : `/api/v1${url}`;
+  const fullUrl = apiHost ? `${apiHost}${normalizedPath}` : normalizedPath;
 
   // Generate correlation ID
   const correlationId =
@@ -48,7 +54,7 @@ export async function apiClient<T>(
 
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
-  if (!requestHeaders.has('Content-Type') && !(restOptions.body instanceof FormData)) {
+  if (!requestHeaders.has('Content-Type') && restOptions.body && !(restOptions.body instanceof FormData)) {
     requestHeaders.set('Content-Type', 'application/json');
   }
   requestHeaders.set('x-correlation-id', correlationId);
