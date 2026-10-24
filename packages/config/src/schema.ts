@@ -78,12 +78,23 @@ export const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
 
-  // Inbound Email Integration Configuration
-  EMAIL_PROVIDER: z.enum(['gmail', 'resend', 'mailgun', 'postmark', 'sendgrid', 'generic', 'cloudmailin']).default('gmail'),
+  // Inbound & Outbound Email Integration Configuration
+  EMAIL_PROVIDER: z.enum(['gmail', 'resend', 'mailgun', 'postmark', 'sendgrid', 'generic', 'cloudmailin', 'smtp', 'brevo']).default('smtp'),
   EMAIL_PROVIDER_API_KEY: z.string().optional().default(''),
   EMAIL_WEBHOOK_SECRET: z.string().default('dev_inbound_email_webhook_secret_key_2026'),
   EMAIL_INBOUND_DOMAIN: z.string().default('inbound.kalpak.com'),
   EMAIL_WEBHOOK_BASE_URL: z.string().default('http://localhost:4000'),
+
+  // SMTP Outbound Configuration (Brevo, Custom SMTP)
+  SMTP_HOST: z.string().optional().default(''),
+  SMTP_PORT: z.coerce.number().optional().default(587),
+  SMTP_USER: z.string().optional().default(''),
+  SMTP_PASS: z.string().optional().default(''),
+  SMTP_SECURE: z.string().optional().default('false'),
+
+  // Gmail SMTP & OAuth Credentials
+  GMAIL_USER: z.string().optional().default(''),
+  GMAIL_APP_PASSWORD: z.string().optional().default(''),
 
   // CloudMailin Inbound Integration Configuration
   CLOUDMAILIN_USERNAME: z.string().optional().default(''),
@@ -99,7 +110,7 @@ export const envSchema = z.object({
   // Outbound Email & Resend Configuration
   RESEND_API_KEY: z.string().optional().default(''),
   EMAIL_FROM: z.string().optional().default(''),
-});
+}).passthrough();
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
