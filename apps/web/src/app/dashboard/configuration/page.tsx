@@ -2166,8 +2166,16 @@ export default function ConfigurationPage() {
                                 </div>
                               </td>
                               <td className="p-3.5">
-                                <span className="font-semibold text-slate-800">
-                                  {member.department || 'Maintenance Department'}
+                                <span
+                                  className={
+                                    member.role === 'CLIENT_ADMIN' || member.role === 'SUPER_ADMIN' || !member.department
+                                      ? 'text-slate-400 font-bold text-sm'
+                                      : 'font-semibold text-slate-800'
+                                  }
+                                >
+                                  {member.role === 'CLIENT_ADMIN' || member.role === 'SUPER_ADMIN' || !member.department
+                                    ? '—'
+                                    : member.department}
                                 </span>
                               </td>
                               <td className="p-3.5">

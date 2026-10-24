@@ -106,9 +106,10 @@ export class UsersService {
     ]);
 
     const items = memberships.map((m) => {
-      const headedDept = m.user.headedDepartments?.[0];
-      const deptId = m.user.employeeProfile?.departmentId || headedDept?.id || null;
-      const deptName = m.user.employeeProfile?.department?.name || headedDept?.name || null;
+      const isOrgAdmin = m.role.name === 'CLIENT_ADMIN' || m.role.name === 'SUPER_ADMIN';
+      const headedDept = isOrgAdmin ? null : m.user.headedDepartments?.[0];
+      const deptId = isOrgAdmin ? null : (m.user.employeeProfile?.departmentId || headedDept?.id || null);
+      const deptName = isOrgAdmin ? null : (m.user.employeeProfile?.department?.name || headedDept?.name || null);
       return {
         membershipId: m.id,
         userId: m.user.id,
@@ -121,7 +122,7 @@ export class UsersService {
         department: deptName,
         departmentId: deptId,
         departmentName: deptName,
-        designation: m.user.employeeProfile?.designation || (headedDept ? 'Department Head' : 'Support Specialist'),
+        designation: isOrgAdmin ? 'Organization Administrator' : (m.user.employeeProfile?.designation || (headedDept ? 'Department Head' : 'Support Specialist')),
         isAvailable: m.user.employeeProfile?.isAvailable ?? true,
         skills: m.user.employeeProfile?.skills || [],
         joinedAt: m.createdAt,
