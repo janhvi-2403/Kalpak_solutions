@@ -549,11 +549,14 @@ export class TenantsService {
       },
     });
 
+    const isSandboxRerouted = Boolean(delivery.sandboxRerouted);
     return {
       success: true,
-      message: delivery.success
-        ? `Official invitation sent in real time to ${email}`
-        : `Invitation created for ${email}. Outbound email delivery (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}. You can copy the activation link directly.`,
+      message: isSandboxRerouted
+        ? `Resend sandbox restriction: delivered to verified account (${delivery.authorizedOwner}). To send directly to ${email}, add GMAIL_USER + GMAIL_APP_PASSWORD on Render or verify your domain in Resend.`
+        : (delivery.success
+          ? `Official invitation sent in real time to ${email}`
+          : `Invitation created for ${email}. Outbound email delivery (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`),
       invitation: {
         id: invitation.id,
         email: invitation.email,
@@ -566,6 +569,8 @@ export class TenantsService {
         inviteUrl,
         emailProvider: delivery.provider,
         emailDelivered: delivery.success,
+        sandboxRerouted: isSandboxRerouted,
+        authorizedOwner: delivery.authorizedOwner,
       },
     };
   }
@@ -689,16 +694,21 @@ export class TenantsService {
       },
     });
 
+    const isSandboxRerouted = Boolean(delivery.sandboxRerouted);
     return {
       success: true,
-      message: delivery.success
-        ? `Invitation resent in real time to ${invitation.email}`
-        : `Fresh invitation token generated. Email delivery attempt (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`,
+      message: isSandboxRerouted
+        ? `Resend sandbox restriction: delivered to verified account (${delivery.authorizedOwner}). To send directly to ${invitation.email}, add GMAIL_USER + GMAIL_APP_PASSWORD on Render or verify your domain in Resend.`
+        : (delivery.success
+          ? `Invitation resent in real time to ${invitation.email}`
+          : `Fresh invitation token generated. Email delivery attempt (${delivery.provider}): ${delivery.error || 'Provider unconfigured'}.`),
       expiresAt: updated.expiresAt,
       token: rawToken,
       inviteUrl,
       emailProvider: delivery.provider,
       emailDelivered: delivery.success,
+      sandboxRerouted: isSandboxRerouted,
+      authorizedOwner: delivery.authorizedOwner,
     };
   }
 

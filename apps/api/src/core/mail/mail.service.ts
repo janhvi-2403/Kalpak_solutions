@@ -18,6 +18,9 @@ export interface EmailDispatchResult {
   messageId?: string;
   provider?: 'resend' | 'smtp' | 'none';
   error?: string;
+  sandboxRerouted?: boolean;
+  authorizedOwner?: string;
+  originalRecipient?: string;
 }
 
 @Injectable()
@@ -136,7 +139,30 @@ export class MailService implements OnModuleInit {
     const recipients = Array.isArray(to) ? to : [to];
     const fromAddress = this.getFromAddress(options.from);
 
-    // 1. Primary Email Provider: Official Resend SDK
+    // 1. If explicit provider is Gmail or SMTP, prioritize secondary transporter
+    const preferredProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+    if (preferredProvider === 'gmail' || preferredProvider === 'smtp') {
+      const transporter = this.getTransporter();
+      if (transporter) {
+        try {
+          const sender = process.env.GMAIL_USER ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>` : fromAddress;
+          const info = await transporter.sendMail({
+            from: sender,
+            to: recipients.join(', '),
+            subject,
+            text,
+            html,
+            replyTo: replyTo || undefined,
+          });
+          logger.info({ messageId: info.messageId, to: recipients, subject }, '[MailService] Email sent successfully via preferred SMTP/Gmail');
+          return { success: true, messageId: info.messageId, provider: 'smtp' };
+        } catch (err: any) {
+          logger.error({ error: err.message, to: recipients }, '[MailService] Preferred SMTP/Gmail failed, trying Resend...');
+        }
+      }
+    }
+
+    // 2. Primary Provider: Official Resend SDK
     const resendClient = this.initResend();
     if (resendClient) {
       try {
@@ -155,21 +181,41 @@ export class MailService implements OnModuleInit {
             '[MailService] Resend email delivery failed'
           );
 
-          // If Resend failed due to sandbox restriction (recipient is not the account owner):
-          // Resend returns: "You can only send testing emails to your own email address (xyz@gmail.com)..."
-          // Reroute to that authorized owner so the developer always receives the email in their inbox!
+          // If Resend failed (e.g. sandbox restriction: recipient is not the account owner),
+          // check if secondary transporter (Gmail SMTP or SMTP) is available to deliver directly to the actual recipient!
+          const transporter = this.getTransporter();
+          if (transporter) {
+            logger.info('[MailService] Resend delivery failed; trying secondary SMTP / Gmail transporter for actual recipient...');
+            try {
+              const sender = process.env.GMAIL_USER ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>` : fromAddress;
+              const info = await transporter.sendMail({
+                from: sender,
+                to: recipients.join(', '),
+                subject,
+                text,
+                html,
+                replyTo: replyTo || undefined,
+              });
+              logger.info({ messageId: info.messageId, to: recipients }, '[MailService] Email successfully delivered to actual recipient via secondary transporter');
+              return { success: true, messageId: info.messageId, provider: 'smtp' };
+            } catch (smtpErr: any) {
+              logger.error({ error: smtpErr.message }, '[MailService] Secondary transporter failed');
+            }
+          }
+
+          // If no secondary transporter or it failed, check for Resend sandbox restriction:
           const match = error.message.match(/your own email address \(([^)]+)\)/i);
           const authorizedOwner = (match && match[1] ? match[1] : (process.env.RESEND_OWNER_EMAIL || 'janhvipagare85@gmail.com')).trim();
 
           if (authorizedOwner && !recipients.map((r) => r.toLowerCase()).includes(authorizedOwner.toLowerCase())) {
             logger.info(
               { authorizedOwner, originalRecipient: recipients[0] },
-              '[MailService] Rerouting test email to authorized Resend account owner'
+              '[MailService] Rerouting test email to authorized Resend account owner due to sandbox restriction'
             );
             const fallbackSubject = `[Testing for: ${recipients[0]}] ${subject}`;
             const fallbackHtml = `
               <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-family:sans-serif;color:#92400e;font-size:13px;">
-                <strong>Resend Delivery Note:</strong> This notification was generated for <strong>${recipients[0]}</strong> and delivered to your verified Resend account (<code>${authorizedOwner}</code>).
+                <strong>Resend Sandbox Notice:</strong> This notification was generated for <strong>${recipients[0]}</strong>. Because your Resend account uses the sandbox domain <code>onboarding@resend.dev</code>, Resend only delivers to your account owner email (<code>${authorizedOwner}</code>). To deliver directly to <strong>${recipients[0]}</strong>, set <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> in your environment variables or verify a domain in Resend.
               </div>
             ` + html;
 
@@ -185,20 +231,23 @@ export class MailService implements OnModuleInit {
               if (fallbackSend && !fallbackSend.error) {
                 logger.info(
                   { id: fallbackSend.data?.id, to: authorizedOwner },
-                  '[MailService] Email successfully delivered to authorized Resend owner inbox'
+                  '[MailService] Email delivered to authorized Resend owner inbox as sandbox fallback'
                 );
-                return { success: true, messageId: fallbackSend.data?.id, provider: 'resend' };
+                return {
+                  success: true,
+                  messageId: fallbackSend.data?.id,
+                  provider: 'resend',
+                  sandboxRerouted: true,
+                  authorizedOwner,
+                  originalRecipient: recipients[0],
+                };
               }
             } catch (fallbackErr: any) {
               logger.warn({ error: fallbackErr.message }, '[MailService] Fallback reroute failed');
             }
           }
 
-          // If Resend failed and no secondary transporter is configured, return the error
-          if (!this.getTransporter()) {
-            return { success: false, provider: 'resend', error: error.message };
-          }
-          logger.warn('[MailService] Falling back to secondary SMTP transporter...');
+          return { success: false, provider: 'resend', error: error.message };
         } else {
           logger.info(
             { id: data?.id, to: recipients, subject },
@@ -211,10 +260,24 @@ export class MailService implements OnModuleInit {
           { error: err.message, to: recipients },
           '[MailService] Unexpected error sending via Resend SDK'
         );
-        if (!this.getTransporter()) {
-          return { success: false, provider: 'resend', error: err.message };
+        const transporter = this.getTransporter();
+        if (transporter) {
+          try {
+            const sender = process.env.GMAIL_USER ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>` : fromAddress;
+            const info = await transporter.sendMail({
+              from: sender,
+              to: recipients.join(', '),
+              subject,
+              text,
+              html,
+              replyTo: replyTo || undefined,
+            });
+            return { success: true, messageId: info.messageId, provider: 'smtp' };
+          } catch (smtpErr: any) {
+            logger.error({ error: smtpErr.message }, '[MailService] Secondary transporter failed');
+          }
         }
-        logger.warn('[MailService] Falling back to secondary SMTP transporter after Resend exception...');
+        return { success: false, provider: 'resend', error: err.message };
       }
     }
 

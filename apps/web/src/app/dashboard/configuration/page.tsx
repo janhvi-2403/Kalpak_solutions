@@ -415,6 +415,8 @@ export default function ConfigurationPage() {
     inviteUrl?: string;
     emailDelivered?: boolean;
     emailProvider?: string;
+    sandboxRerouted?: boolean;
+    authorizedOwner?: string;
   } | null>(null);
 
   // Load initial configuration data from server
@@ -908,6 +910,8 @@ export default function ConfigurationPage() {
           token?: string;
           emailDelivered?: boolean;
           emailProvider?: string;
+          sandboxRerouted?: boolean;
+          authorizedOwner?: string;
         };
       }>('/tenants/invitations', {
         method: 'POST',
@@ -930,9 +934,10 @@ export default function ConfigurationPage() {
           email: inviteEmail.trim(),
           fullName: inviteFullName.trim() || 'Department Head Candidate',
           department: inviteDeptName,
-          inviteUrl: res?.invitation?.inviteUrl || (res?.invitation?.token ? `${window.location.origin}/accept-invitation?token=${res.invitation.token}` : ''),
           emailDelivered: res?.invitation?.emailDelivered ?? true,
-          emailProvider: res?.invitation?.emailProvider || 'resend',
+          emailProvider: res?.invitation?.emailProvider || 'Resend',
+          sandboxRerouted: res?.invitation?.sandboxRerouted,
+          authorizedOwner: res?.invitation?.authorizedOwner,
         });
       }
       setIsInviteModalOpen(false);
@@ -2832,16 +2837,31 @@ export default function ConfigurationPage() {
       >
         {sentInviteModalData && (
           <div className="space-y-4 mt-3">
-            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-3 text-xs text-emerald-900">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold text-sm text-emerald-900">Real-Time Email Dispatched</p>
-                <p className="text-xs text-emerald-800 leading-relaxed">
-                  An authentic invitation email has been sent to <strong>{sentInviteModalData.email}</strong> via {sentInviteModalData.emailProvider || 'Resend'}.
-                  The recipient can open the email in their inbox and click &quot;Accept Invitation &amp; Setup Account&quot; to set their password and take charge of {sentInviteModalData.department}.
-                </p>
+            {sentInviteModalData.sandboxRerouted ? (
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1.5">
+                  <p className="font-bold text-sm text-amber-900">Resend Free Sandbox Notice</p>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Because your Resend account uses the sandbox domain <code>onboarding@resend.dev</code>, Resend only delivers to your registered account (<strong>{sentInviteModalData.authorizedOwner || 'janhvipagare85@gmail.com'}</strong>).
+                  </p>
+                  <p className="text-[11px] text-amber-800 bg-amber-100/70 p-2.5 rounded-lg border border-amber-200 leading-normal">
+                    💡 <strong>To send directly to {sentInviteModalData.email}:</strong> Add <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> in your Render environment variables, or verify a custom domain in Resend.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-3 text-xs text-emerald-900">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-sm text-emerald-900">Real-Time Email Dispatched</p>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    An authentic invitation email has been sent to <strong>{sentInviteModalData.email}</strong> via {sentInviteModalData.emailProvider || 'Resend'}.
+                    The recipient can open the email in their inbox and click &quot;Accept Invitation &amp; Setup Account&quot; to set their password and take charge of {sentInviteModalData.department}.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between">
