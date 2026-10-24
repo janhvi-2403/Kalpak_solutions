@@ -456,8 +456,8 @@ export class TenantsService {
       }
     }
 
-    // 3. Resolve Role
-    const roleRecord = await this.prisma.role.findFirst({
+    // 3. Resolve Role (with baseline RBAC fallback if role is missing in DB)
+    let roleRecord = await this.prisma.role.findFirst({
       where: {
         name: dto.role,
         OR: [{ tenantId }, { tenantId: null }],
@@ -465,7 +465,17 @@ export class TenantsService {
     });
 
     if (!roleRecord) {
-      throw new BadRequestException(`Role "${dto.role}" is invalid or not found`);
+      await this.prisma.ensureBaselineRbac();
+      roleRecord = await this.prisma.role.findFirst({
+        where: {
+          name: dto.role,
+          OR: [{ tenantId }, { tenantId: null }],
+        },
+      });
+    }
+
+    if (!roleRecord) {
+      throw new BadRequestException(`Role "${dto.role}" is invalid or not found in system permissions`);
     }
 
     // 3.5. Enforce Starter Plan Max Employee / Technicians Quota (applicable to staff roles)
@@ -497,10 +507,18 @@ export class TenantsService {
       data: { revokedAt: new Date() },
     });
 
-    // 5. Generate secure token
+    // 5. Generate secure token & validate actor to avoid FK violation
     const rawToken = generateSessionToken();
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    let validActorId: string | null = null;
+    if (actorId) {
+      const actorExists = await this.prisma.user.findUnique({ where: { id: actorId }, select: { id: true } });
+      if (actorExists) {
+        validActorId = actorExists.id;
+      }
+    }
 
     const invitation = await this.prisma.invitation.create({
       data: {
@@ -511,7 +529,7 @@ export class TenantsService {
         fullName: dto.fullName?.trim() || null,
         phone: dto.phone?.trim() || null,
         tokenHash,
-        invitedByUserId: actorId,
+        invitedByUserId: validActorId,
         expiresAt,
       },
       include: {
