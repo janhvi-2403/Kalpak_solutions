@@ -262,37 +262,34 @@ export class MailService implements OnModuleInit {
     organizationName?: string
   ): Promise<EmailDispatchResult> {
     const verificationUrl = `${this.getWebBaseUrl()}/verify-email?token=${token}`;
-    const subject = `Verify your email address - ${organizationName || 'Kalpak Solutions'}`;
-    const textContent = `Please verify your email address to complete your registration${
+    const orgSuffix = organizationName && organizationName !== 'Kalpak Solutions' ? ` (${organizationName})` : '';
+    const subject = `Kalpak Solutions - Verify your email address${orgSuffix}`;
+    const textContent = `Hello,\n\nPlease verify your email address to complete your registration${
       organizationName ? ` with ${organizationName}` : ''
-    } by visiting:\n\n${verificationUrl}\n\nThis verification link is valid for 24 hours.`;
+    } on Kalpak Solutions by opening the following link in your browser:\n\n${verificationUrl}\n\nThis verification link will expire in 24 hours. If you did not create this account, please ignore this email.`;
 
     const htmlContent = `
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>${subject}</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b; margin: 0;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px 12px; color: #1e293b; margin: 0;">
   <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
     <div style="background: linear-gradient(135deg, #ea580c 0%, #f97316 100%); padding: 28px 24px; color: #ffffff;">
       <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Kalpak Solutions</h1>
-      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">Email Address Verification</p>
+      <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.95;">Account Email Verification</p>
     </div>
     <div style="padding: 24px;">
-      <p style="font-size: 15px; margin-top: 0;">Hello,</p>
+      <p style="font-size: 15px; margin-top: 0; color: #0f172a;">Hello,</p>
       <p style="font-size: 14px; line-height: 1.6; color: #475569;">
         Please confirm your email address to complete your registration${
           organizationName ? ` with <strong>${organizationName}</strong>` : ''
-        }.
+        } on the Kalpak platform.
       </p>
-      <div style="margin: 24px 0; text-align: center;">
-        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
+      <div style="margin: 28px 0; text-align: center;">
+        <a href="${verificationUrl}" style="background-color: #ea580c; color: #ffffff; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-block;">
           Verify Email Address
         </a>
       </div>
-      <p style="font-size: 12px; color: #64748b;">This verification link will expire in 24 hours.</p>
+      <p style="font-size: 12px; color: #64748b; margin-top: 24px;">This verification link will expire in 24 hours.</p>
       <p style="font-size: 11px; word-break: break-all; color: #94a3b8; font-family: monospace;">${verificationUrl}</p>
     </div>
   </div>
@@ -304,6 +301,7 @@ export class MailService implements OnModuleInit {
       subject,
       text: textContent,
       html: htmlContent,
+      replyTo: 'support@kalpak.solutions',
     });
   }
 

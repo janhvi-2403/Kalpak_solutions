@@ -24,8 +24,6 @@ function VerifyEmailContent() {
   const [resendEmail, setResendEmail] = useState(initialEmail);
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
-  const [directVerificationUrl, setDirectVerificationUrl] = useState<string | null>(null);
-  const [isActivatingDirectly, setIsActivatingDirectly] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -68,9 +66,6 @@ function VerifyEmailContent() {
         }
       );
       setResendMessage(res.message || 'If an unverified account exists, a new verification link has been dispatched.');
-      if (res.verificationUrl) {
-        setDirectVerificationUrl(res.verificationUrl);
-      }
     } catch (err) {
       if (err instanceof ApiClientError) {
         setError(err.errorResponse.message || 'Failed to resend email');
@@ -79,27 +74,6 @@ function VerifyEmailContent() {
       }
     } finally {
       setIsResending(false);
-    }
-  };
-
-  const handleInstantVerify = async () => {
-    if (!resendEmail) return;
-    setIsActivatingDirectly(true);
-    setError(null);
-    try {
-      await apiClient('/health/verify-user-by-email', {
-        method: 'POST',
-        body: JSON.stringify({ email: resendEmail.trim().toLowerCase() }),
-      });
-      setIsVerified(true);
-    } catch (err: any) {
-      if (err instanceof ApiClientError) {
-        setError(err.errorResponse.message || 'Instant verification failed');
-      } else {
-        setError('Failed to activate account.');
-      }
-    } finally {
-      setIsActivatingDirectly(false);
     }
   };
 
@@ -179,23 +153,6 @@ function VerifyEmailContent() {
             </div>
           )}
 
-          {directVerificationUrl && (
-            <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-left">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
-                Direct Verification Available
-              </h4>
-              <p className="text-xs text-emerald-700 mb-3 leading-relaxed">
-                You can complete your verification directly using the link below:
-              </p>
-              <a
-                href={directVerificationUrl}
-                className="inline-flex items-center justify-center w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-colors"
-              >
-                Complete Email Verification Now &rarr;
-              </a>
-            </div>
-          )}
-
           <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/80 text-left mb-6">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
               Didn&apos;t receive the email?
@@ -222,18 +179,6 @@ function VerifyEmailContent() {
                 Resend Verification Email
               </Button>
             </form>
-
-            <div className="mt-3 pt-3 border-t border-slate-200">
-              <Button
-                type="button"
-                variant="secondary"
-                isLoading={isActivatingDirectly}
-                onClick={handleInstantVerify}
-                className="w-full text-xs h-9 font-bold bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
-              >
-                Instant Test Activation (Skip Email Delivery)
-              </Button>
-            </div>
           </div>
 
           <div className="pt-2 text-center text-xs text-slate-500">

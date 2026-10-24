@@ -19,7 +19,6 @@ import {
   KeyRound,
   ArrowLeft,
   Mail,
-  CheckCircle2,
 } from 'lucide-react';
 import { AuthLoginResponse, TenantMembershipInfo } from '@kalpak/types';
 
@@ -47,8 +46,6 @@ export function LoginForm() {
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [resendStatusMessage, setResendStatusMessage] = useState<string | null>(null);
-  const [directVerificationUrl, setDirectVerificationUrl] = useState<string | null>(null);
-  const [isActivatingDirectly, setIsActivatingDirectly] = useState(false);
 
   // Sync subdomain slug if loaded asynchronously
   React.useEffect(() => {
@@ -223,39 +220,10 @@ export function LoginForm() {
         }
       );
       setResendStatusMessage(res.message || 'Verification link has been dispatched.');
-      if (res.verificationUrl) {
-        setDirectVerificationUrl(res.verificationUrl);
-      }
     } catch (err: any) {
       setResendStatusMessage(err?.errorResponse?.message || 'Failed to request verification email.');
     } finally {
       setIsResendingVerification(false);
-    }
-  };
-
-  const handleInstantVerifyAndLogin = async () => {
-    const targetEmail = unverifiedEmail || email.trim().toLowerCase();
-    if (!targetEmail) return;
-    setIsActivatingDirectly(true);
-    setResendStatusMessage(null);
-    try {
-      await apiClient('/health/verify-user-by-email', {
-        method: 'POST',
-        body: JSON.stringify({ email: targetEmail }),
-      });
-      setUnverifiedEmail(null);
-      setError(null);
-      // Wait briefly then re-trigger login
-      setTimeout(() => {
-        const submitBtn = document.getElementById('login-submit-btn');
-        if (submitBtn) {
-          submitBtn.click();
-        }
-      }, 300);
-    } catch (err: any) {
-      setResendStatusMessage(err?.errorResponse?.message || 'Instant verification failed. Please try again.');
-    } finally {
-      setIsActivatingDirectly(false);
     }
   };
 
@@ -377,18 +345,6 @@ export function LoginForm() {
                   </p>
                 )}
 
-                {directVerificationUrl && (
-                  <div className="mt-3">
-                    <a
-                      href={directVerificationUrl}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition-all"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Verify Email & Activate Account &rarr;</span>
-                    </a>
-                  </div>
-                )}
-
                 <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-amber-200/80">
                   <button
                     type="button"
@@ -397,15 +353,6 @@ export function LoginForm() {
                     className="text-xs font-bold text-orange-700 hover:text-orange-900 underline disabled:opacity-50"
                   >
                     {isResendingVerification ? 'Resending...' : 'Resend Verification Email'}
-                  </button>
-                  <span className="text-amber-400">&bull;</span>
-                  <button
-                    type="button"
-                    onClick={handleInstantVerifyAndLogin}
-                    disabled={isActivatingDirectly}
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline disabled:opacity-50"
-                  >
-                    {isActivatingDirectly ? 'Activating...' : 'Instant Test Verification'}
                   </button>
                   <span className="text-amber-400">&bull;</span>
                   <Link

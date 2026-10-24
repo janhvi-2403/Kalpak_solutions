@@ -487,19 +487,6 @@ export class AuthService {
       '[AuthService] Initial account verification email dispatched'
     );
 
-    // If outbound email delivery was blocked or failed (such as Resend sandbox restricting recipients),
-    // automatically verify the account and pass the token in redirect so registration flows smoothly as previous.
-    if (!emailDelivered) {
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-        },
-      });
-      user.emailVerified = true;
-    }
-
     // 8. Record audit logs
     await this.auditService.record({
       tenantId: tenant.id,
@@ -550,15 +537,11 @@ export class AuthService {
         ? this.mailService.getWebBaseUrl()
         : 'https://kalpak-web.onrender.com';
     const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
-    const redirectUrl = emailDelivered
-      ? `/verify-email?email=${encodeURIComponent(email)}`
-      : `/verify-email?email=${encodeURIComponent(email)}&token=${token}&auto=1`;
+    const redirectUrl = `/verify-email?email=${encodeURIComponent(email)}`;
 
     return {
       success: true,
-      message: emailDelivered
-        ? 'Organization registered successfully. Please verify your email address to activate your account.'
-        : 'Organization registered successfully and account verified.',
+      message: 'Organization registered successfully. Please verify your email address to activate your account.',
       user: userPrincipal,
       activeTenantId: tenant.id,
       memberships: membershipsInfo,
@@ -687,22 +670,6 @@ export class AuthService {
       '[AuthService] Resend verification email dispatch result'
     );
 
-    if (!dispatchResult.success) {
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-        },
-      });
-    }
-
-    const baseUrl =
-      typeof this.mailService?.getWebBaseUrl === 'function'
-        ? this.mailService.getWebBaseUrl()
-        : 'https://kalpak-web.onrender.com';
-    const verificationUrl = `${baseUrl}/verify-email?token=${rawToken}`;
-
     return {
       success: true,
       emailDelivered: dispatchResult.success,
@@ -710,8 +677,7 @@ export class AuthService {
       error: dispatchResult.error || null,
       message: dispatchResult.success
         ? 'A new verification link has been sent to your email inbox.'
-        : `Email delivery attempt (${dispatchResult.provider || 'none'}): ${dispatchResult.error || 'Provider not configured'}. You can verify directly using the link below.`,
-      verificationUrl,
+        : `Email delivery failed: ${dispatchResult.error || 'Please check email configuration'}.`,
     };
   }
 
