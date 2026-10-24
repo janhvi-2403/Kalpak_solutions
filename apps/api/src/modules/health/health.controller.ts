@@ -179,5 +179,33 @@ export class HealthController {
       tenantSlug: user.memberships[0]?.tenant?.slug || null,
     };
   }
+
+  @Public()
+  @Post('purge-target')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Purge a test tenant and associated users by slug or name' })
+  async purgeTargetEndpoint(@Body() body: { identifier?: string; email?: string }) {
+    const identifier = body?.identifier?.trim().toLowerCase();
+    const email = body?.email?.trim().toLowerCase();
+    let tenantResult = { purgedTenants: 0, purgedUsers: 0 };
+    let emailResult = false;
+
+    if (identifier) {
+      tenantResult = await this.prisma.purgeTarget(identifier);
+    }
+    if (email) {
+      emailResult = await this.prisma.purgeUserByEmail(email);
+    }
+
+    return {
+      success: true,
+      identifier,
+      email,
+      purgedTenants: tenantResult.purgedTenants,
+      purgedUsers: tenantResult.purgedUsers,
+      userPurgedByEmail: emailResult,
+      message: `Successfully purged targets from database.`,
+    };
+  }
 }
 
