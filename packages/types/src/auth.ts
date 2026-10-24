@@ -88,6 +88,7 @@ export interface PublicInvitationInfo {
   tenantName: string;
   tenantSlug: string;
   isExpired: boolean;
+  alreadyAccepted?: boolean;
   fullName?: string | null;
   phone?: string | null;
   mfaSetup?: {

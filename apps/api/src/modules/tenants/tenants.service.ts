@@ -501,7 +501,7 @@ export class TenantsService {
     await this.prisma.invitation.updateMany({
       where: {
         tenantId,
-        email,
+        email: { equals: email, mode: 'insensitive' },
         acceptedAt: null,
         revokedAt: null,
       },
@@ -601,6 +601,33 @@ export class TenantsService {
   }
 
   async listInvitations(tenantId: string) {
+    // Auto-reconcile: If any pending invitation belongs to an email that is already an active member of this tenant,
+    // automatically mark those invitations as accepted so they are immediately removed from pending!
+    try {
+      const activeMembers = await this.prisma.tenantMembership.findMany({
+        where: { tenantId },
+        include: { user: { select: { email: true } } },
+      });
+      const activeEmails = activeMembers
+        .map((m) => m.user?.email?.toLowerCase().trim())
+        .filter((e): e is string => Boolean(e));
+
+      if (activeEmails.length > 0) {
+        await this.prisma.invitation.updateMany({
+          where: {
+            tenantId,
+            email: { in: activeEmails },
+            acceptedAt: null,
+          },
+          data: {
+            acceptedAt: new Date(),
+          },
+        });
+      }
+    } catch {
+      // Non-fatal reconciliation fallback
+    }
+
     const invitations = await this.prisma.invitation.findMany({
       where: {
         tenantId,

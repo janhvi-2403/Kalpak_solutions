@@ -118,6 +118,7 @@ export class UsersService {
         isActive: m.user.isActive,
         mfaEnabled: m.user.mfaEnabled,
         role: m.role.name,
+        department: deptName,
         departmentId: deptId,
         departmentName: deptName,
         designation: m.user.employeeProfile?.designation || (headedDept ? 'Department Head' : 'Support Specialist'),

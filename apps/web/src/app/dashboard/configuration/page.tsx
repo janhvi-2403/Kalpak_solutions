@@ -533,18 +533,30 @@ export default function ConfigurationPage() {
         }
       }
 
-      // 3. Fetch Invitations
-      const invRes = await apiClient<any[]>('/tenants/invitations').catch(() => []);
+      // 3. Fetch Invitations and team members
+      const [invRes, usersRes] = await Promise.all([
+        apiClient<any[]>('/tenants/invitations').catch(() => []),
+        apiClient<any>('/users?limit=50').catch(() => null),
+      ]);
+
+      const activeMemberList = usersRes?.items || [];
+      setTeamMembers(activeMemberList);
+
+      const activeMemberEmails = new Set(
+        activeMemberList.map((m: any) => m.email?.toLowerCase().trim()).filter(Boolean)
+      );
+
       if (invRes && Array.isArray(invRes)) {
-        setInvitations(invRes);
+        // Exclude invitations that are already accepted, belong to active members, or belong to non-department roles
+        const pendingDeptHeadInvites = invRes.filter((inv) => {
+          const isDeptRole = !inv.role || inv.role === 'DEPARTMENT_ADMIN' || inv.role === 'DEPARTMENT_HEAD';
+          const isAlreadyAccepted = !!inv.acceptedAt;
+          const isMember = activeMemberEmails.has(inv.email?.toLowerCase().trim());
+          return isDeptRole && !isAlreadyAccepted && !isMember;
+        });
+        setInvitations(pendingDeptHeadInvites);
       } else {
         setInvitations([]);
-      }
-
-      // 4. Fetch team members for Department Head directory
-      const usersRes = await apiClient<any>('/users?limit=50').catch(() => null);
-      if (usersRes && usersRes.items) {
-        setTeamMembers(usersRes.items);
       }
     } catch (err) {
       setFeedback({
@@ -1207,6 +1219,7 @@ export default function ConfigurationPage() {
           onClick={() => {
             setActiveSubTab('heads');
             setFeedback(null);
+            loadConfiguration();
           }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-sm transition-all border-b-2 ${
             activeSubTab === 'heads'

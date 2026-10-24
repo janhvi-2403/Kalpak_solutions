@@ -39,6 +39,9 @@ function AcceptInvitationContent() {
       apiClient<PublicInvitationInfo>(`/auth/invitations/${token}`)
         .then((data) => {
           setInvitationInfo(data);
+          if (data.alreadyAccepted) {
+            setIsAccepted(true);
+          }
           if (data.fullName) setFullName(data.fullName);
           if (data.phone) setPhone(data.phone);
         })

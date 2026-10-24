@@ -1122,7 +1122,7 @@ export class AuthService {
           });
         }
 
-        const isDeptHead = invitation.role.name === 'DEPARTMENT_ADMIN';
+        const isDeptHead = invitation.role.name === 'DEPARTMENT_ADMIN' || invitation.role.name === 'DEPARTMENT_HEAD';
 
         if (!department) {
           const cleanCode = trimmedDept
@@ -1205,6 +1205,29 @@ export class AuthService {
         where: { id: invitation.id },
         data: { acceptedAt: new Date() },
       });
+
+      // Reconcile: Mark any other pending invitations for this email in this tenant as accepted
+      await tx.invitation.updateMany({
+        where: {
+          tenantId: invitation.tenantId,
+          email: { equals: email, mode: 'insensitive' },
+          acceptedAt: null,
+        },
+        data: { acceptedAt: new Date() },
+      });
+
+      // If this is a department head invitation, mark any other pending invites for this department as revoked
+      if (invitation.department) {
+        await tx.invitation.updateMany({
+          where: {
+            tenantId: invitation.tenantId,
+            department: invitation.department,
+            roleId: invitation.roleId,
+            acceptedAt: null,
+          },
+          data: { revokedAt: new Date() },
+        });
+      }
     });
 
     await this.auditService.record({
