@@ -31,6 +31,7 @@ import {
   Check,
   ExternalLink,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/api-client';
@@ -388,12 +389,19 @@ export default function ConfigurationPage() {
   const [deptDescription, setDeptDescription] = useState('');
   const [deptStatus, setDeptStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<string[]>(DEFAULT_SKILLS);
   const [customSkillInput, setCustomSkillInput] = useState('');
+
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<string[]>(DEFAULT_PRODUCTS);
   const [customProductInput, setCustomProductInput] = useState('');
+
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [availableServices, setAvailableServices] = useState<string[]>(DEFAULT_SERVICES);
   const [customServiceInput, setCustomServiceInput] = useState('');
+
   const [selectedIssueTypes, setSelectedIssueTypes] = useState<string[]>([]);
+  const [availableIssueTypes, setAvailableIssueTypes] = useState<string[]>(DEFAULT_ISSUE_TYPES);
   const [customIssueTypeInput, setCustomIssueTypeInput] = useState('');
 
   // 3. Department Head & Invitations State
@@ -680,10 +688,10 @@ export default function ConfigurationPage() {
     setDeptCode('');
     setDeptDescription('');
     setDeptStatus('ACTIVE');
-    setSelectedSkills([...DEFAULT_SKILLS.slice(0, 4)]);
-    setSelectedProducts([...DEFAULT_PRODUCTS.slice(0, 3)]);
-    setSelectedServices([...DEFAULT_SERVICES.slice(0, 3)]);
-    setSelectedIssueTypes([...DEFAULT_ISSUE_TYPES.slice(0, 5)]);
+    setSelectedSkills([...availableSkills.slice(0, 4)]);
+    setSelectedProducts([...availableProducts.slice(0, 3)]);
+    setSelectedServices([...availableServices.slice(0, 3)]);
+    setSelectedIssueTypes([...availableIssueTypes.slice(0, 5)]);
     setIsDeptModalOpen(true);
   };
 
@@ -697,6 +705,18 @@ export default function ConfigurationPage() {
     setSelectedProducts(dept.products || []);
     setSelectedServices(dept.services || []);
     setSelectedIssueTypes(dept.issueTypes || []);
+    if (dept.skills && dept.skills.length > 0) {
+      setAvailableSkills((prev) => Array.from(new Set([...prev, ...dept.skills])));
+    }
+    if (dept.products && dept.products.length > 0) {
+      setAvailableProducts((prev) => Array.from(new Set([...prev, ...dept.products])));
+    }
+    if (dept.services && dept.services.length > 0) {
+      setAvailableServices((prev) => Array.from(new Set([...prev, ...dept.services])));
+    }
+    if (dept.issueTypes && dept.issueTypes.length > 0) {
+      setAvailableIssueTypes((prev) => Array.from(new Set([...prev, ...dept.issueTypes])));
+    }
     setIsDeptModalOpen(true);
   };
 
@@ -809,11 +829,40 @@ export default function ConfigurationPage() {
   const addCustomItem = (
     input: string,
     setInput: React.Dispatch<React.SetStateAction<string>>,
-    setList: React.Dispatch<React.SetStateAction<string[]>>
+    setAvailableList: React.Dispatch<React.SetStateAction<string[]>>,
+    setSelectedList: React.Dispatch<React.SetStateAction<string[]>>
   ) => {
-    if (!input.trim()) return;
-    setList((prev) => (prev.includes(input.trim()) ? prev : [...prev, input.trim()]));
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    setAvailableList((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setSelectedList((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
     setInput('');
+  };
+
+  const removeItemFromList = (
+    item: string,
+    setAvailableList: React.Dispatch<React.SetStateAction<string[]>>,
+    setSelectedList: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setAvailableList((prev) => prev.filter((x) => x !== item));
+    setSelectedList((prev) => prev.filter((x) => x !== item));
+  };
+
+  const clearList = (
+    setAvailableList: React.Dispatch<React.SetStateAction<string[]>>,
+    setSelectedList: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setAvailableList([]);
+    setSelectedList([]);
+  };
+
+  const resetListDefaults = (
+    defaults: string[],
+    setAvailableList: React.Dispatch<React.SetStateAction<string[]>>,
+    setSelectedList: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setAvailableList(defaults);
+    setSelectedList([...defaults]);
   };
 
   // --------------------------------------------------------------------------
@@ -2223,52 +2272,105 @@ export default function ConfigurationPage() {
           </div>
 
           {/* 1. Skills Handled */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
             <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
-              <span>Skills Handled by Department</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                {selectedSkills.length} selected
+              <span className="flex items-center gap-1.5">
+                <Wrench className="w-3.5 h-3.5 text-orange-600" />
+                <span>Skills Handled by Department</span>
               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {selectedSkills.length} selected
+                </span>
+                {availableSkills.length > 0 && (
+                  <>
+                    <span className="text-slate-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => clearList(setAvailableSkills, setSelectedSkills)}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold hover:underline"
+                    >
+                      Clear List
+                    </button>
+                  </>
+                )}
+                <span className="text-slate-300">&bull;</span>
+                <button
+                  type="button"
+                  onClick={() => resetListDefaults(DEFAULT_SKILLS, setAvailableSkills, setSelectedSkills)}
+                  className="text-[11px] text-orange-600 hover:text-orange-700 font-semibold hover:underline"
+                >
+                  Reset Defaults
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEFAULT_SKILLS.map((skill) => {
-                const isChecked = selectedSkills.includes(skill);
-                return (
-                  <label
-                    key={skill}
-                    className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                      isChecked
-                        ? 'bg-orange-50 border-orange-200 text-orange-950 font-semibold'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleItem(setSelectedSkills, skill)}
-                      className="rounded text-orange-600 focus:ring-orange-500"
-                    />
-                    <span>{skill}</span>
-                  </label>
-                );
-              })}
-            </div>
+
+            {availableSkills.length === 0 ? (
+              <div className="p-3 rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-400 bg-white">
+                No skills in list. Type below and click Add to create your custom skills.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {availableSkills.map((skill) => {
+                  const isChecked = selectedSkills.includes(skill);
+                  return (
+                    <div
+                      key={skill}
+                      className={`flex items-center justify-between p-2 rounded-lg text-xs border transition-colors ${
+                        isChecked
+                          ? 'bg-orange-50/80 border-orange-200 text-orange-950 font-semibold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer flex-1 mr-2 overflow-hidden">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleItem(setSelectedSkills, skill)}
+                          className="rounded text-orange-600 focus:ring-orange-500 shrink-0"
+                        />
+                        <span className="truncate">{skill}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeItemFromList(skill, setAvailableSkills, setSelectedSkills);
+                        }}
+                        title={`Remove "${skill}" from list`}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Custom Skill Input */}
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={customSkillInput}
                 onChange={(e) => setCustomSkillInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomItem(customSkillInput, setCustomSkillInput, setAvailableSkills, setSelectedSkills);
+                  }
+                }}
                 placeholder="+ Add custom skill tag..."
-                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white"
+                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  addCustomItem(customSkillInput, setCustomSkillInput, setSelectedSkills)
+                  addCustomItem(customSkillInput, setCustomSkillInput, setAvailableSkills, setSelectedSkills)
                 }
+                className="text-xs font-bold"
               >
                 Add
               </Button>
@@ -2276,51 +2378,104 @@ export default function ConfigurationPage() {
           </div>
 
           {/* 2. Products Handled */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
             <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
-              <span>Products Handled</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                {selectedProducts.length} selected
+              <span className="flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 text-blue-600" />
+                <span>Products Handled</span>
               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {selectedProducts.length} selected
+                </span>
+                {availableProducts.length > 0 && (
+                  <>
+                    <span className="text-slate-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => clearList(setAvailableProducts, setSelectedProducts)}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold hover:underline"
+                    >
+                      Clear List
+                    </button>
+                  </>
+                )}
+                <span className="text-slate-300">&bull;</span>
+                <button
+                  type="button"
+                  onClick={() => resetListDefaults(DEFAULT_PRODUCTS, setAvailableProducts, setSelectedProducts)}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold hover:underline"
+                >
+                  Reset Defaults
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEFAULT_PRODUCTS.map((prod) => {
-                const isChecked = selectedProducts.includes(prod);
-                return (
-                  <label
-                    key={prod}
-                    className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                      isChecked
-                        ? 'bg-blue-50 border-blue-200 text-blue-950 font-semibold'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleItem(setSelectedProducts, prod)}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>{prod}</span>
-                  </label>
-                );
-              })}
-            </div>
+
+            {availableProducts.length === 0 ? (
+              <div className="p-3 rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-400 bg-white">
+                No products in list. Type below and click Add to create your custom products.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {availableProducts.map((prod) => {
+                  const isChecked = selectedProducts.includes(prod);
+                  return (
+                    <div
+                      key={prod}
+                      className={`flex items-center justify-between p-2 rounded-lg text-xs border transition-colors ${
+                        isChecked
+                          ? 'bg-blue-50/80 border-blue-200 text-blue-950 font-semibold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer flex-1 mr-2 overflow-hidden">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleItem(setSelectedProducts, prod)}
+                          className="rounded text-blue-600 focus:ring-blue-500 shrink-0"
+                        />
+                        <span className="truncate">{prod}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeItemFromList(prod, setAvailableProducts, setSelectedProducts);
+                        }}
+                        title={`Remove "${prod}" from list`}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={customProductInput}
                 onChange={(e) => setCustomProductInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomItem(customProductInput, setCustomProductInput, setAvailableProducts, setSelectedProducts);
+                  }
+                }}
                 placeholder="+ Add custom product..."
-                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white"
+                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  addCustomItem(customProductInput, setCustomProductInput, setSelectedProducts)
+                  addCustomItem(customProductInput, setCustomProductInput, setAvailableProducts, setSelectedProducts)
                 }
+                className="text-xs font-bold"
               >
                 Add
               </Button>
@@ -2328,51 +2483,104 @@ export default function ConfigurationPage() {
           </div>
 
           {/* 3. Services Handled */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
             <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
-              <span>Services Handled</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                {selectedServices.length} selected
+              <span className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Services Handled</span>
               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-normal">
+                  {selectedServices.length} selected
+                </span>
+                {availableServices.length > 0 && (
+                  <>
+                    <span className="text-slate-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => clearList(setAvailableServices, setSelectedServices)}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold hover:underline"
+                    >
+                      Clear List
+                    </button>
+                  </>
+                )}
+                <span className="text-slate-300">&bull;</span>
+                <button
+                  type="button"
+                  onClick={() => resetListDefaults(DEFAULT_SERVICES, setAvailableServices, setSelectedServices)}
+                  className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
+                >
+                  Reset Defaults
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEFAULT_SERVICES.map((serv) => {
-                const isChecked = selectedServices.includes(serv);
-                return (
-                  <label
-                    key={serv}
-                    className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                      isChecked
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-semibold'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleItem(setSelectedServices, serv)}
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span>{serv}</span>
-                  </label>
-                );
-              })}
-            </div>
+
+            {availableServices.length === 0 ? (
+              <div className="p-3 rounded-lg border border-dashed border-slate-300 text-center text-xs text-slate-400 bg-white">
+                No services in list. Type below and click Add to create your custom services.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {availableServices.map((serv) => {
+                  const isChecked = selectedServices.includes(serv);
+                  return (
+                    <div
+                      key={serv}
+                      className={`flex items-center justify-between p-2 rounded-lg text-xs border transition-colors ${
+                        isChecked
+                          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950 font-semibold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer flex-1 mr-2 overflow-hidden">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleItem(setSelectedServices, serv)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 shrink-0"
+                        />
+                        <span className="truncate">{serv}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeItemFromList(serv, setAvailableServices, setSelectedServices);
+                        }}
+                        title={`Remove "${serv}" from list`}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={customServiceInput}
                 onChange={(e) => setCustomServiceInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomItem(customServiceInput, setCustomServiceInput, setAvailableServices, setSelectedServices);
+                  }
+                }}
                 placeholder="+ Add custom service..."
-                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white"
+                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  addCustomItem(customServiceInput, setCustomServiceInput, setSelectedServices)
+                  addCustomItem(customServiceInput, setCustomServiceInput, setAvailableServices, setSelectedServices)
                 }
+                className="text-xs font-bold"
               >
                 Add
               </Button>
@@ -2380,51 +2588,104 @@ export default function ConfigurationPage() {
           </div>
 
           {/* 4. Query / Issue Types Handled ⭐ */}
-          <div className="p-3.5 bg-purple-50/50 rounded-xl border border-purple-200 space-y-2">
+          <div className="p-3.5 bg-purple-50/50 rounded-xl border border-purple-200 space-y-2.5">
             <div className="text-xs font-bold text-purple-900 flex items-center justify-between">
-              <span>Queries / Issue Types Handled ⭐</span>
-              <span className="text-[11px] text-purple-600 font-semibold">
-                {selectedIssueTypes.length} selected
+              <span className="flex items-center gap-1.5">
+                <HelpCircle className="w-3.5 h-3.5 text-purple-600" />
+                <span>Queries / Issue Types Handled ⭐</span>
               </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-purple-600 font-semibold">
+                  {selectedIssueTypes.length} selected
+                </span>
+                {availableIssueTypes.length > 0 && (
+                  <>
+                    <span className="text-purple-300">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={() => clearList(setAvailableIssueTypes, setSelectedIssueTypes)}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-semibold hover:underline"
+                    >
+                      Clear List
+                    </button>
+                  </>
+                )}
+                <span className="text-purple-300">&bull;</span>
+                <button
+                  type="button"
+                  onClick={() => resetListDefaults(DEFAULT_ISSUE_TYPES, setAvailableIssueTypes, setSelectedIssueTypes)}
+                  className="text-[11px] text-purple-700 hover:text-purple-900 font-semibold hover:underline"
+                >
+                  Reset Defaults
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEFAULT_ISSUE_TYPES.map((issue) => {
-                const isChecked = selectedIssueTypes.includes(issue);
-                return (
-                  <label
-                    key={issue}
-                    className={`flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer border transition-colors ${
-                      isChecked
-                        ? 'bg-purple-100 border-purple-300 text-purple-950 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleItem(setSelectedIssueTypes, issue)}
-                      className="rounded text-purple-600 focus:ring-purple-500"
-                    />
-                    <span>{issue}</span>
-                  </label>
-                );
-              })}
-            </div>
+
+            {availableIssueTypes.length === 0 ? (
+              <div className="p-3 rounded-lg border border-dashed border-purple-300 text-center text-xs text-purple-400 bg-white">
+                No issue types in list. Type below and click Add to create your custom issue types.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {availableIssueTypes.map((issue) => {
+                  const isChecked = selectedIssueTypes.includes(issue);
+                  return (
+                    <div
+                      key={issue}
+                      className={`flex items-center justify-between p-2 rounded-lg text-xs border transition-colors ${
+                        isChecked
+                          ? 'bg-purple-100/80 border-purple-300 text-purple-950 font-bold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer flex-1 mr-2 overflow-hidden">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleItem(setSelectedIssueTypes, issue)}
+                          className="rounded text-purple-600 focus:ring-purple-500 shrink-0"
+                        />
+                        <span className="truncate">{issue}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeItemFromList(issue, setAvailableIssueTypes, setSelectedIssueTypes);
+                        }}
+                        title={`Remove "${issue}" from list`}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={customIssueTypeInput}
                 onChange={(e) => setCustomIssueTypeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomItem(customIssueTypeInput, setCustomIssueTypeInput, setAvailableIssueTypes, setSelectedIssueTypes);
+                  }
+                }}
                 placeholder="+ Add custom issue type..."
-                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white"
+                className="flex-1 text-xs rounded-lg border border-slate-200 p-2 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  addCustomItem(customIssueTypeInput, setCustomIssueTypeInput, setSelectedIssueTypes)
+                  addCustomItem(customIssueTypeInput, setCustomIssueTypeInput, setAvailableIssueTypes, setSelectedIssueTypes)
                 }
+                className="text-xs font-bold"
               >
                 Add
               </Button>
