@@ -574,10 +574,6 @@ export default function ConfigurationPage() {
           ...prev,
           logoUrl: reader.result as string,
         }));
-        setFeedback({
-          type: 'success',
-          text: `Logo "${file.name}" uploaded successfully! Click "Save Company Configuration" to apply.`,
-        });
       }
     };
     reader.readAsDataURL(file);
