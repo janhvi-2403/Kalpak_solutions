@@ -169,7 +169,7 @@ export class MailService implements OnModuleInit {
             const fallbackSubject = `[Testing for: ${recipients[0]}] ${subject}`;
             const fallbackHtml = `
               <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-family:sans-serif;color:#92400e;font-size:13px;">
-                <strong>Resend Test Delivery:</strong> This verification email was created for <strong>${recipients[0]}</strong> and delivered to your verified Resend account (<code>${authorizedOwner}</code>).
+                <strong>Resend Delivery Note:</strong> This notification was generated for <strong>${recipients[0]}</strong> and delivered to your verified Resend account (<code>${authorizedOwner}</code>).
               </div>
             ` + html;
 
@@ -512,6 +512,7 @@ This invitation is valid for 7 days.
       subject,
       text: textContent,
       html: htmlContent,
+      replyTo: 'support@kalpak.solutions',
     });
   }
 

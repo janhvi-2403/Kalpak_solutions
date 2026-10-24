@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Send,
-  RefreshCw,
   XCircle,
   Info,
   Wrench,
@@ -27,9 +26,6 @@ import {
   Upload,
   ImageIcon,
   Tag,
-  Copy,
-  Check,
-  ExternalLink,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -420,7 +416,6 @@ export default function ConfigurationPage() {
     emailDelivered?: boolean;
     emailProvider?: string;
   } | null>(null);
-  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
 
   // Load initial configuration data from server
   const loadConfiguration = useCallback(async () => {
@@ -975,44 +970,6 @@ export default function ConfigurationPage() {
       setFeedback({
         type: 'error',
         text: err instanceof Error ? err.message : 'Failed to resend invitation',
-      });
-    }
-  };
-
-  const copyInviteLink = async (inv: InvitationItem) => {
-    let link = inv.inviteUrl;
-    if (!link && inv.token) {
-      link = `${window.location.origin}/accept-invitation?token=${inv.token}`;
-    }
-    if (!link && !inv.id.startsWith('inv-')) {
-      try {
-        const res = await apiClient<any>(`/tenants/invitations/${inv.id}/resend`, { method: 'POST' });
-        if (res?.inviteUrl) {
-          link = res.inviteUrl;
-          setInvitations((prev) =>
-            prev.map((item) => (item.id === inv.id ? { ...item, inviteUrl: res.inviteUrl, token: res.token } : item))
-          );
-        }
-      } catch {
-        link = `${window.location.origin}/accept-invitation?token=pending`;
-      }
-    }
-    if (!link) {
-      link = `${window.location.origin}/accept-invitation?token=pending`;
-    }
-
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopiedInviteId(inv.id);
-      setFeedback({
-        type: 'success',
-        text: `Direct activation link copied to clipboard! You can share it directly with ${inv.email}.`,
-      });
-      setTimeout(() => setCopiedInviteId(null), 3000);
-    } catch {
-      setFeedback({
-        type: 'error',
-        text: 'Unable to write to clipboard.',
       });
     }
   };
@@ -2084,35 +2041,19 @@ export default function ConfigurationPage() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => copyInviteLink(inv)}
-                              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-1 transition-colors"
-                            >
-                              {copiedInviteId === inv.id ? (
-                                <>
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span className="text-emerald-700 font-bold">Copied</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3.5 h-3.5 text-slate-500" />
-                                  <span>Copy Link</span>
-                                </>
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
                               onClick={() => handleResendInvitation(inv.id, inv.email)}
-                              className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 flex items-center gap-1 transition-colors"
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 flex items-center gap-1.5 transition-colors"
+                              title="Resend official invitation email"
                             >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              <span>Resend</span>
+                              <Mail className="w-3.5 h-3.5" />
+                              <span>Resend Email</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleRevokeInvitation(inv.id, inv.email)}
                               className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 flex items-center gap-1 transition-colors"
+                              title="Revoke invitation"
                             >
                               <XCircle className="w-3.5 h-3.5" />
                               <span>Revoke</span>
@@ -2886,31 +2827,30 @@ export default function ConfigurationPage() {
       <Dialog
         isOpen={!!sentInviteModalData}
         onClose={() => setSentInviteModalData(null)}
-        title="Department Head Invitation Dispatched!"
-        description="The real invitation has been created and dispatched to the candidate's email address."
+        title="Invitation Email Sent!"
+        description="An official onboarding invitation has been dispatched to the candidate's email address."
       >
         {sentInviteModalData && (
           <div className="space-y-4 mt-3">
-            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center gap-2.5 text-xs text-emerald-900">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div>
-                <p className="font-bold">Real-Time Email Dispatched</p>
-                <p className="text-[11px] text-emerald-800">
-                  {sentInviteModalData.emailDelivered !== false
-                    ? `An authentic invitation email was dispatched in real time to ${sentInviteModalData.email} via ${sentInviteModalData.emailProvider || 'Resend'}.`
-                    : `Invitation created in system for ${sentInviteModalData.email}. Use the single-use activation link below.`}
+            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex items-start gap-3 text-xs text-emerald-900">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold text-sm text-emerald-900">Real-Time Email Dispatched</p>
+                <p className="text-xs text-emerald-800 leading-relaxed">
+                  An authentic invitation email has been sent to <strong>{sentInviteModalData.email}</strong> via {sentInviteModalData.emailProvider || 'Resend'}.
+                  The recipient can open the email in their inbox and click &quot;Accept Invitation &amp; Setup Account&quot; to set their password and take charge of {sentInviteModalData.department}.
                 </p>
               </div>
             </div>
 
-            <div className="p-4 bg-orange-50/70 rounded-xl border border-orange-200 space-y-2 text-xs">
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Invitee:</span>
                 <span className="font-bold text-slate-900">{sentInviteModalData.fullName}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Work Email:</span>
-                <span className="font-mono text-slate-800">{sentInviteModalData.email}</span>
+                <span className="font-mono text-slate-800 font-semibold">{sentInviteModalData.email}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Department:</span>
@@ -2924,52 +2864,11 @@ export default function ConfigurationPage() {
               </div>
             </div>
 
-            {sentInviteModalData.inviteUrl && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>Single-Use Activation Link</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Valid for 7 days</span>
-                </label>
-                <div className="p-2.5 bg-slate-900 text-slate-100 font-mono text-xs rounded-lg break-all select-all">
-                  {sentInviteModalData.inviteUrl}
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  💡 The candidate will receive this link directly in their email inbox. You can also copy it immediately if needed.
-                </p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              {sentInviteModalData.inviteUrl && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(sentInviteModalData.inviteUrl!);
-                      setFeedback({ type: 'success', text: 'Activation link copied to clipboard!' });
-                    }}
-                    className="gap-1.5"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Copy Link</span>
-                  </Button>
-                  <a
-                    href={sentInviteModalData.inviteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Button className="bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5">
-                      <span>Open Link</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </Button>
-                  </a>
-                </>
-              )}
+            <div className="flex items-center justify-end pt-3 border-t border-slate-100">
               <Button
                 type="button"
                 onClick={() => setSentInviteModalData(null)}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-bold"
+                className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 shadow-sm"
               >
                 Done
               </Button>
