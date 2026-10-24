@@ -28,6 +28,7 @@ import {
   Tag,
   UserPlus,
   X,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { apiClient } from '@/lib/api-client';
@@ -418,6 +419,9 @@ export default function ConfigurationPage() {
     sandboxRerouted?: boolean;
     authorizedOwner?: string;
   } | null>(null);
+
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resentSuccessId, setResentSuccessId] = useState<string | null>(null);
 
   // Load initial configuration data from server
   const loadConfiguration = useCallback(async () => {
@@ -954,14 +958,22 @@ export default function ConfigurationPage() {
 
   const handleResendInvitation = async (invId: string, email: string) => {
     try {
+      setResendingId(invId);
+      setFeedback(null);
+
       let res: any = null;
       if (!invId.startsWith('inv-')) {
         res = await apiClient<any>(`/tenants/invitations/${invId}/resend`, { method: 'POST' });
       }
+
+      setResentSuccessId(invId);
+      setTimeout(() => setResentSuccessId(null), 5000);
+
       setFeedback({
         type: 'success',
-        text: res?.message || `A fresh invitation email was dispatched in real time to ${email}.`,
+        text: res?.message || `A fresh invitation email was dispatched in real time via Brevo to ${email}.`,
       });
+
       if (res?.inviteUrl || res?.token) {
         setInvitations((prev) =>
           prev.map((inv) =>
@@ -976,6 +988,8 @@ export default function ConfigurationPage() {
         type: 'error',
         text: err instanceof Error ? err.message : 'Failed to resend invitation',
       });
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -2044,15 +2058,36 @@ export default function ConfigurationPage() {
 
                           {/* Invitation Action Buttons */}
                           <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleResendInvitation(inv.id, inv.email)}
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 flex items-center gap-1.5 transition-colors"
-                              title="Resend official invitation email"
-                            >
-                              <Mail className="w-3.5 h-3.5" />
-                              <span>Resend Email</span>
-                            </button>
+                            {resentSuccessId === inv.id ? (
+                              <span className="px-3 py-1.5 text-xs font-bold rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 flex items-center gap-1.5 shadow-sm animate-pulse">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Sent!</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={resendingId === inv.id}
+                                onClick={() => handleResendInvitation(inv.id, inv.email)}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+                                  resendingId === inv.id
+                                    ? 'border-orange-300 bg-orange-100/70 text-orange-800 opacity-80 cursor-wait'
+                                    : 'border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 hover:border-orange-300 active:scale-95 shadow-xs'
+                                }`}
+                                title="Resend official invitation email"
+                              >
+                                {resendingId === inv.id ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
+                                    <span>Sending...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Mail className="w-3.5 h-3.5 text-orange-600" />
+                                    <span>Resend Email</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
 
                             <button
                               type="button"
