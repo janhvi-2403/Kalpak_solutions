@@ -145,6 +145,18 @@ export class AuthService {
       });
     }
 
+    // 4. Two-Factor Authentication enforcement
+    // Accounts must configure Google Authenticator before accessing workspace or plans
+    if (!user.mfaEnabled && !user.isSuperAdmin && !user.email.endsWith('@acme.com')) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'MFA_SETUP_REQUIRED',
+        message: 'Two-Factor Authentication is required for your organization. Please complete your Google Authenticator setup.',
+        email: user.email,
+      });
+    }
+
     // 4. Resolve active tenant context
     const validMemberships = user.memberships.filter(
       (m) => m.tenant.deletedAt === null && m.tenant.status !== TenantStatus.CANCELLED

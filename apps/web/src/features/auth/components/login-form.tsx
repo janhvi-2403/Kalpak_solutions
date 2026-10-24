@@ -161,6 +161,11 @@ export function LoginForm() {
           return;
         }
 
+        if (errCode === 'MFA_SETUP_REQUIRED' || rawMsg.toLowerCase().includes('two-factor authentication is required')) {
+          window.location.href = `/verify-email?email=${encodeURIComponent(errEmail || loginEmail.trim().toLowerCase())}`;
+          return;
+        }
+
         const isLocalhost =
           typeof window !== 'undefined' &&
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
