@@ -24,7 +24,6 @@ import {
   SlidersHorizontal,
   Upload,
   ImageIcon,
-  Tag,
   UserPlus,
   X,
   Loader2,
@@ -45,7 +44,6 @@ import {
   PhoneInput,
 } from '@/components/ui';
 import {
-  ServiceCategoriesTab,
   ServiceCategoryItem,
   PriorityItem,
 } from './components/service-categories-tab';
@@ -330,7 +328,7 @@ const DEFAULT_ASSIGNMENT_RULES: AssignmentRuleItem[] = [
 
 export default function ConfigurationPage() {
   const { user } = useAuth();
-  const [activeSubTab, setActiveSubTab] = useState<'company' | 'departments' | 'heads' | 'categories' | 'rules' | 'email'>('company');
+  const [activeSubTab, setActiveSubTab] = useState<'company' | 'departments' | 'heads' | 'rules' | 'email'>('company');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1059,55 +1057,8 @@ export default function ConfigurationPage() {
   };
 
   // --------------------------------------------------------------------------
-  // Service Categories & Assignment Rules Handlers
+  // Assignment Rules Handlers
   // --------------------------------------------------------------------------
-  const handleSaveCategories = async (updated: ServiceCategoryItem[]) => {
-    try {
-      setIsSaving(true);
-      setServiceCategories(updated);
-      await apiClient('/tenants/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          serviceCategories: updated,
-        }),
-      });
-      setFeedback({
-        type: 'success',
-        text: 'Service categories successfully updated and saved!',
-      });
-    } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Failed to save service categories.',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSavePriorities = async (updated: PriorityItem[]) => {
-    try {
-      setIsSaving(true);
-      setPriorities(updated);
-      await apiClient('/tenants/profile', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          priorities: updated,
-        }),
-      });
-      setFeedback({
-        type: 'success',
-        text: 'Priority SLA response & resolution target hours successfully updated!',
-      });
-    } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Failed to save SLA targets.',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleSaveAssignmentRules = async (updated: AssignmentRuleItem[]) => {
     try {
@@ -1237,24 +1188,6 @@ export default function ConfigurationPage() {
 
         <button
           onClick={() => {
-            setActiveSubTab('categories');
-            setFeedback(null);
-          }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-sm transition-all border-b-2 ${
-            activeSubTab === 'categories'
-              ? 'border-orange-500 text-orange-600 bg-orange-50/50'
-              : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-          }`}
-        >
-          <Tag className="w-4 h-4" />
-          <span>4. Service Categories &amp; Priorities</span>
-          <Badge variant="primary" className="bg-orange-100 text-orange-700 font-mono text-[10px] ml-1">
-            {serviceCategories.length}
-          </Badge>
-        </button>
-
-        <button
-          onClick={() => {
             setActiveSubTab('rules');
             setFeedback(null);
           }}
@@ -1265,7 +1198,7 @@ export default function ConfigurationPage() {
           }`}
         >
           <SlidersHorizontal className="w-4 h-4" />
-          <span>5. Ticket Assignment Rules</span>
+          <span>4. Ticket Assignment Rules</span>
           <Badge variant="primary" className="bg-orange-100 text-orange-700 font-mono text-[10px] ml-1">
             {assignmentRules.length}
           </Badge>
@@ -1283,7 +1216,7 @@ export default function ConfigurationPage() {
           }`}
         >
           <Mail className="w-4 h-4" />
-          <span>6. Email Configuration</span>
+          <span>5. Email Configuration</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 ml-1" />
         </button>
       </div>
@@ -2224,15 +2157,6 @@ export default function ConfigurationPage() {
             </div>
           )}
 
-          {activeSubTab === 'categories' && (
-            <ServiceCategoriesTab
-              categories={serviceCategories}
-              priorities={priorities}
-              onSaveCategories={handleSaveCategories}
-              onSavePriorities={handleSavePriorities}
-              isSaving={isSaving}
-            />
-          )}
 
           {activeSubTab === 'rules' && (
             <TicketAssignmentRulesTab
