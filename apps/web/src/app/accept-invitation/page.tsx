@@ -60,6 +60,7 @@ function AcceptInvitationContent() {
 
   const isClientAdmin = invitationInfo?.role === 'CLIENT_ADMIN';
   const isDeptAdmin = invitationInfo?.role === 'DEPARTMENT_ADMIN';
+  const isMandatoryMfa = isClientAdmin || isDeptAdmin;
   const roleDisplay = isDeptAdmin ? 'Department Head' : isClientAdmin ? 'Client Administrator' : (invitationInfo?.role || 'Team Member');
 
   const handleCopySecret = () => {
@@ -92,8 +93,8 @@ function AcceptInvitationContent() {
       return;
     }
 
-    if (isClientAdmin && (!totpCode || totpCode.trim().length !== 6)) {
-      setError('Please enter the 6-digit verification code from your authenticator app to complete 2-step authentication.');
+    if (isMandatoryMfa && (!totpCode || totpCode.trim().length !== 6)) {
+      setError(`Please enter the 6-digit verification code from your authenticator app to complete 2-step authentication.`);
       return;
     }
 
@@ -280,9 +281,9 @@ function AcceptInvitationContent() {
                     <KeyRound className="w-3.5 h-3.5 text-orange-600" />
                     <span>2. Setup 2-Step Authentication</span>
                   </div>
-                  {isClientAdmin && (
+                  {isMandatoryMfa && (
                     <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                      Mandatory for Admins
+                      Mandatory for {isDeptAdmin ? 'Department Heads' : 'Admins'}
                     </span>
                   )}
                 </div>
@@ -353,7 +354,7 @@ function AcceptInvitationContent() {
                   <Input
                     id="totp-code"
                     label="Enter 6-Digit Authenticator Verification Code"
-                    required={isClientAdmin}
+                    required={isMandatoryMfa}
                     maxLength={6}
                     value={totpCode}
                     onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}

@@ -997,8 +997,10 @@ export class AuthService {
       throw new BadRequestException('This invitation has expired. Please contact your organization administrator.');
     }
 
-    // Client Admins require 2-step authentication setup
+    // Client Admins and Department Heads require 2-step authentication setup
     const isClientAdmin = invitation.role.name === 'CLIENT_ADMIN';
+    const isDeptAdmin = invitation.role.name === 'DEPARTMENT_ADMIN';
+    const isMandatoryMfa = isClientAdmin || isDeptAdmin;
     let enableMfa = false;
     let encryptedTotpSecret: string | null = null;
     let hashedBackupCodes: string[] = [];
@@ -1019,9 +1021,9 @@ export class AuthService {
           ? dto.backupCodes
           : generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
       hashedBackupCodes = plainBackupCodes.map(hashBackupCode);
-    } else if (isClientAdmin) {
+    } else if (isMandatoryMfa) {
       throw new BadRequestException(
-        '2-Step Authentication is mandatory for Client Admin accounts. Please scan the QR code and enter the 6-digit code from your authenticator app.'
+        `2-Step Authentication is mandatory for ${isDeptAdmin ? 'Department Head' : 'Administrator'} accounts. Please scan the QR code and enter the 6-digit code from your authenticator app.`
       );
     }
 
@@ -1217,7 +1219,6 @@ export class AuthService {
       userAgent,
     });
 
-    const isDeptAdmin = invitation.role.name === 'DEPARTMENT_ADMIN';
     const isCustomer = invitation.role.name === 'CUSTOMER';
     const welcomeMessage = isDeptAdmin && invitation.department
       ? `Welcome ${user?.fullName || ''}! You have successfully joined ${invitation.tenant.name} as Department Head for ${invitation.department}. You can now sign in.`
