@@ -24,6 +24,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       logger.info('Database connection established successfully');
       // Automatically purge legacy/demo infosys tenant and associated credentials
       await this.purgeTarget('infosys');
+      await this.purgeUserByEmail('janhvipagare85@gmail.com');
       await this.ensureBaselineRbac();
       await this.ensureDemoLogins();
     } catch (error) {
@@ -340,6 +341,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
+   * Safely and permanently deletes a user by email, cleaning all child/foreign-key relationships
+   * so that the user can register fresh without hitting "Account already exists".
+   */
+  async purgeUserByEmail(email: string) {
+    try {
+      const targetEmail = email.trim().toLowerCase();
+      if (!targetEmail) return false;
+
+      const user = await this.user.findUnique({
+        where: { email: targetEmail },
+        select: { id: true, isSuperAdmin: true },
+      });
+      if (!user || user.isSuperAdmin) return false;
+
+      logger.info({ email: targetEmail, userId: user.id }, `[PrismaService] Purging user "${targetEmail}"`);
+
+      await this.invitation.updateMany({ where: { invitedByUserId: user.id }, data: { invitedByUserId: null } });
+      await this.notification.deleteMany({ where: { userId: user.id } });
+      await this.emailVerificationToken.deleteMany({ where: { userId: user.id } });
+      await this.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      await this.session.deleteMany({ where: { userId: user.id } });
+      await this.tenantMembership.deleteMany({ where: { userId: user.id } });
+      await this.auditEvent.deleteMany({ where: { actorId: user.id } });
+      await this.user.delete({ where: { id: user.id } });
+
+      logger.info({ email: targetEmail }, `[PrismaService] Successfully purged user "${targetEmail}" from database`);
+      return true;
+    } catch (err: any) {
+      logger.warn({ error: err.message, email }, `[PrismaService] purgeUserByEmail warning`);
+      return false;
+    }
+  }
+
+  /**
    * Automatically guarantees that official company testing accounts exist and are verified.
    */
   async ensureDemoLogins() {
@@ -540,30 +575,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         });
       }
 
-      // 5. Janhvi Pagare (Platform Client Admin)
-      const janhviUser = await this.user.findUnique({
-        where: { email: 'janhvipagare85@gmail.com' },
-      });
-
-      if (janhviUser && clientAdminRole && acmeTenant) {
-        await this.tenantMembership.upsert({
-          where: {
-            uq_membership_tenant_user: {
-              tenantId: acmeTenant.id,
-              userId: janhviUser.id,
-            },
-          },
-          update: { roleId: clientAdminRole.id, isDefault: true },
-          create: {
-            tenantId: acmeTenant.id,
-            userId: janhviUser.id,
-            roleId: clientAdminRole.id,
-            isDefault: true,
-          },
-        });
-      }
-
-      logger.info('[PrismaService] Official accounts and Janhvi Pagare provisioned/verified successfully');
+      logger.info('[PrismaService] Official testing accounts provisioned/verified successfully');
     } catch (error) {
       logger.warn({ error }, '[PrismaService] ensureDemoLogins warning');
     }
