@@ -38,11 +38,17 @@ services:
         value: "*"
       - key: SUPPORT_EMAIL
         value: support@kalpak.solutions
-      - key: EMAIL_INBOUND_PROVIDER
-        value: cloudmailin
+      - key: EMAIL_PROVIDER
+        value: smtp
       - key: EMAIL_OUTBOUND_PROVIDER
-        value: resend
-      - key: RESEND_API_KEY
+        value: smtp
+      - key: SMTP_HOST
+        value: smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
         sync: false
       - key: EMAIL_FROM
         value: "Kalpak Solutions <janhvipagare3@gmail.com>"

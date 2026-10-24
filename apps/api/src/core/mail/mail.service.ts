@@ -90,18 +90,14 @@ export class MailService implements OnModuleInit {
    * Secondary fallback transporter for standard SMTP / Gmail / SendGrid
    */
   private getTransporter(): nodemailer.Transporter | null {
-    if (process.env.SMTP_HOST) {
+    if (process.env.SMTP_HOST || process.env.SMTP_USER) {
+      const user = process.env.SMTP_USER || '';
+      const pass = process.env.SMTP_PASS || '';
       return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
+        host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
         port: parseInt(process.env.SMTP_PORT || '587', 10),
         secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
-        auth:
-          process.env.SMTP_USER && process.env.SMTP_PASS
-            ? {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS,
-              }
-            : undefined,
+        auth: user && pass ? { user, pass } : undefined,
       });
     }
 
@@ -132,32 +128,52 @@ export class MailService implements OnModuleInit {
   }
 
   /**
-   * Unified email dispatcher: sends via Resend first, falls back to SMTP if configured.
+   * Unified email dispatcher: sends via Brevo SMTP first to reach any recipient without sandbox restrictions.
    */
   async sendEmail(options: EmailDispatchOptions): Promise<EmailDispatchResult> {
     const { to, subject, text, html, replyTo } = options;
     const recipients = Array.isArray(to) ? to : [to];
     const fromAddress = this.getFromAddress(options.from);
 
-    // 1. If explicit provider is Gmail or SMTP, prioritize secondary transporter
-    const preferredProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
-    if (preferredProvider === 'gmail' || preferredProvider === 'smtp') {
+    // 1. Always prioritize Brevo / SMTP transporter if configured so emails reach ANY recipient
+    const hasSmtpConfig = Boolean(
+      process.env.SMTP_HOST ||
+      process.env.SMTP_USER ||
+      (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+    );
+    const preferredProvider = (
+      process.env.EMAIL_OUTBOUND_PROVIDER ||
+      process.env.EMAIL_PROVIDER ||
+      ''
+    ).toLowerCase();
+
+    if (
+      hasSmtpConfig ||
+      preferredProvider === 'gmail' ||
+      preferredProvider === 'smtp' ||
+      preferredProvider === 'brevo'
+    ) {
       const transporter = this.getTransporter();
       if (transporter) {
         try {
-          const sender = process.env.GMAIL_USER ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>` : fromAddress;
+          const sender = process.env.GMAIL_USER
+            ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>`
+            : (fromAddress.includes('onboarding@resend.dev')
+                ? 'Kalpak Solutions <janhvipagare3@gmail.com>'
+                : fromAddress);
+
           const info = await transporter.sendMail({
             from: sender,
             to: recipients.join(', '),
             subject,
             text,
             html,
-            replyTo: replyTo || undefined,
+            replyTo: replyTo || 'janhvipagare3@gmail.com',
           });
-          logger.info({ messageId: info.messageId, to: recipients, subject }, '[MailService] Email sent successfully via preferred SMTP/Gmail');
+          logger.info({ messageId: info.messageId, to: recipients, subject }, '[MailService] Email sent successfully via Brevo SMTP to actual recipient');
           return { success: true, messageId: info.messageId, provider: 'smtp' };
         } catch (err: any) {
-          logger.error({ error: err.message, to: recipients }, '[MailService] Preferred SMTP/Gmail failed, trying Resend...');
+          logger.error({ error: err.message, to: recipients }, '[MailService] SMTP dispatch failed, trying Resend...');
         }
       }
     }
