@@ -89,15 +89,23 @@ export class MailService implements OnModuleInit {
   /**
    * Secondary fallback transporter for standard SMTP / Gmail / SendGrid
    */
-  private getTransporter(): nodemailer.Transporter | null {
+  private getTransporter(forcedPort?: number): nodemailer.Transporter | null {
     if (process.env.SMTP_HOST || process.env.SMTP_USER) {
       const user = process.env.SMTP_USER || '';
       const pass = process.env.SMTP_PASS || '';
+      const configuredPort = parseInt(process.env.SMTP_PORT || '2525', 10);
+      // Cloud platforms like Render Free Tier silently block outbound ports 25, 465, and 587.
+      // Port 2525 is Brevo's dedicated alternative port specifically supported to bypass cloud blocks.
+      const port = forcedPort || (configuredPort === 587 ? 2525 : configuredPort);
+
       return nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+        port,
+        secure: port === 465,
         auth: user && pass ? { user, pass } : undefined,
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
       });
     }
 
@@ -111,6 +119,9 @@ export class MailService implements OnModuleInit {
           user: 'apikey',
           pass: sendgridKey,
         },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
       });
     }
 
@@ -121,6 +132,9 @@ export class MailService implements OnModuleInit {
           user: process.env.GMAIL_USER,
           pass: process.env.GMAIL_APP_PASSWORD,
         },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000,
       });
     }
 
@@ -153,27 +167,31 @@ export class MailService implements OnModuleInit {
       preferredProvider === 'smtp' ||
       preferredProvider === 'brevo'
     ) {
-      const transporter = this.getTransporter();
-      if (transporter) {
-        try {
-          const sender = process.env.GMAIL_USER
-            ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>`
-            : (fromAddress.includes('onboarding@resend.dev')
-                ? 'Kalpak Solutions <janhvipagare3@gmail.com>'
-                : fromAddress);
+      // First attempt on port 2525 (bypasses Render firewall), fallback to 587 if needed
+      const portsToTry = [2525, 587];
+      for (const port of portsToTry) {
+        const transporter = this.getTransporter(port);
+        if (transporter) {
+          try {
+            const sender = process.env.GMAIL_USER
+              ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>`
+              : (fromAddress.includes('onboarding@resend.dev')
+                  ? 'Kalpak Solutions <janhvipagare3@gmail.com>'
+                  : fromAddress);
 
-          const info = await transporter.sendMail({
-            from: sender,
-            to: recipients.join(', '),
-            subject,
-            text,
-            html,
-            replyTo: replyTo || 'janhvipagare3@gmail.com',
-          });
-          logger.info({ messageId: info.messageId, to: recipients, subject }, '[MailService] Email sent successfully via Brevo SMTP to actual recipient');
-          return { success: true, messageId: info.messageId, provider: 'smtp' };
-        } catch (err: any) {
-          logger.error({ error: err.message, to: recipients }, '[MailService] SMTP dispatch failed, trying Resend...');
+            const info = await transporter.sendMail({
+              from: sender,
+              to: recipients.join(', '),
+              subject,
+              text,
+              html,
+              replyTo: replyTo || 'janhvipagare3@gmail.com',
+            });
+            logger.info({ messageId: info.messageId, to: recipients, port, subject }, '[MailService] Email sent successfully via Brevo SMTP to actual recipient');
+            return { success: true, messageId: info.messageId, provider: 'smtp' };
+          } catch (err: any) {
+            logger.warn({ error: err.message, port, to: recipients }, `[MailService] SMTP dispatch failed on port ${port}, trying next...`);
+          }
         }
       }
     }

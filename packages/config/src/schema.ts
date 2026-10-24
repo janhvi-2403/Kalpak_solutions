@@ -87,7 +87,7 @@ export const envSchema = z.object({
 
   // SMTP Outbound Configuration (Brevo, Custom SMTP)
   SMTP_HOST: z.string().optional().default(''),
-  SMTP_PORT: z.coerce.number().optional().default(587),
+  SMTP_PORT: z.coerce.number().optional().default(2525),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
   SMTP_SECURE: z.string().optional().default('false'),
