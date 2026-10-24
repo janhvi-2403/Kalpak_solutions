@@ -407,6 +407,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       const clientAdminRole = await this.role.findFirst({
         where: { name: SystemRole.CLIENT_ADMIN, tenantId: null },
       });
+      const deptAdminRole = await this.role.findFirst({
+        where: { name: SystemRole.DEPARTMENT_ADMIN, tenantId: null },
+      });
       const technicianRole = await this.role.findFirst({
         where: { name: SystemRole.SUPPORT_EMPLOYEE, tenantId: null },
       });
@@ -481,42 +484,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         });
       }
 
-      // 3. Clear demo department head data as requested
-      await this.purgeUserByEmail('depthead@acme.com');
-
-      // 4. Restore official credentials requested by user
-      const infosysTenant = await this.tenant.upsert({
-        where: { slug: 'infosys' },
+      // 3. Department Head
+      const deptHeadPasswordHash = await hashPassword('AcmeDept123!');
+      const deptHeadUser = await this.user.upsert({
+        where: { email: 'depthead@acme.com' },
         update: {
-          name: 'Infosys',
-          status: 'ACTIVE' as any,
-          settings: {
-            onboarding: { completed: true },
-            industry: 'Information Technology & Consulting',
-            contactPhone: '+91 20 2687 4000',
-            supportEmail: 'support@infosys.com',
-          },
-          deletedAt: null,
-        },
-        create: {
-          name: 'Infosys',
-          slug: 'infosys',
-          status: 'ACTIVE' as any,
-          settings: {
-            onboarding: { completed: true },
-            industry: 'Information Technology & Consulting',
-            contactPhone: '+91 20 2687 4000',
-            supportEmail: 'support@infosys.com',
-          },
-        },
-      });
-
-      const devyaniPasswordHash = await hashPassword('Infosys@123');
-      const devyaniUser = await this.user.upsert({
-        where: { email: 'devyanigurgude@gmail.com' },
-        update: {
-          fullName: 'Devyani Gurgude',
-          passwordHash: devyaniPasswordHash,
+          fullName: 'Rajesh Nair (Dept Head)',
+          passwordHash: deptHeadPasswordHash,
           isActive: true,
           isSuperAdmin: false,
           emailVerified: true,
@@ -525,9 +499,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           deletedAt: null,
         },
         create: {
-          email: 'devyanigurgude@gmail.com',
-          fullName: 'Devyani Gurgude',
-          passwordHash: devyaniPasswordHash,
+          email: 'depthead@acme.com',
+          fullName: 'Rajesh Nair (Dept Head)',
+          passwordHash: deptHeadPasswordHash,
           isActive: true,
           isSuperAdmin: false,
           emailVerified: true,
@@ -536,19 +510,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         },
       });
 
-      if (clientAdminRole) {
+      if (deptAdminRole) {
         await this.tenantMembership.upsert({
           where: {
             uq_membership_tenant_user: {
-              tenantId: infosysTenant.id,
-              userId: devyaniUser.id,
+              tenantId: acmeTenant.id,
+              userId: deptHeadUser.id,
             },
           },
-          update: { roleId: clientAdminRole.id, isDefault: true },
+          update: { roleId: deptAdminRole.id, isDefault: true },
           create: {
-            tenantId: infosysTenant.id,
-            userId: devyaniUser.id,
-            roleId: clientAdminRole.id,
+            tenantId: acmeTenant.id,
+            userId: deptHeadUser.id,
+            roleId: deptAdminRole.id,
             isDefault: true,
           },
         });
