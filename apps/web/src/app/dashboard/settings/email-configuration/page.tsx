@@ -104,24 +104,6 @@ export default function EmailConfigurationPage() {
   const [recentInboundEmails, setRecentInboundEmails] = useState<InboundEmailAuditItem[]>([]);
   const [isLoadingEmails, setIsLoadingEmails] = useState<boolean>(false);
 
-  // Read URL query params for OAuth status redirects
-  useEffect(() => {
-    const errorParam = searchParams.get('error');
-    const successParam = searchParams.get('success');
-
-    if (errorParam) {
-      setFeedback({
-        type: 'error',
-        message: decodeURIComponent(errorParam),
-      });
-    } else if (successParam) {
-      setFeedback({
-        type: 'success',
-        message: decodeURIComponent(successParam),
-      });
-    }
-  }, [searchParams]);
-
   // ==================== Data Fetching ====================
 
   const fetchInboundIntegration = useCallback(async () => {
@@ -140,6 +122,27 @@ export default function EmailConfigurationPage() {
       // Non-blocking
     }
   }, []);
+
+  // Read URL query params for OAuth status redirects
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    const successParam = searchParams.get('success');
+    const connectedParam = searchParams.get('connected');
+    const emailParam = searchParams.get('email');
+
+    if (errorParam) {
+      setFeedback({
+        type: 'error',
+        message: decodeURIComponent(errorParam),
+      });
+    } else if (connectedParam === 'true' || successParam) {
+      setFeedback({
+        type: 'success',
+        message: `Google Workspace support mailbox ${emailParam ? `(${decodeURIComponent(emailParam)}) ` : ''}connected successfully!`,
+      });
+      fetchInboundIntegration();
+    }
+  }, [searchParams, fetchInboundIntegration]);
 
   const fetchPolicyConfig = useCallback(async () => {
     try {
@@ -302,7 +305,9 @@ export default function EmailConfigurationPage() {
 
   const primaryInboundAddress =
     incomingConfig?.dedicatedInboundAddress ||
-    (incomingConfig?.tenantSlug ? `${incomingConfig.tenantSlug}@inbound.kalpak.solutions` : 'support@inbound.kalpak.solutions');
+    (incomingConfig?.tenantSlug
+      ? `c5e1f5045bfd98846d8e+${incomingConfig.tenantSlug}@cloudmailin.net`
+      : 'c5e1f5045bfd98846d8e@cloudmailin.net');
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">

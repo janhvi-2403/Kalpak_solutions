@@ -230,6 +230,7 @@ export class EmailConnectionController {
 
       return res.redirect(`${redirectSettingsUrl}?connected=true&email=${encodeURIComponent(emailAddress)}`);
     } catch (err: any) {
+      console.error('[EmailConnectionController] Google OAuth callback error:', err);
       return res.redirect(
         `${redirectSettingsUrl}?error=${encodeURIComponent(err?.message || 'Failed connecting Gmail')}`
       );

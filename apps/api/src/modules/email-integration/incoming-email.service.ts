@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
-import { getConfig } from '@kalpak/config';
 import {
   InboundForwardingStatus,
   IncomingEmailConfigDto,
@@ -37,17 +36,10 @@ export class IncomingEmailService {
    * e.g. "acme-corp@inbound.kalpak.com"
    */
   getInboundAddressForTenant(tenantSlug: string): string {
-    const config = getConfig();
-    if (
-      config.EMAIL_PROVIDER === 'cloudmailin' ||
-      process.env.CLOUDMAILIN_INBOUND_ADDRESS ||
-      !config.EMAIL_INBOUND_DOMAIN ||
-      config.EMAIL_INBOUND_DOMAIN === 'inbound.kalpak.com'
-    ) {
-      return process.env.CLOUDMAILIN_INBOUND_ADDRESS || 'c5e1f5045bfd98846d8e@cloudmailin.net';
-    }
-    const domain = config.EMAIL_INBOUND_DOMAIN || process.env.EMAIL_INBOUND_DOMAIN || 'inbound.kalpak.com';
-    return `${tenantSlug.toLowerCase().trim()}@${domain.toLowerCase().trim()}`;
+    const cloudmailinBridge = process.env.CLOUDMAILIN_INBOUND_ADDRESS || 'c5e1f5045bfd98846d8e@cloudmailin.net';
+    const bridgeUser = cloudmailinBridge.split('@')[0] || 'c5e1f5045bfd98846d8e';
+    const bridgeDomain = cloudmailinBridge.split('@')[1] || 'cloudmailin.net';
+    return `${bridgeUser}+${tenantSlug.toLowerCase().trim()}@${bridgeDomain}`;
   }
 
   /**
@@ -67,8 +59,10 @@ export class IncomingEmailService {
         throw new NotFoundException('Organization tenant not found');
       }
 
-      const dedicatedInbound = `${tenant.slug.toLowerCase().trim()}@inbound.kalpak.solutions`;
       const cloudmailinBridge = process.env.CLOUDMAILIN_INBOUND_ADDRESS || 'c5e1f5045bfd98846d8e@cloudmailin.net';
+      const bridgeUser = cloudmailinBridge.split('@')[0] || 'c5e1f5045bfd98846d8e';
+      const bridgeDomain = cloudmailinBridge.split('@')[1] || 'cloudmailin.net';
+      const dedicatedInbound = `${bridgeUser}+${tenant.slug.toLowerCase().trim()}@${bridgeDomain}`;
 
       // Ensure EmailConfiguration record exists and has inboundAddress stored
       let emailConfig = tenant.emailConfiguration;
@@ -98,14 +92,14 @@ export class IncomingEmailService {
       const defaultSupport = emailConfig.supportEmail || dedicatedInbound;
 
       return {
-        method: 'Built-in Inbound & Forwarding',
+        method: 'CloudMailin Live Inbound',
         inboundAddress: dedicatedInbound,
         dedicatedInboundAddress: dedicatedInbound,
         cloudmailinBridgeAddress: cloudmailinBridge,
         tenantSlug: tenant.slug,
         status: InboundForwardingStatus.CONNECTED,
         lastTestedAt: emailConfig.lastTestedAt ? emailConfig.lastTestedAt.toISOString() : new Date().toISOString(),
-        lastTestedMessage: 'Built-in dedicated inbound address active. Real-time ticket ingestion is running.',
+        lastTestedMessage: 'Live CloudMailin inbound address active. Real-time ticket ingestion is running.',
         forwardedFromEmail: defaultSupport,
       };
     });
