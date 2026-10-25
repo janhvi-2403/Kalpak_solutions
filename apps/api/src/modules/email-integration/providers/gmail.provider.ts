@@ -32,11 +32,13 @@ export class GmailEmailProvider {
   private readonly config = getConfig();
 
   get clientId(): string {
-    return this.config.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
+    const raw = (this.config.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim();
+    return raw.replace(/^["']|["']$/g, '').trim();
   }
 
   get clientSecret(): string {
-    return this.config.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '';
+    const raw = (this.config.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim();
+    return raw.replace(/^["']|["']$/g, '').trim();
   }
 
   get redirectUri(): string {
