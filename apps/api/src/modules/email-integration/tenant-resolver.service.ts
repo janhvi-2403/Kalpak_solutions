@@ -29,45 +29,11 @@ export class TenantResolverService {
 
     logger.debug({ recipients: normalizedRecipients }, '[TenantResolver] Attempting to resolve tenant from recipients');
 
-    // 1. Direct match on EmailConfiguration (supportEmail, providerAddress, or inboundAddress)
-    for (const recipient of normalizedRecipients) {
-      const emailConfig = await this.prisma.emailConfiguration.findFirst({
-        where: {
-          OR: [
-            { supportEmail: { equals: recipient, mode: 'insensitive' } },
-            { providerAddress: { equals: recipient, mode: 'insensitive' } },
-            { inboundAddress: { equals: recipient, mode: 'insensitive' } },
-          ],
-          enabled: true,
-        },
-        include: {
-          tenant: true,
-        },
-      });
+    // Separate specific company support emails from generic forwarding addresses
+    const specificRecipients = normalizedRecipients.filter((r) => !r.includes('@cloudmailin.net'));
 
-      if (emailConfig && emailConfig.tenant) {
-        const tenant = emailConfig.tenant;
-        if (tenant.status === 'ACTIVE' && !tenant.deletedAt) {
-          logger.info(
-            { tenantId: tenant.id, tenantSlug: tenant.slug, recipient },
-            '[TenantResolver] Tenant successfully resolved from EmailConfiguration'
-          );
-          return {
-            tenant,
-            emailConfig,
-            matchedRecipient: recipient,
-          };
-        } else {
-          logger.warn(
-            { tenantId: tenant.id, status: tenant.status },
-            '[TenantResolver] Matched tenant is inactive or soft-deleted - ignoring'
-          );
-        }
-      }
-    }
-
-    // 2. Direct match on SupportEmail table
-    for (const recipient of normalizedRecipients) {
+    // 1. Direct match on SupportEmail table (prioritized for real company support addresses)
+    for (const recipient of specificRecipients) {
       let supportEmailRecord = await this.prisma.supportEmail.findFirst({
         where: {
           email: { equals: recipient, mode: 'insensitive' },
@@ -126,6 +92,42 @@ export class TenantResolverService {
             emailConfig,
             matchedRecipient: recipient,
           };
+        }
+      }
+    }
+
+    // 2. Direct match on EmailConfiguration (supportEmail, providerAddress, or inboundAddress)
+    for (const recipient of normalizedRecipients) {
+      const emailConfig = await this.prisma.emailConfiguration.findFirst({
+        where: {
+          OR: [
+            { supportEmail: { equals: recipient, mode: 'insensitive' } },
+            { providerAddress: { equals: recipient, mode: 'insensitive' } },
+            { inboundAddress: { equals: recipient, mode: 'insensitive' } },
+          ],
+        },
+        include: {
+          tenant: true,
+        },
+      });
+
+      if (emailConfig && emailConfig.tenant) {
+        const tenant = emailConfig.tenant;
+        if (tenant.status === 'ACTIVE' && !tenant.deletedAt) {
+          logger.info(
+            { tenantId: tenant.id, tenantSlug: tenant.slug, recipient },
+            '[TenantResolver] Tenant successfully resolved from EmailConfiguration'
+          );
+          return {
+            tenant,
+            emailConfig,
+            matchedRecipient: recipient,
+          };
+        } else {
+          logger.warn(
+            { tenantId: tenant.id, status: tenant.status },
+            '[TenantResolver] Matched tenant is inactive or soft-deleted - ignoring'
+          );
         }
       }
     }
@@ -279,6 +281,11 @@ export class TenantResolverService {
               autoRoute: true,
               status: 'ACTIVE',
             },
+          });
+        } else if (!emailConfig.enabled || !emailConfig.autoCreateTicket) {
+          emailConfig = await this.prisma.emailConfiguration.update({
+            where: { id: emailConfig.id },
+            data: { enabled: true, autoCreateTicket: true },
           });
         }
         logger.info(

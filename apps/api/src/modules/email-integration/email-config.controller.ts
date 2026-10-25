@@ -145,8 +145,9 @@ export class EmailConfigController {
         emailConfig,
         inboundDetails: {
           provider: 'CLOUDMAILIN',
-          providerInboundAddress: 'c5e1f5045bfd98846d8e@cloudmailin.net',
-          webhookUrl: 'https://guitar-std-bangkok-shots.trycloudflare.com/webhooks/cloudmailin',
+          webhookUrl: process.env.API_BASE_URL
+            ? `${process.env.API_BASE_URL.replace(/\/$/, '')}/webhooks/cloudmailin`
+            : 'https://kalpak-api.onrender.com/webhooks/cloudmailin',
           webhookSecretConfigured: false,
           status: 'ACTIVE',
         },

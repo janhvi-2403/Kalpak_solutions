@@ -94,19 +94,38 @@ export class CloudMailinInboundProvider implements EmailProviderStrategy {
     let fromName: string | undefined;
 
     if (fromHeader) {
-      // Format: "John Doe <john@company.com>" or "john@company.com"
-      const match = fromHeader.match(/^(.*?)\s*<([^>]+)>/);
-      if (match) {
-        fromName = match[1].replace(/^["']|["']$/g, '').trim() || undefined;
-        fromEmail = match[2].trim().toLowerCase();
+      if (typeof fromHeader === 'object') {
+        fromEmail = (fromHeader.address || fromHeader.email || fromHeader.value || '').trim().toLowerCase();
+        fromName = fromHeader.name || undefined;
       } else {
-        const emailMatch = fromHeader.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-        fromEmail = emailMatch ? emailMatch[0].trim().toLowerCase() : fromHeader.trim().toLowerCase();
+        // Format: "John Doe <john@company.com>" or "john@company.com"
+        const match = String(fromHeader).match(/^(.*?)\s*<([^>]+)>/);
+        if (match && match[1] !== undefined && match[2] !== undefined) {
+          fromName = match[1].replace(/^["']|["']$/g, '').trim() || undefined;
+          fromEmail = match[2].trim().toLowerCase();
+        } else {
+          const emailMatch = String(fromHeader).match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          fromEmail = emailMatch && emailMatch[0] ? emailMatch[0].trim().toLowerCase() : String(fromHeader).trim().toLowerCase();
+        }
       }
     }
 
     if (!fromEmail && envelopeFrom) {
-      fromEmail = envelopeFrom.trim().toLowerCase();
+      const envFromStr = typeof envelopeFrom === 'object' ? (envelopeFrom.address || envelopeFrom.email || '') : String(envelopeFrom);
+      const emailMatch = envFromStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      fromEmail = emailMatch && emailMatch[0] ? emailMatch[0].trim().toLowerCase() : envFromStr.trim().toLowerCase();
+    }
+
+    if (!fromEmail && body?.from) {
+      const bodyFromStr = typeof body.from === 'object' ? (body.from.address || body.from.email || '') : String(body.from);
+      const emailMatch = bodyFromStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch && emailMatch[0]) fromEmail = emailMatch[0].trim().toLowerCase();
+    }
+
+    if (!fromEmail && body?.sender) {
+      const bodySenderStr = typeof body.sender === 'object' ? (body.sender.address || body.sender.email || '') : String(body.sender);
+      const emailMatch = bodySenderStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch && emailMatch[0]) fromEmail = emailMatch[0].trim().toLowerCase();
     }
 
     // 2. Extract Recipients (all potential delivery points)
@@ -123,6 +142,20 @@ export class CloudMailinInboundProvider implements EmailProviderStrategy {
         if (matches) {
           matches.forEach((m) => recipientSet.add(m.trim().toLowerCase()));
         }
+      } else if (typeof val === 'object') {
+        if (val.address) addCandidate(val.address);
+        if (val.email) addCandidate(val.email);
+        if (val.value) addCandidate(val.value);
+        if (val.recipient) addCandidate(val.recipient);
+        for (const [k, v] of Object.entries(val)) {
+          if (
+            ['to', 'recipient', 'recipients', 'address', 'email', 'forward', 'envelope'].some((kw) =>
+              k.toLowerCase().includes(kw)
+            )
+          ) {
+            addCandidate(v);
+          }
+        }
       }
     };
 
@@ -133,6 +166,13 @@ export class CloudMailinInboundProvider implements EmailProviderStrategy {
     addCandidate(rawHeaders.cc);
     addCandidate(rawHeaders.x_forwarded_to);
     addCandidate(rawHeaders.delivered_to);
+    addCandidate(rawHeaders['x-original-to']);
+    addCandidate(rawHeaders['envelope-to']);
+    addCandidate(body?.to);
+    addCandidate(body?.recipient);
+    addCandidate(body?.recipients);
+    addCandidate(body?.envelope?.to);
+    addCandidate(body?.envelope?.recipients);
 
     // Also scan all headers for forwarded or delivery targets (case-insensitive & hyphen-tolerant)
     if (rawHeaders && typeof rawHeaders === 'object') {
@@ -151,12 +191,17 @@ export class CloudMailinInboundProvider implements EmailProviderStrategy {
       }
     }
 
-    const allRecipients = Array.from(recipientSet);
+    // Sort recipients so that specific non-cloudmailin addresses are evaluated FIRST
+    const allRecipients = Array.from(recipientSet).sort((a, b) => {
+      const aIsCloudMailin = a.includes('@cloudmailin.net') ? 1 : 0;
+      const bIsCloudMailin = b.includes('@cloudmailin.net') ? 1 : 0;
+      return aIsCloudMailin - bIsCloudMailin;
+    });
+
     const toEmail = (
-      envelope.to ||
-      rawHeaders.to ||
-      rawHeaders.To ||
       allRecipients[0] ||
+      (typeof envelope.to === 'string' ? envelope.to : '') ||
+      (typeof rawHeaders.to === 'string' ? rawHeaders.to : '') ||
       ''
     )
       .toLowerCase()

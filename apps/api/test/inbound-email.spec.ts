@@ -561,4 +561,60 @@ describe('Real Inbound Email Integration & Tenant Isolation Test Suite', () => {
       });
     });
   });
+
+  // ============================================================================
+  // 7. CloudMailin Forwarding & Recipient Extraction
+  // ============================================================================
+  describe('CloudMailin Provider & Inbound Forwarding', () => {
+    it('should extract company support address when forwarded via CloudMailin bridge', () => {
+      const payload = {
+        headers: {
+          from: 'Customer Query <client@customer.com>',
+          to: 'support@kalpak-tech.com',
+          'x-forwarded-to': 'c5e1f5045bfd98846d8e@cloudmailin.net',
+          subject: 'Broken valve replacement needed urgently',
+        },
+        envelope: {
+          from: 'client@customer.com',
+          to: 'c5e1f5045bfd98846d8e@cloudmailin.net',
+          recipients: ['c5e1f5045bfd98846d8e@cloudmailin.net'],
+        },
+        plain: 'Please send a quote for valve replacement.',
+      };
+
+      const parsed = cloudmailinProvider.parseInboundEmail({}, payload);
+
+      expect(parsed.provider).toBe('CLOUDMAILIN');
+      expect(parsed.fromEmail).toBe('client@customer.com');
+      expect(parsed.fromName).toBe('Customer Query');
+      // The specific company support address should be prioritized first
+      expect(parsed.allRecipients).toContain('support@kalpak-tech.com');
+      expect(parsed.allRecipients).toContain('c5e1f5045bfd98846d8e@cloudmailin.net');
+      expect(parsed.toEmail).toBe('support@kalpak-tech.com');
+      expect(parsed.subject).toBe('Broken valve replacement needed urgently');
+      expect(parsed.bodyText).toBe('Please send a quote for valve replacement.');
+    });
+
+    it('should handle object recipients and nested envelope data gracefully', () => {
+      const payload = {
+        headers: {
+          from: { name: 'Support Inquirer', address: 'inquirer@gmail.com' },
+          to: [{ name: 'Helpdesk', address: 'helpdesk@company.com' }],
+          subject: 'Question on warranty',
+        },
+        envelope: {
+          to: { address: 'c5e1f5045bfd98846d8e@cloudmailin.net' },
+        },
+        plain: 'Is our warranty still active?',
+      };
+
+      const parsed = cloudmailinProvider.parseInboundEmail({}, payload);
+
+      expect(parsed.fromEmail).toBe('inquirer@gmail.com');
+      expect(parsed.fromName).toBe('Support Inquirer');
+      expect(parsed.allRecipients).toContain('helpdesk@company.com');
+      expect(parsed.toEmail).toBe('helpdesk@company.com');
+    });
+  });
 });
+

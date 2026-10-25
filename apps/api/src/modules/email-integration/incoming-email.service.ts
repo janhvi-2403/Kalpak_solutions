@@ -38,7 +38,12 @@ export class IncomingEmailService {
    */
   getInboundAddressForTenant(tenantSlug: string): string {
     const config = getConfig();
-    if (config.EMAIL_PROVIDER === 'cloudmailin') {
+    if (
+      config.EMAIL_PROVIDER === 'cloudmailin' ||
+      process.env.CLOUDMAILIN_INBOUND_ADDRESS ||
+      !config.EMAIL_INBOUND_DOMAIN ||
+      config.EMAIL_INBOUND_DOMAIN === 'inbound.kalpak.com'
+    ) {
       return process.env.CLOUDMAILIN_INBOUND_ADDRESS || 'c5e1f5045bfd98846d8e@cloudmailin.net';
     }
     const domain = config.EMAIL_INBOUND_DOMAIN || process.env.EMAIL_INBOUND_DOMAIN || 'inbound.kalpak.com';
@@ -67,7 +72,10 @@ export class IncomingEmailService {
       }
 
       const generatedInbound = this.getInboundAddressForTenant(tenant.slug);
-      const isCloudMailin = getConfig().EMAIL_PROVIDER === 'cloudmailin';
+      const isCloudMailin =
+        getConfig().EMAIL_PROVIDER === 'cloudmailin' ||
+        Boolean(process.env.CLOUDMAILIN_INBOUND_ADDRESS) ||
+        generatedInbound.includes('@cloudmailin.net');
 
       // Ensure EmailConfiguration record exists and has inboundAddress stored
       let emailConfig = tenant.emailConfiguration;
