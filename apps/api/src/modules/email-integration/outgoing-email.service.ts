@@ -37,10 +37,6 @@ export class OutgoingEmailService {
         where: { id: tenantId },
         include: {
           emailConfiguration: true,
-          supportEmails: {
-            where: { isDefault: true },
-            take: 1,
-          },
         },
       });
 
@@ -52,14 +48,13 @@ export class OutgoingEmailService {
 
       // If no emailConfiguration exists yet, create one
       if (!emailConfig) {
-        const defaultSupport = tenant.supportEmails[0];
         emailConfig = await tx.emailConfiguration.create({
           data: {
             tenantId: tenant.id,
-            supportEmail: defaultSupport?.email || `support@${tenant.slug}.com`,
-            senderName: defaultSupport?.displayName || `${tenant.name} Support`,
-            fromEmail: defaultSupport?.email || null,
-            replyToEmail: defaultSupport?.email || null,
+            supportEmail: `support@${tenant.slug}.com`,
+            senderName: `${tenant.name} Support`,
+            fromEmail: `support@${tenant.slug}.com`,
+            replyToEmail: `support@${tenant.slug}.com`,
             provider: 'OUTBOUND',
             outboundStatus: OutboundEmailStatus.NOT_CONFIGURED,
             enabled: true,

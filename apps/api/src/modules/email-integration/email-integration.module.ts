@@ -22,9 +22,6 @@ import { EmailWebhookController } from './email-webhook.controller';
 import { CloudMailinWebhookController } from './cloudmailin-webhook.controller';
 import { EmailConfigController } from './email-config.controller';
 import { EmailConnectionController } from './email-connection.controller';
-import { SupportEmailsService } from './support-emails.service';
-import { SupportEmailsController } from './support-emails.controller';
-import { SupportEmailPublicController } from './support-email-public.controller';
 import { IncomingEmailService } from './incoming-email.service';
 import { IncomingEmailController } from './incoming-email.controller';
 import { OutgoingEmailService } from './outgoing-email.service';
@@ -50,7 +47,6 @@ import { OutgoingEmailController } from './outgoing-email.controller';
     DepartmentRoutingService,
     TenantResolverService,
     InboundEmailService,
-    SupportEmailsService,
     IncomingEmailService,
     OutgoingEmailService,
   ],
@@ -59,8 +55,6 @@ import { OutgoingEmailController } from './outgoing-email.controller';
     EmailConfigController,
     EmailWebhookController,
     CloudMailinWebhookController,
-    SupportEmailsController,
-    SupportEmailPublicController,
     IncomingEmailController,
     OutgoingEmailController,
   ],
@@ -72,7 +66,6 @@ import { OutgoingEmailController } from './outgoing-email.controller';
     TenantResolverService,
     EmailProviderService,
     DepartmentRoutingService,
-    SupportEmailsService,
     IncomingEmailService,
     OutgoingEmailService,
   ],

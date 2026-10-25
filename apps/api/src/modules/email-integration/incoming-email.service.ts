@@ -60,10 +60,6 @@ export class IncomingEmailService {
         where: { id: tenantId },
         include: {
           emailConfiguration: true,
-          supportEmails: {
-            where: { isDefault: true },
-            take: 1,
-          },
         },
       });
 
@@ -80,7 +76,7 @@ export class IncomingEmailService {
         emailConfig = await tx.emailConfiguration.create({
           data: {
             tenantId: tenant.id,
-            supportEmail: tenant.supportEmails[0]?.email || `support@${tenant.slug}.com`,
+            supportEmail: `support@${tenant.slug}.com`,
             provider: 'CLOUDMAILIN',
             inboundAddress: dedicatedInbound,
             forwardingStatus: InboundForwardingStatus.CONNECTED,
@@ -99,7 +95,7 @@ export class IncomingEmailService {
         });
       }
 
-      const defaultSupport = tenant.supportEmails[0]?.email || emailConfig.supportEmail || null;
+      const defaultSupport = emailConfig.supportEmail || dedicatedInbound;
 
       return {
         method: 'Built-in Inbound & Forwarding',
@@ -227,7 +223,6 @@ export class IncomingEmailService {
         where: { id: tenantId },
         include: {
           emailConfiguration: true,
-          supportEmails: { where: { isActive: true }, take: 1 },
         },
       });
 
@@ -238,7 +233,6 @@ export class IncomingEmailService {
       // Determine recipient: specified toEmail, or tenant supportEmail, or generated inbound address
       const recipientEmail =
         dto.toEmail?.trim() ||
-        tenant.supportEmails[0]?.email ||
         tenant.emailConfiguration?.supportEmail ||
         this.getInboundAddressForTenant(tenant.slug);
 
