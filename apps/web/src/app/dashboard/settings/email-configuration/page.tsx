@@ -18,11 +18,6 @@ import {
   ShieldCheck,
   Settings,
   Layers,
-  Inbox,
-  Copy,
-  Check,
-  Send,
-  Zap,
 } from 'lucide-react';
 import {
   Button,
@@ -33,12 +28,6 @@ import {
 } from '@/components/ui';
 import {
   SupportEmailVerificationStatus,
-  InboundForwardingStatus,
-  IncomingEmailConfigDto,
-  TestIncomingEmailResponse,
-  OutboundEmailStatus,
-  OutgoingEmailConfigDto,
-  SendTestEmailResponse,
 } from '@kalpak/types';
 
 // ==================== Interfaces ====================
@@ -78,40 +67,6 @@ export default function EmailConfigurationPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Incoming Email Forwarding State
-  const [incomingConfig, setIncomingConfig] = useState<IncomingEmailConfigDto | null>(null);
-  const [isLoadingIncoming, setIsLoadingIncoming] = useState<boolean>(true);
-  const [isTestingIncoming, setIsTestingIncoming] = useState<boolean>(false);
-  const [copiedInbound, setCopiedInbound] = useState<boolean>(false);
-  const [showTestModal, setShowTestModal] = useState<boolean>(false);
-  const [lastTestResponse, setLastTestResponse] = useState<TestIncomingEmailResponse | null>(null);
-
-  // Outgoing Email State
-  const [outgoingConfig, setOutgoingConfig] = useState<OutgoingEmailConfigDto | null>(null);
-  const [isLoadingOutgoing, setIsLoadingOutgoing] = useState<boolean>(true);
-  const [isSavingOutgoing, setIsSavingOutgoing] = useState<boolean>(false);
-  const [outgoingFormData, setOutgoingFormData] = useState<{
-    senderName: string;
-    fromEmail: string;
-    replyToEmail: string;
-  }>({
-    senderName: '',
-    fromEmail: '',
-    replyToEmail: '',
-  });
-  const [outgoingErrors, setOutgoingErrors] = useState<{
-    senderName?: string;
-    fromEmail?: string;
-    replyToEmail?: string;
-  }>({});
-
-  // Outgoing Test Email Modal state
-  const [showSendTestModal, setShowSendTestModal] = useState<boolean>(false);
-  const [testRecipientEmail, setTestRecipientEmail] = useState<string>('');
-  const [testRecipientError, setTestRecipientError] = useState<string | null>(null);
-  const [isSendingTestEmail, setIsSendingTestEmail] = useState<boolean>(false);
-  const [testSendResult, setTestSendResult] = useState<SendTestEmailResponse | null>(null);
-
   // Support Email Modal states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
@@ -125,6 +80,7 @@ export default function EmailConfigurationPage() {
   // Status toggle in progress tracking
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   // ==================== Data Fetching ====================
 
@@ -143,40 +99,9 @@ export default function EmailConfigurationPage() {
     }
   }, []);
 
-  const fetchIncomingConfig = useCallback(async () => {
-    setIsLoadingIncoming(true);
-    try {
-      const data = await apiClient<IncomingEmailConfigDto>('/tenants/email-config/incoming');
-      setIncomingConfig(data);
-    } catch (err: any) {
-      // Inbound config error
-    } finally {
-      setIsLoadingIncoming(false);
-    }
-  }, []);
-
-  const fetchOutgoingConfig = useCallback(async () => {
-    setIsLoadingOutgoing(true);
-    try {
-      const data = await apiClient<OutgoingEmailConfigDto>('/tenants/email-config/outgoing');
-      setOutgoingConfig(data);
-      setOutgoingFormData({
-        senderName: data.senderName || '',
-        fromEmail: data.fromEmail || '',
-        replyToEmail: data.replyToEmail || '',
-      });
-    } catch (err: any) {
-      // Outbound config fetch error
-    } finally {
-      setIsLoadingOutgoing(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchSupportEmails();
-    fetchIncomingConfig();
-    fetchOutgoingConfig();
-  }, [fetchSupportEmails, fetchIncomingConfig, fetchOutgoingConfig]);
+  }, [fetchSupportEmails]);
 
   // Automatically dismiss success feedback after 5 seconds
   useEffect(() => {
@@ -273,7 +198,6 @@ export default function EmailConfigurationPage() {
 
       setIsModalOpen(false);
       await fetchSupportEmails();
-      await fetchIncomingConfig();
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -299,7 +223,6 @@ export default function EmailConfigurationPage() {
         message: `"${item.displayName}" (${item.email}) is now the default support email.`,
       });
       await fetchSupportEmails();
-      await fetchIncomingConfig();
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -357,7 +280,6 @@ export default function EmailConfigurationPage() {
     }
   };
 
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const handleVerifyEmail = async (item: SupportEmailItem) => {
     setVerifyingId(item.id);
     try {
@@ -369,7 +291,6 @@ export default function EmailConfigurationPage() {
         message: `Support email "${item.email}" verified successfully! Real-time ticket ingestion is active.`,
       });
       await fetchSupportEmails();
-      await fetchIncomingConfig();
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -380,166 +301,16 @@ export default function EmailConfigurationPage() {
     }
   };
 
-  // ==================== Incoming Email Forwarding Handlers ====================
-
-  const handleCopyInboundAddress = () => {
-    if (!incomingConfig?.inboundAddress) return;
-    navigator.clipboard.writeText(incomingConfig.inboundAddress);
-    setCopiedInbound(true);
-    setTimeout(() => setCopiedInbound(false), 2500);
-  };
-
-  const handleTestIncomingEmail = async (simulate = false) => {
-    setIsTestingIncoming(true);
-    setFeedback(null);
-
-    try {
-      const res = await apiClient<TestIncomingEmailResponse>('/tenants/email-config/incoming/test', {
-        method: 'POST',
-        body: JSON.stringify({ simulateReception: simulate }),
-      });
-
-      setLastTestResponse(res);
-
-      if (incomingConfig) {
-        setIncomingConfig({
-          ...incomingConfig,
-          status: res.status,
-          lastTestedAt: res.lastTestedAt,
-          lastTestedMessage: res.message,
-        });
-      }
-
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        message: res.message,
-      });
-
-      if (!res.success && !simulate) {
-        setShowTestModal(true);
-      }
-    } catch (err: any) {
-      setFeedback({
-        type: 'error',
-        message: err instanceof ApiClientError ? err.message : 'Failed to test incoming email forwarding',
-      });
-    } finally {
-      setIsTestingIncoming(false);
-    }
-  };
-
-  // ==================== Outgoing Email Handlers ====================
-
-  const handleSaveOutgoing = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const errors: { senderName?: string; fromEmail?: string; replyToEmail?: string } = {};
-
-    if (!outgoingFormData.fromEmail.trim()) {
-      errors.fromEmail = 'From email address is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(outgoingFormData.fromEmail.trim())) {
-      errors.fromEmail = 'Please provide a valid email address';
-    }
-
-    if (
-      outgoingFormData.replyToEmail.trim() &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(outgoingFormData.replyToEmail.trim())
-    ) {
-      errors.replyToEmail = 'Please provide a valid reply-to email address';
-    }
-
-    setOutgoingErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    setIsSavingOutgoing(true);
-    setFeedback(null);
-    try {
-      const updated = await apiClient<OutgoingEmailConfigDto>('/tenants/email-config/outgoing', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          senderName: outgoingFormData.senderName.trim() || undefined,
-          fromEmail: outgoingFormData.fromEmail.trim().toLowerCase(),
-          replyToEmail: outgoingFormData.replyToEmail.trim().toLowerCase() || undefined,
-        }),
-      });
-      setOutgoingConfig(updated);
-      setFeedback({
-        type: 'success',
-        message: 'Outgoing email configuration saved successfully.',
-      });
-    } catch (err: any) {
-      setFeedback({
-        type: 'error',
-        message: err instanceof ApiClientError ? err.message : 'Failed to save outgoing email configuration',
-      });
-    } finally {
-      setIsSavingOutgoing(false);
-    }
-  };
-
-  const handleOpenSendTestModal = () => {
-    setTestRecipientEmail('');
-    setTestRecipientError(null);
-    setTestSendResult(null);
-    setShowSendTestModal(true);
-  };
-
-  const handleSendTestEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testRecipientEmail.trim()) {
-      setTestRecipientError('Recipient email address is required');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testRecipientEmail.trim())) {
-      setTestRecipientError('Please provide a valid recipient email address');
-      return;
-    }
-
-    setTestRecipientError(null);
-    setIsSendingTestEmail(true);
-    setTestSendResult(null);
-
-    try {
-      const res = await apiClient<SendTestEmailResponse>('/tenants/email-config/outgoing/test', {
-        method: 'POST',
-        body: JSON.stringify({ recipientEmail: testRecipientEmail.trim().toLowerCase() }),
-      });
-      setTestSendResult(res);
-      if (outgoingConfig) {
-        setOutgoingConfig({
-          ...outgoingConfig,
-          status: res.status,
-          lastTestedAt: res.lastTestedAt,
-          lastTestedMessage: res.message,
-        });
-      }
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        message: res.message,
-      });
-    } catch (err: any) {
-      const msg = err instanceof ApiClientError ? err.message : 'Failed to send test email';
-      setTestSendResult({
-        success: false,
-        status: OutboundEmailStatus.FAILED,
-        message: msg,
-        lastTestedAt: new Date().toISOString(),
-      });
-      setFeedback({
-        type: 'error',
-        message: msg,
-      });
-    } finally {
-      setIsSendingTestEmail(false);
-    }
-  };
-
   // ==================== Computed Metrics ====================
 
   const metrics = useMemo(() => {
     const total = emails.length;
     const active = emails.filter((e) => e.isActive).length;
+    const verified = emails.filter(
+      (e) => e.verificationStatus === SupportEmailVerificationStatus.VERIFIED
+    ).length;
     const defaultItem = emails.find((e) => e.isDefault);
-    return { total, active, defaultItem };
+    return { total, active, verified, defaultItem };
   }, [emails]);
 
   return (
@@ -557,22 +328,18 @@ export default function EmailConfigurationPage() {
             </Badge>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Configure primary support email addresses and incoming email forwarding for automated ticket capture.
+            Configure primary support email addresses for customer communications and ticket management.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
-            onClick={() => {
-              fetchSupportEmails();
-              fetchIncomingConfig();
-              fetchOutgoingConfig();
-            }}
-            disabled={isLoading || isLoadingIncoming || isLoadingOutgoing}
+            onClick={fetchSupportEmails}
+            disabled={isLoading}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading || isLoadingIncoming || isLoadingOutgoing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button onClick={openAddModal} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white">
@@ -630,7 +397,7 @@ export default function EmailConfigurationPage() {
       )}
 
       {/* Overview Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-5 border-slate-200 bg-white">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -660,66 +427,21 @@ export default function EmailConfigurationPage() {
         <Card className="p-5 border-slate-200 bg-white">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Incoming Email Status
+              Verified Addresses
             </span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Inbox className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            {incomingConfig?.status === InboundForwardingStatus.CONNECTED ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Connected
-              </span>
-            ) : incomingConfig?.status === InboundForwardingStatus.FAILED ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-                <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                Failed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
-                Waiting for Setup
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Email Forwarding Pipeline</p>
-        </Card>
-
-        <Card className="p-5 border-slate-200 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Outgoing Email Status
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Send className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            {outgoingConfig?.status === OutboundEmailStatus.CONNECTED ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Connected
-              </span>
-            ) : outgoingConfig?.status === OutboundEmailStatus.FAILED ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-                <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                Failed
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Not Configured
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Outgoing SMTP Dispatch</p>
+          <p className="text-2xl font-bold text-slate-900 mt-2">{metrics.verified}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {metrics.defaultItem ? `Default: ${metrics.defaultItem.email}` : 'No default email set'}
+          </p>
         </Card>
       </div>
 
       {/* ======================================================== */}
-      {/* 1. SUPPORT EMAIL SECTION                                */}
+      {/* SUPPORT EMAIL DIRECTORY                                  */}
       {/* ======================================================== */}
       <Card className="border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -963,417 +685,6 @@ export default function EmailConfigurationPage() {
         </div>
       </Card>
 
-      {/* ======================================================== */}
-      {/* 2. INCOMING EMAIL SECTION                               */}
-      {/* ======================================================== */}
-      <Card className="border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Inbox className="w-5 h-5 text-orange-600" />
-                Incoming Email
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                Method: {incomingConfig?.method || 'Email Forwarding'}
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 mt-1">
-              Forward inquiries from your existing support email (e.g.{' '}
-              <span className="font-semibold text-slate-700">
-                {metrics.defaultItem ? metrics.defaultItem.email : 'support@abc.com'}
-              </span>
-              ) to your unique Kalpak Inbound Email address.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              onClick={() => handleTestIncomingEmail(false)}
-              disabled={isTestingIncoming || isLoadingIncoming}
-              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold shadow-sm"
-            >
-              <RefreshCw className={`w-4 h-4 ${isTestingIncoming ? 'animate-spin' : ''}`} />
-              {isTestingIncoming ? 'Testing Connection...' : 'Test Incoming Email'}
-            </Button>
-          </div>
-        </div>
-
-        {/* Inbound Email Configuration Box */}
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Unique Inbound Address Card (Left - 7 cols) */}
-            <div className="lg:col-span-7 bg-gradient-to-br from-slate-50 to-orange-50/20 rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-orange-600" />
-                    Kalpak Inbound Email Address
-                  </span>
-                  <Badge variant="primary" className="text-[11px] font-semibold">
-                    Unique Tenant Inbound
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Forward all customer inquiries from your company support address to this recipient address:
-                </p>
-
-                {/* Inbound Address Bar with Copy */}
-                <div className="mt-3.5 flex items-center gap-2 bg-white rounded-xl p-2 pl-3.5 border border-slate-200 shadow-sm">
-                  <span className="font-mono text-sm sm:text-base font-semibold text-slate-900 select-all truncate">
-                    {incomingConfig?.inboundAddress || 'Loading address...'}
-                  </span>
-                  <button
-                    onClick={handleCopyInboundAddress}
-                    disabled={!incomingConfig?.inboundAddress}
-                    className={`ml-auto shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
-                      copiedInbound
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    {copiedInbound ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        Copy
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-500">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  Protected by Tenant Isolation
-                </span>
-                <span>Automated Ingestion</span>
-              </div>
-            </div>
-
-            {/* Status & Method Box (Right - 5 cols) */}
-            <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                  Forwarding Status
-                </span>
-
-                <div className="mt-2">
-                  {incomingConfig?.status === InboundForwardingStatus.CONNECTED ? (
-                    <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-2.5">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-bold text-emerald-900">Connected</p>
-                        <p className="text-xs text-emerald-700 mt-0.5">
-                          Incoming email forwarding is verified. Emails forwarded to your Kalpak Inbound Address are being received.
-                        </p>
-                      </div>
-                    </div>
-                  ) : incomingConfig?.status === InboundForwardingStatus.FAILED ? (
-                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2.5">
-                      <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-bold text-red-900">Failed</p>
-                        <p className="text-xs text-red-700 mt-0.5">
-                          Verification failed. Ensure your email provider forwarding rule is active and points to your Kalpak Inbound address.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5">
-                      <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-bold text-amber-900">Waiting for Setup</p>
-                        <p className="text-xs text-amber-700 mt-0.5">
-                          Forwarding rule has not been detected yet. Set up forwarding in your email host and click &ldquo;Test Incoming Email&rdquo;.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Status Details */}
-              <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-400 font-medium">Forwarding Method:</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">Email Forwarding</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Last Tested:</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">
-                    {incomingConfig?.lastTestedAt
-                      ? new Date(incomingConfig.lastTestedAt).toLocaleString()
-                      : 'Not tested yet'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 3-Step Setup Instructions Guide */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-orange-600" />
-                How to Set Up Email Forwarding
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Step 1 */}
-              <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm relative">
-                <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center mb-2.5">
-                  1
-                </div>
-                <h4 className="text-sm font-bold text-slate-900">Configure Support Email</h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Make sure your primary support email (e.g.{' '}
-                  <span className="font-semibold text-slate-700">
-                    {metrics.defaultItem ? metrics.defaultItem.email : 'support@abc.com'}
-                  </span>
-                  ) is registered in the Support Email section above.
-                </p>
-              </div>
-
-              {/* Step 2 */}
-              <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm relative">
-                <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center mb-2.5">
-                  2
-                </div>
-                <h4 className="text-sm font-bold text-slate-900">Set Up Forwarding Rule</h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  In your email host (Google Workspace, Microsoft 365, cPanel, or Zoho), create an automatic forwarding rule sending all incoming emails to your{' '}
-                  <span className="font-semibold text-slate-700">Kalpak Inbound Address</span>.
-                </p>
-              </div>
-
-              {/* Step 3 */}
-              <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-sm relative">
-                <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center mb-2.5">
-                  3
-                </div>
-                <h4 className="text-sm font-bold text-slate-900">Verify Connectivity</h4>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Send a test message to your support email, then click{' '}
-                  <span className="font-semibold text-slate-700">&ldquo;Test Incoming Email&rdquo;</span> to confirm your forwarding is active and connected.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Test & Simulation Buttons */}
-          <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Zap className="w-3.5 h-3.5 text-orange-600" />
-              <span>
-                Want to test before updating your DNS or mail server? Use the simulated test option.
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2.5 ml-auto">
-              <Button
-                variant="outline"
-                onClick={() => handleTestIncomingEmail(true)}
-                disabled={isTestingIncoming}
-                className="text-xs font-semibold flex items-center gap-1.5 text-slate-700 hover:text-orange-600 hover:bg-orange-50 border-slate-300"
-              >
-                <Send className="w-3.5 h-3.5" />
-                Simulate Test Inbound Email
-              </Button>
-              <Button
-                onClick={() => handleTestIncomingEmail(false)}
-                disabled={isTestingIncoming}
-                className="text-xs font-semibold flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingIncoming ? 'animate-spin' : ''}`} />
-                Test Incoming Email
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* ======================================================== */}
-      {/* 3. OUTGOING EMAIL SECTION                               */}
-      {/* ======================================================== */}
-      <Card className="border-slate-200 bg-white overflow-hidden shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Send className="w-5 h-5 text-orange-600" />
-                Outgoing Email
-              </h2>
-              {/* Outbound Status Badge */}
-              {outgoingConfig?.status === OutboundEmailStatus.CONNECTED ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  Connected
-                </span>
-              ) : outgoingConfig?.status === OutboundEmailStatus.FAILED ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-                  <AlertCircle className="w-3.5 h-3.5 text-red-600" />
-                  Failed
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                  <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  Not Configured
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-slate-500 mt-1">
-              Configure sender details for outgoing customer emails, ticket notifications, and system dispatches.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              type="button"
-              onClick={handleOpenSendTestModal}
-              disabled={isLoadingOutgoing || !outgoingFormData.fromEmail}
-              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold shadow-sm disabled:opacity-50"
-              title={!outgoingFormData.fromEmail ? 'Save From Email first to send a test' : 'Send a real test email'}
-            >
-              <Send className="w-4 h-4" />
-              Send Test Email
-            </Button>
-          </div>
-        </div>
-
-        <form onSubmit={handleSaveOutgoing} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Sender Name */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Sender Name <span className="text-slate-400 font-normal">(e.g. ABC Support)</span>
-              </label>
-              <Input
-                type="text"
-                value={outgoingFormData.senderName}
-                onChange={(e) => {
-                  setOutgoingFormData({ ...outgoingFormData, senderName: e.target.value });
-                  if (outgoingErrors.senderName) setOutgoingErrors({ ...outgoingErrors, senderName: undefined });
-                }}
-                placeholder="e.g. ABC Support"
-                className={outgoingErrors.senderName ? 'border-red-400 focus:ring-red-300' : ''}
-              />
-              {outgoingErrors.senderName ? (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {outgoingErrors.senderName}
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500 mt-1">
-                  The friendly sender name shown in customer email clients.
-                </p>
-              )}
-            </div>
-
-            {/* From Email */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                From Email <span className="text-red-500">*</span> <span className="text-slate-400 font-normal">(e.g. support@abc.com)</span>
-              </label>
-              <Input
-                type="email"
-                value={outgoingFormData.fromEmail}
-                onChange={(e) => {
-                  setOutgoingFormData({ ...outgoingFormData, fromEmail: e.target.value });
-                  if (outgoingErrors.fromEmail) setOutgoingErrors({ ...outgoingErrors, fromEmail: undefined });
-                }}
-                placeholder="e.g. support@abc.com"
-                className={outgoingErrors.fromEmail ? 'border-red-400 focus:ring-red-300' : ''}
-              />
-              {outgoingErrors.fromEmail ? (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {outgoingErrors.fromEmail}
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500 mt-1">
-                  The sender email address appearing in the &ldquo;From&rdquo; header.
-                </p>
-              )}
-            </div>
-
-            {/* Reply-To Email */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Reply-To Email <span className="text-slate-400 font-normal">(Optional)</span>
-              </label>
-              <Input
-                type="email"
-                value={outgoingFormData.replyToEmail}
-                onChange={(e) => {
-                  setOutgoingFormData({ ...outgoingFormData, replyToEmail: e.target.value });
-                  if (outgoingErrors.replyToEmail) setOutgoingErrors({ ...outgoingErrors, replyToEmail: undefined });
-                }}
-                placeholder="e.g. support@abc.com"
-                className={outgoingErrors.replyToEmail ? 'border-red-400 focus:ring-red-300' : ''}
-              />
-              {outgoingErrors.replyToEmail ? (
-                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  {outgoingErrors.replyToEmail}
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500 mt-1">
-                  Where customer replies are routed. Defaults to From Email if blank.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Status info bar & Save button */}
-          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                {outgoingConfig?.lastTestedAt ? (
-                  <>
-                    Last tested:{' '}
-                    <strong className="text-slate-700">
-                      {new Date(outgoingConfig.lastTestedAt).toLocaleString()}
-                    </strong>
-                    {outgoingConfig.lastTestedMessage && (
-                      <span className="ml-1 text-slate-600 font-medium">
-                        — {outgoingConfig.lastTestedMessage}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  'Outbound emails are securely isolated by tenant and dispatched via your platform mail service.'
-                )}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <Button
-                type="submit"
-                disabled={isSavingOutgoing}
-                className="bg-slate-900 hover:bg-slate-800 text-white min-w-[140px] flex items-center justify-center gap-2 text-xs font-semibold"
-              >
-                {isSavingOutgoing ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Outgoing Settings'
-                )}
-              </Button>
-            </div>
-          </div>
-        </form>
-      </Card>
-
       {/* Add / Edit Support Email Modal */}
       <Dialog
         isOpen={isModalOpen}
@@ -1560,184 +871,6 @@ export default function EmailConfigurationPage() {
             </Button>
           </div>
         </div>
-      </Dialog>
-
-      {/* Test Guidance Modal */}
-      <Dialog
-        isOpen={showTestModal}
-        onClose={() => setShowTestModal(false)}
-        title="Incoming Email Test Result"
-        description="Forwarded email verification details."
-      >
-        <div className="space-y-4 pt-2">
-          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-bold text-amber-900">Waiting for Forwarded Email</p>
-              <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                {lastTestResponse?.message ||
-                  'No forwarded email has been detected yet from your support address.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-xl text-xs space-y-2 text-slate-600 border border-slate-200">
-            <p className="font-semibold text-slate-800">Quick Checklist:</p>
-            <ul className="list-disc pl-4 space-y-1 text-slate-600">
-              <li>
-                Inbound address is correctly set to:{' '}
-                <span className="font-mono font-semibold text-slate-900">
-                  {incomingConfig?.inboundAddress}
-                </span>
-              </li>
-              <li>
-                Your forwarding rule in your email host (Google Workspace, Office 365, etc.) is active.
-              </li>
-              <li>You sent at least one email to your support address after setting up forwarding.</li>
-            </ul>
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowTestModal(false);
-                handleTestIncomingEmail(true);
-              }}
-              className="text-xs flex items-center gap-1.5 text-orange-600 hover:text-orange-700"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Simulate Inbound Test Now
-            </Button>
-            <Button
-              onClick={() => setShowTestModal(false)}
-              className="bg-slate-900 hover:bg-slate-800 text-white text-xs"
-            >
-              Got it
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Send Real Test Email Modal */}
-      <Dialog
-        isOpen={showSendTestModal}
-        onClose={() => !isSendingTestEmail && setShowSendTestModal(false)}
-        title="Send Real Test Email"
-        description="Verify your Outgoing Email configuration by sending a real email to a specified recipient."
-      >
-        <form onSubmit={handleSendTestEmail} className="space-y-4 pt-2">
-          {/* Current Outgoing Identity preview */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
-            <p className="font-semibold text-slate-700">Outgoing Identity Summary:</p>
-            <div className="grid grid-cols-2 gap-2 text-slate-600">
-              <p>
-                Sender Name:{' '}
-                <span className="font-medium text-slate-900">
-                  {outgoingFormData.senderName || 'Not Set'}
-                </span>
-              </p>
-              <p>
-                From Email:{' '}
-                <span className="font-medium text-slate-900">
-                  {outgoingFormData.fromEmail || 'Not Set'}
-                </span>
-              </p>
-              <p className="col-span-2">
-                Reply-To:{' '}
-                <span className="font-medium text-slate-900">
-                  {outgoingFormData.replyToEmail ||
-                    outgoingFormData.fromEmail ||
-                    'Same as From Email'}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Recipient Email Input */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-              Recipient Email Address <span className="text-red-500">*</span>
-            </label>
-            <Input
-              type="email"
-              value={testRecipientEmail}
-              onChange={(e) => {
-                setTestRecipientEmail(e.target.value);
-                setTestRecipientError(null);
-              }}
-              placeholder="e.g. admin@yourcompany.com"
-              className={testRecipientError ? 'border-red-400 focus:ring-red-300' : ''}
-              autoFocus
-              disabled={isSendingTestEmail}
-            />
-            {testRecipientError ? (
-              <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" />
-                {testRecipientError}
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500 mt-1">
-                Enter an inbox address where you can verify receipt of the test message.
-              </p>
-            )}
-          </div>
-
-          {/* Test Result Feedback */}
-          {testSendResult && (
-            <div
-              className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs ${
-                testSendResult.success
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                  : 'bg-red-50 text-red-900 border-red-200'
-              }`}
-            >
-              {testSendResult.success ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              )}
-              <div>
-                <p className="font-bold">
-                  {testSendResult.success ? 'Delivery Success (Connected)' : 'Delivery Failed'}
-                </p>
-                <p className="mt-0.5">{testSendResult.message}</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Tested at: {new Date(testSendResult.lastTestedAt).toLocaleTimeString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Dialog Action Buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowSendTestModal(false)}
-              disabled={isSendingTestEmail}
-            >
-              Close
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSendingTestEmail}
-              className="bg-orange-600 hover:bg-orange-700 text-white min-w-[130px]"
-            >
-              {isSendingTestEmail ? (
-                <span className="flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Sending Test...
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <Send className="w-3.5 h-3.5" />
-                  Send Test Email
-                </span>
-              )}
-            </Button>
-          </div>
-        </form>
       </Dialog>
     </div>
   );
