@@ -1,12 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { getConfig } from '@kalpak/config';
-import { InboundForwardingStatus, IncomingEmailConfigDto, TestIncomingEmailResponse } from '@kalpak/types';
+import {
+  InboundForwardingStatus,
+  IncomingEmailConfigDto,
+  TestIncomingEmailResponse,
+  SimulateEmailQueryResponse,
+} from '@kalpak/types';
 import { logger } from '@kalpak/logger';
+import { InboundEmailService } from './inbound-email.service';
+import { ParsedInboundEmail } from './providers/email-provider.interface';
 
 @Injectable()
 export class IncomingEmailService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inboundEmailService: InboundEmailService
+  ) {}
 
   /**
    * Safe execution wrapper enforcing PostgreSQL Row Level Security (RLS) context
@@ -191,4 +201,80 @@ export class IncomingEmailService {
       };
     });
   }
+
+  /**
+   * Simulates receiving an inbound email query from a customer to test end-to-end ticket generation.
+   * Runs through the exact same InboundEmailService pipeline as real webhooks.
+   */
+  async simulateEmailQuery(
+    tenantId: string,
+    dto: {
+      fromEmail: string;
+      fromName?: string;
+      subject: string;
+      bodyText: string;
+      toEmail?: string;
+    }
+  ): Promise<SimulateEmailQueryResponse> {
+    return this.withTenant(tenantId, false, async (tx) => {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        include: {
+          emailConfiguration: true,
+          supportEmails: { where: { isActive: true }, take: 1 },
+        },
+      });
+
+      if (!tenant) {
+        throw new NotFoundException('Organization tenant not found');
+      }
+
+      // Determine recipient: specified toEmail, or tenant supportEmail, or generated inbound address
+      const recipientEmail =
+        dto.toEmail?.trim() ||
+        tenant.supportEmails[0]?.email ||
+        tenant.emailConfiguration?.supportEmail ||
+        this.getInboundAddressForTenant(tenant.slug);
+
+      const parsed: ParsedInboundEmail = {
+        provider: 'EMAIL_INBOUND_SIMULATION',
+        providerEventId: `sim_${Date.now()}`,
+        messageId: `sim_${Date.now()}_${Math.random().toString(36).substring(2, 9)}@kalpak.local`,
+        fromEmail: dto.fromEmail.toLowerCase().trim(),
+        fromName: dto.fromName?.trim() || dto.fromEmail.split('@')[0],
+        toEmail: recipientEmail.toLowerCase().trim(),
+        allRecipients: [recipientEmail.toLowerCase().trim()],
+        subject: dto.subject.trim() || 'Inbound Customer Inquiry',
+        bodyText: dto.bodyText.trim() || '(No details provided)',
+        rawPayload: {
+          simulated: true,
+          simulatedAt: new Date().toISOString(),
+          tenantId,
+          tenantSlug: tenant.slug,
+        },
+      };
+
+      const result = await this.inboundEmailService.processInboundEmail(parsed);
+
+      logger.info(
+        { tenantId, status: result.status, ticketNumber: result.ticketNumber },
+        '[IncomingEmail] Inbound email query simulated and processed'
+      );
+
+      return {
+        success: result.status === 'TICKET_CREATED' || result.status === 'THREAD_REPLY_RECORDED',
+        status: result.status,
+        ticketId: result.ticketId,
+        ticketNumber: result.ticketNumber,
+        tenantSlug: result.tenantSlug || tenant.slug,
+        messageId: parsed.messageId,
+        recipient: recipientEmail,
+        sender: dto.fromEmail,
+        message: result.ticketNumber
+          ? `Ticket #${result.ticketNumber} created successfully from email query.`
+          : `Email query processed with status: ${result.status}`,
+      };
+    });
+  }
 }
+

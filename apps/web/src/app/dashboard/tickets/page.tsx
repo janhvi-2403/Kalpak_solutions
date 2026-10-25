@@ -16,6 +16,10 @@ import {
   ShieldAlert,
   Layers,
   RotateCcw,
+  Mail,
+  Globe,
+  Phone,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Button,
@@ -30,6 +34,7 @@ interface TicketListItem {
   title: string;
   status: 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'AWAITING_CUSTOMER' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  source?: 'EMAIL' | 'PORTAL' | 'PHONE' | 'MANUAL';
   isOverdue: boolean;
   raisedBy: 'CUSTOMER' | 'EMPLOYEE';
   raisedForCustomer?: { id: string; companyName: string } | null;
@@ -77,12 +82,14 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -113,15 +120,20 @@ export default function TicketsPage() {
     }
   }, []);
 
-  const fetchTickets = useCallback(async () => {
+  const fetchTickets = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) {
+        setIsLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
       const params: Record<string, string | number | boolean | undefined> = {
         page,
         pageSize: 15,
         search: search.trim() || undefined,
         status: statusFilter || undefined,
         priority: priorityFilter || undefined,
+        source: sourceFilter || undefined,
         isOverdue: overdueOnly ? true : undefined,
       };
 
@@ -129,14 +141,26 @@ export default function TicketsPage() {
       setTickets(result.data || []);
       setTotalPages(result.totalPages || 1);
     } catch (err) {
-      setFeedbackMsg({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Failed to load tickets',
-      });
+      if (!silent) {
+        setFeedbackMsg({
+          type: 'error',
+          text: err instanceof Error ? err.message : 'Failed to load tickets',
+        });
+      }
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, [page, search, statusFilter, priorityFilter, overdueOnly]);
+  }, [page, search, statusFilter, priorityFilter, sourceFilter, overdueOnly]);
+
+  // Periodic polling for live ticket updates (e.g. newly arrived email queries)
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchTickets(true);
+      fetchStats();
+    }, 15000);
+    return () => clearInterval(pollInterval);
+  }, [fetchTickets, fetchStats]);
 
   const fetchLookupData = useCallback(async () => {
     try {
@@ -258,6 +282,38 @@ export default function TicketsPage() {
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
             LOW
+          </span>
+        );
+    }
+  };
+
+  const getSourceBadge = (source?: string) => {
+    switch (source) {
+      case 'EMAIL':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-300 shadow-xs">
+            <Mail className="w-3 h-3 text-cyan-600" />
+            EMAIL
+          </span>
+        );
+      case 'PORTAL':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+            <Globe className="w-3 h-3 text-slate-500" />
+            PORTAL
+          </span>
+        );
+      case 'PHONE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            <Phone className="w-3 h-3 text-amber-500" />
+            PHONE
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+            {source || 'DIRECT'}
           </span>
         );
     }
@@ -420,6 +476,22 @@ export default function TicketsPage() {
             <option value="LOW">Low</option>
           </select>
 
+          {/* Source Dropdown */}
+          <select
+            value={sourceFilter}
+            onChange={(e) => {
+              setSourceFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium"
+          >
+            <option value="">All Intake Sources</option>
+            <option value="EMAIL">✉️ Email Inquiry</option>
+            <option value="PORTAL">🌐 Customer Portal</option>
+            <option value="PHONE">📞 Phone Call</option>
+            <option value="MANUAL">📝 Internal Manual</option>
+          </select>
+
           {/* Overdue Checkbox Button */}
           <button
             onClick={() => {
@@ -437,12 +509,13 @@ export default function TicketsPage() {
           </button>
 
           {/* Reset Filters */}
-          {(search || statusFilter || priorityFilter || overdueOnly) && (
+          {(search || statusFilter || priorityFilter || sourceFilter || overdueOnly) && (
             <button
               onClick={() => {
                 setSearch('');
                 setStatusFilter('');
                 setPriorityFilter('');
+                setSourceFilter('');
                 setOverdueOnly(false);
                 setPage(1);
               }}
@@ -452,6 +525,26 @@ export default function TicketsPage() {
               <span>Reset</span>
             </button>
           )}
+        </div>
+
+        {/* Live Refresh & Pulse Controls */}
+        <div className="flex items-center gap-2 self-end md:self-center">
+          <button
+            onClick={() => {
+              fetchTickets();
+              fetchStats();
+            }}
+            disabled={isLoading || isRefreshing}
+            className="px-3 py-2 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+            title="Refresh ticket list"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isLoading || isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-lg">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live Sync
+          </span>
         </div>
       </div>
 
@@ -488,6 +581,7 @@ export default function TicketsPage() {
                   <th className="py-3 px-4">Ticket Ref</th>
                   <th className="py-3 px-4">Issue Title & Details</th>
                   <th className="py-3 px-4">Customer & Machine</th>
+                  <th className="py-3 px-4">Source</th>
                   <th className="py-3 px-4">Priority</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Assigned To</th>
@@ -522,12 +616,20 @@ export default function TicketsPage() {
                       >
                         {t.title}
                       </Link>
-                      {t.department && (
-                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                          <Layers className="w-3 h-3 text-slate-400" />
-                          <span>{t.department.name}</span>
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        {t.source === 'EMAIL' && (
+                          <span className="text-[10px] font-semibold text-cyan-700 bg-cyan-50 border border-cyan-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                            <Mail className="w-2.5 h-2.5" />
+                            Email Query
+                          </span>
+                        )}
+                        {t.department && (
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Layers className="w-3 h-3 text-slate-400" />
+                            <span>{t.department.name}</span>
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* Customer & Asset */}
@@ -541,6 +643,11 @@ export default function TicketsPage() {
                           <span>{t.customerAsset.serialNumber}</span>
                         </div>
                       )}
+                    </td>
+
+                    {/* Source */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {getSourceBadge(t.source)}
                     </td>
 
                     {/* Priority */}

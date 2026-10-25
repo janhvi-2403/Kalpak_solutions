@@ -57,6 +57,7 @@ export class TicketsController {
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, enum: ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'AWAITING_CUSTOMER', 'RESOLVED', 'CLOSED', 'CANCELLED'] })
   @ApiQuery({ name: 'priority', required: false, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] })
+  @ApiQuery({ name: 'source', required: false, enum: ['EMAIL', 'PORTAL', 'PHONE', 'MANUAL'] })
   @ApiQuery({ name: 'departmentId', required: false, type: String })
   @ApiQuery({ name: 'assignedToUserId', required: false, type: String })
   @ApiQuery({ name: 'raisedForCustomerId', required: false, type: String })
@@ -70,6 +71,7 @@ export class TicketsController {
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
+    @Query('source') source?: string,
     @Query('departmentId') departmentId?: string,
     @Query('assignedToUserId') assignedToUserId?: string,
     @Query('raisedForCustomerId') raisedForCustomerId?: string,
@@ -83,6 +85,7 @@ export class TicketsController {
       pageSize: pageSize ? parseInt(pageSize, 10) : 20,
       status,
       priority,
+      source,
       departmentId,
       assignedToUserId,
       raisedForCustomerId,

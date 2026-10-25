@@ -19,6 +19,7 @@ import {
   Activity,
   History,
   ChevronRight,
+  Mail,
 } from 'lucide-react';
 import {
   Button,
@@ -55,6 +56,7 @@ interface TicketDetail {
   description: string;
   status: 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'AWAITING_CUSTOMER' | 'RESOLVED' | 'CLOSED' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  source?: string;
   isOverdue: boolean;
   tolerableOpenDays: number;
   raisedBy: 'CUSTOMER' | 'EMPLOYEE';
@@ -373,6 +375,12 @@ export default function TicketDetailPage() {
             <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-300">
               {ticket.status}
             </span>
+            {ticket.source === 'EMAIL' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-300 shadow-xs">
+                <Mail className="w-3.5 h-3.5 text-cyan-600" />
+                Inbound Email
+              </span>
+            )}
             {ticket.isOverdue && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
                 <ShieldAlert className="w-3.5 h-3.5" />

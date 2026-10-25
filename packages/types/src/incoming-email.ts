@@ -15,3 +15,16 @@ export interface TestIncomingEmailResponse {
   message: string;
   lastTestedAt: string;
 }
+
+export interface SimulateEmailQueryResponse {
+  success: boolean;
+  status: string;
+  ticketId?: string;
+  ticketNumber?: string;
+  tenantSlug?: string;
+  messageId: string;
+  recipient: string;
+  sender: string;
+  message: string;
+}
+

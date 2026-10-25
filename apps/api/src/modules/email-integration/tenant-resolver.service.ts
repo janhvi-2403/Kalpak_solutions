@@ -68,7 +68,7 @@ export class TenantResolverService {
 
     // 2. Direct match on SupportEmail table
     for (const recipient of normalizedRecipients) {
-      const supportEmailRecord = await this.prisma.supportEmail.findFirst({
+      let supportEmailRecord = await this.prisma.supportEmail.findFirst({
         where: {
           email: { equals: recipient, mode: 'insensitive' },
           isActive: true,
@@ -79,6 +79,19 @@ export class TenantResolverService {
           },
         },
       });
+
+      if (!supportEmailRecord) {
+        supportEmailRecord = await this.prisma.supportEmail.findFirst({
+          where: {
+            email: { equals: recipient, mode: 'insensitive' },
+          },
+          include: {
+            tenant: {
+              include: { emailConfiguration: true },
+            },
+          },
+        });
+      }
 
       if (supportEmailRecord && supportEmailRecord.tenant) {
         const tenant = supportEmailRecord.tenant;
@@ -101,6 +114,11 @@ export class TenantResolverService {
                 status: 'ACTIVE',
               },
             });
+          } else if (!emailConfig.enabled) {
+            emailConfig = await this.prisma.emailConfiguration.update({
+              where: { id: emailConfig.id },
+              data: { enabled: true, autoCreateTicket: true },
+            });
           }
 
           return {
@@ -112,33 +130,57 @@ export class TenantResolverService {
       }
     }
 
-    // 3. Subdomain / Slug alias fallback (e.g. acme-corp@inbound.kalpak.com or acme-corp@cloudmailin.net)
+    // 3. Subdomain / Slug alias fallback (e.g. acme-corp@inbound.kalpak.com or support@acme-corp.com)
     for (const recipient of normalizedRecipients) {
       const localPart = recipient.split('@')[0] || '';
+      const domainPart = recipient.split('@')[1] || '';
       const candidateSlug = localPart.replace(/-support$/i, '').replace(/-tickets?$/i, '').trim();
+      const domainSlug = domainPart.split('.')[0]?.trim();
 
-      if (candidateSlug) {
+      const candidateSlugs = [candidateSlug, domainSlug].filter((s): s is string => Boolean(s));
+
+      for (const slug of candidateSlugs) {
+        // Exclude common provider domains
+        if (['cloudmailin', 'kalpak', 'gmail', 'google', 'outlook', 'yahoo', 'example'].includes(slug)) {
+          continue;
+        }
+
         const tenant = await this.prisma.tenant.findUnique({
-          where: { slug: candidateSlug },
+          where: { slug },
           include: {
             emailConfiguration: true,
           },
         });
 
-        if (
-          tenant &&
-          tenant.status === 'ACTIVE' &&
-          !tenant.deletedAt &&
-          tenant.emailConfiguration &&
-          tenant.emailConfiguration.enabled
-        ) {
+        if (tenant && tenant.status === 'ACTIVE' && !tenant.deletedAt) {
           logger.info(
-            { tenantId: tenant.id, candidateSlug, recipient },
+            { tenantId: tenant.id, slug, recipient },
             '[TenantResolver] Tenant resolved via slug-based inbound alias'
           );
+
+          let emailConfig = tenant.emailConfiguration;
+          if (!emailConfig) {
+            emailConfig = await this.prisma.emailConfiguration.create({
+              data: {
+                tenantId: tenant.id,
+                supportEmail: recipient,
+                provider: 'CLOUDMAILIN',
+                enabled: true,
+                autoCreateTicket: true,
+                autoRoute: true,
+                status: 'ACTIVE',
+              },
+            });
+          } else if (!emailConfig.enabled) {
+            emailConfig = await this.prisma.emailConfiguration.update({
+              where: { id: emailConfig.id },
+              data: { enabled: true, autoCreateTicket: true },
+            });
+          }
+
           return {
             tenant,
-            emailConfig: tenant.emailConfiguration,
+            emailConfig,
             matchedRecipient: recipient,
           };
         }
@@ -180,6 +222,73 @@ export class TenantResolverService {
           tenant: defaultTenant,
           emailConfig,
           matchedRecipient: normalizedRecipients[0] || 'default-cloudmailin',
+        };
+      }
+    }
+
+    // 5. CloudMailin Shared Recipient Fallback:
+    // If the email was delivered to a cloudmailin address (e.g. *@cloudmailin.net),
+    // find a tenant configuring that inbound address or default to the primary active tenant.
+    const hasCloudMailinRecipient = normalizedRecipients.some((r) => r.includes('@cloudmailin.net'));
+    if (hasCloudMailinRecipient) {
+      for (const recipient of normalizedRecipients) {
+        if (recipient.includes('@cloudmailin.net')) {
+          const matchedTenant = await this.prisma.tenant.findFirst({
+            where: {
+              status: 'ACTIVE',
+              deletedAt: null,
+              emailConfiguration: {
+                inboundAddress: { contains: recipient, mode: 'insensitive' },
+              },
+            },
+            include: { emailConfiguration: true },
+          });
+
+          if (matchedTenant && matchedTenant.emailConfiguration) {
+            logger.info(
+              { tenantId: matchedTenant.id, tenantSlug: matchedTenant.slug, recipient },
+              '[TenantResolver] Resolved tenant from CloudMailin shared inboundAddress'
+            );
+            return {
+              tenant: matchedTenant,
+              emailConfig: matchedTenant.emailConfiguration,
+              matchedRecipient: recipient,
+            };
+          }
+        }
+      }
+
+      // If still not resolved but delivered to cloudmailin.net, resolve to single active tenant
+      const activeTenants = await this.prisma.tenant.findMany({
+        where: { status: 'ACTIVE', deletedAt: null },
+        include: { emailConfiguration: true },
+        take: 2,
+      });
+
+      if (activeTenants.length === 1 && activeTenants[0]) {
+        const singleTenant = activeTenants[0];
+        let emailConfig = singleTenant.emailConfiguration;
+        if (!emailConfig) {
+          emailConfig = await this.prisma.emailConfiguration.create({
+            data: {
+              tenantId: singleTenant.id,
+              supportEmail: `support@${singleTenant.slug}.com`,
+              provider: 'CLOUDMAILIN',
+              enabled: true,
+              autoCreateTicket: true,
+              autoRoute: true,
+              status: 'ACTIVE',
+            },
+          });
+        }
+        logger.info(
+          { tenantId: singleTenant.id, tenantSlug: singleTenant.slug },
+          '[TenantResolver] Resolved CloudMailin webhook to single active tenant in database'
+        );
+        return {
+          tenant: singleTenant,
+          emailConfig,
+          matchedRecipient: normalizedRecipients[0] || 'cloudmailin-fallback',
         };
       }
     }

@@ -134,6 +134,23 @@ export class CloudMailinInboundProvider implements EmailProviderStrategy {
     addCandidate(rawHeaders.x_forwarded_to);
     addCandidate(rawHeaders.delivered_to);
 
+    // Also scan all headers for forwarded or delivery targets (case-insensitive & hyphen-tolerant)
+    if (rawHeaders && typeof rawHeaders === 'object') {
+      for (const [key, val] of Object.entries(rawHeaders)) {
+        const lowerKey = key.toLowerCase();
+        if (
+          lowerKey.includes('to') ||
+          lowerKey.includes('forward') ||
+          lowerKey.includes('recipient') ||
+          lowerKey.includes('delivered') ||
+          lowerKey.includes('envelope') ||
+          lowerKey.includes('cc')
+        ) {
+          addCandidate(val);
+        }
+      }
+    }
+
     const allRecipients = Array.from(recipientSet);
     const toEmail = (
       envelope.to ||

@@ -145,10 +145,10 @@ export class TicketsService {
     const policy = await this.prisma.tenantPolicy.findUnique({ where: { tenantId } });
 
     if (policy) {
-      if (dto.raisedBy === 'CUSTOMER' && !policy.allowCustomerToRaise) {
+      if (dto.source !== 'EMAIL' && dto.raisedBy === 'CUSTOMER' && !policy.allowCustomerToRaise) {
         throw new ForbiddenException('Tenant policy does not allow customers to raise tickets');
       }
-      if (dto.raisedBy === 'EMPLOYEE' && dto.raisedForCustomerId && !policy.allowEmployeeOnBehalf) {
+      if (dto.source !== 'EMAIL' && dto.raisedBy === 'EMPLOYEE' && dto.raisedForCustomerId && !policy.allowEmployeeOnBehalf) {
         throw new ForbiddenException('Tenant policy does not allow employees to raise tickets on behalf of customers');
       }
     }
@@ -328,6 +328,7 @@ export class TicketsService {
     pageSize?: number;
     status?: string;
     priority?: string;
+    source?: string;
     departmentId?: string;
     assignedToUserId?: string;
     raisedForCustomerId?: string;
@@ -345,6 +346,7 @@ export class TicketsService {
       deletedAt: null,
       ...(query.status && { status: query.status as TicketStatus }),
       ...(query.priority && { priority: query.priority as any }),
+      ...(query.source && { source: query.source as any }),
       ...(query.departmentId && { departmentId: query.departmentId }),
       ...(query.assignedToUserId && { assignedToUserId: query.assignedToUserId }),
       ...(query.raisedForCustomerId && { raisedForCustomerId: query.raisedForCustomerId }),

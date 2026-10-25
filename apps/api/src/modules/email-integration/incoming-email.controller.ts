@@ -14,7 +14,7 @@ import { PermissionsGuard } from '../../core/rbac/permissions.guard';
 import { RequirePermissions } from '../../core/rbac/require-permissions.decorator';
 import { CurrentTenant } from '../../core/tenant/current-tenant.decorator';
 import { TenantContext, PermissionCode } from '@kalpak/types';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TestIncomingEmailDto {
@@ -22,6 +22,30 @@ export class TestIncomingEmailDto {
   @IsOptional()
   @IsBoolean()
   simulateReception?: boolean;
+}
+
+export class SimulateEmailQueryDto {
+  @ApiPropertyOptional({ description: 'Sender email address of customer', example: 'customer@clientcorp.com' })
+  @IsString()
+  fromEmail!: string;
+
+  @ApiPropertyOptional({ description: 'Customer sender name', example: 'Jane Doe' })
+  @IsOptional()
+  @IsString()
+  fromName?: string;
+
+  @ApiPropertyOptional({ description: 'Subject line of email query', example: 'Emergency: Motor overheating on conveyor #2' })
+  @IsString()
+  subject!: string;
+
+  @ApiPropertyOptional({ description: 'Body text of email inquiry', example: 'Our conveyor motor is running abnormally hot.' })
+  @IsString()
+  bodyText!: string;
+
+  @ApiPropertyOptional({ description: 'Optional recipient email (defaults to tenant support email)' })
+  @IsOptional()
+  @IsString()
+  toEmail?: string;
 }
 
 @ApiTags('Incoming Email Configuration')
@@ -53,4 +77,17 @@ export class IncomingEmailController {
       body?.simulateReception
     );
   }
+
+  @Post('simulate-query')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PermissionCode.TENANT_SETTINGS)
+  @ApiOperation({ summary: 'Simulate an incoming email query from a customer to generate a real ticket' })
+  @ApiResponse({ status: 200, description: 'Result of email ingestion and generated ticket details' })
+  async simulateEmailQuery(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Body() body: SimulateEmailQueryDto
+  ) {
+    return this.incomingEmailService.simulateEmailQuery(tenantCtx.tenantId, body);
+  }
 }
+

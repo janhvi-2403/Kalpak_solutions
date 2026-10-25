@@ -24,6 +24,8 @@ import {
   Zap,
   KeyRound,
   Check,
+  Send,
+  ArrowRight,
 } from 'lucide-react';
 import {
   Button,
@@ -110,6 +112,21 @@ export default function EmailConfigurationPage() {
   const [isSavingPolicy, setIsSavingPolicy] = useState<boolean>(false);
   const [recentInboundEmails, setRecentInboundEmails] = useState<InboundEmailAuditItem[]>([]);
   const [isLoadingEmails, setIsLoadingEmails] = useState<boolean>(false);
+
+  // Email Query Simulation State (In-app ticket generator)
+  const [simSenderEmail, setSimSenderEmail] = useState<string>('customer@acme-corp.com');
+  const [simSenderName, setSimSenderName] = useState<string>('Rajesh Kumar');
+  const [simSubject, setSimSubject] = useState<string>('Emergency: Conveyor Motor Overheating on Line #2');
+  const [simBody, setSimBody] = useState<string>('Our assembly line conveyor motor is running abnormally hot and tripping the circuit breaker. Need immediate maintenance technician visit.');
+  const [simToEmail, setSimToEmail] = useState<string>('');
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simResult, setSimResult] = useState<{
+    ticketNumber?: string;
+    ticketId?: string;
+    status: string;
+    message: string;
+  } | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
 
   // Support Email Modal states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -531,6 +548,55 @@ export default function EmailConfigurationPage() {
       });
     } finally {
       setIsSavingPolicy(false);
+    }
+  };
+
+  const handleSimulateEmailQuery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!simSenderEmail.trim() || !simSubject.trim() || !simBody.trim()) {
+      setSimError('Please fill in customer sender email, query subject, and description.');
+      return;
+    }
+
+    try {
+      setIsSimulating(true);
+      setSimError(null);
+      setSimResult(null);
+
+      const targetTo = simToEmail.trim() || emails.find((e) => e.isDefault)?.email || emails[0]?.email || policyConfig.supportEmail;
+
+      const res = await apiClient<{
+        success: boolean;
+        status: string;
+        ticketId?: string;
+        ticketNumber?: string;
+        message: string;
+      }>('/tenants/email-config/incoming/simulate-query', {
+        method: 'POST',
+        body: JSON.stringify({
+          fromEmail: simSenderEmail.trim(),
+          fromName: simSenderName.trim() || undefined,
+          subject: simSubject.trim(),
+          bodyText: simBody.trim(),
+          toEmail: targetTo || undefined,
+        }),
+      });
+
+      if (res.success && res.ticketNumber) {
+        setSimResult({
+          ticketNumber: res.ticketNumber,
+          ticketId: res.ticketId,
+          status: res.status,
+          message: res.message,
+        });
+        await fetchInboundIntegration();
+      } else {
+        setSimError(res.message || 'Email processed but ticket was not generated. Check tenant intake policies.');
+      }
+    } catch (err: any) {
+      setSimError(err instanceof Error ? err.message : 'Failed to simulate email query');
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -1007,7 +1073,178 @@ export default function EmailConfigurationPage() {
       </Card>
 
       {/* ======================================================== */}
-      {/* 3. RECENT INBOUND EMAILS AUDIT TRAIL                    */}
+      {/* 3. SIMULATE INBOUND EMAIL QUERY & TICKET CREATION       */}
+      {/* ======================================================== */}
+      <Card className="border-cyan-200 bg-gradient-to-br from-white to-cyan-50/30 shadow-sm overflow-hidden">
+        <CardHeader className="p-6 border-b border-cyan-100 bg-white/70">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Send className="w-4 h-4 text-cyan-600" />
+                Simulate Inbound Email Query (Instant Ticket Generator)
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500">
+                Test sending a customer inquiry email to your support desk. A service ticket with Source: EMAIL will immediately be generated and displayed in your Ticket Section.
+              </CardDescription>
+            </div>
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200 self-start sm:self-auto">
+              Live Inbound Pipeline
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+          {simResult && (
+            <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <div className="font-bold text-sm text-emerald-950 flex items-center gap-2">
+                    <span>Ticket Generated Successfully!</span>
+                    <span className="font-mono bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 text-xs">
+                      #{simResult.ticketNumber}
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Your inquiry has been converted into a live support ticket. You can view all its details in the Ticket Section.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link href="/dashboard/tickets">
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-sm text-xs"
+                  >
+                    <span>View in Ticket Section</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {simError && (
+            <div className="p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-900 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{simError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSimError(null)}
+                className="text-xs font-bold hover:underline opacity-80"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSimulateEmailQuery} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Customer Email (From) <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  type="email"
+                  value={simSenderEmail}
+                  onChange={(e) => setSimSenderEmail(e.target.value)}
+                  placeholder="e.g. client@company.com"
+                  required
+                  className="bg-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Customer Name / Contact Person
+                </label>
+                <Input
+                  type="text"
+                  value={simSenderName}
+                  onChange={(e) => setSimSenderName(e.target.value)}
+                  placeholder="e.g. Rajesh Kumar"
+                  className="bg-white text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Query Subject <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  type="text"
+                  value={simSubject}
+                  onChange={(e) => setSimSubject(e.target.value)}
+                  placeholder="e.g. Motor overheating on Conveyor #2"
+                  required
+                  className="bg-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Recipient Support Address (To)
+                </label>
+                <Input
+                  type="email"
+                  value={simToEmail}
+                  onChange={(e) => setSimToEmail(e.target.value)}
+                  placeholder={emails[0]?.email || policyConfig.supportEmail || 'support@yourtenant.com'}
+                  className="bg-white text-xs"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Defaults to your default verified support email if left blank.
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Inquiry Description / Body <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={simBody}
+                onChange={(e) => setSimBody(e.target.value)}
+                rows={3}
+                required
+                placeholder="Describe the issue, symptoms, machine numbers, or question..."
+                className="w-full text-xs p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 bg-white placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-cyan-100">
+              <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-cyan-600" />
+                Auto-provisions customer record, classifies department, and generates live ticket with Source: EMAIL.
+              </span>
+
+              <Button
+                type="submit"
+                disabled={isSimulating}
+                className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-6 shadow-sm gap-2"
+              >
+                {isSimulating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing Inbound Query...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send Email Query &amp; Generate Ticket</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ======================================================== */}
+      {/* 4. RECENT INBOUND EMAILS AUDIT TRAIL                    */}
       {/* ======================================================== */}
       <Card className="border-slate-200 bg-white shadow-sm overflow-hidden">
         <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between">
