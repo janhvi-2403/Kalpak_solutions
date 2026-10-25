@@ -141,6 +141,12 @@ export function Sidebar() {
       clientAdminOnly: true,
     },
     {
+      label: 'Email Configuration',
+      href: '/dashboard/settings/email-configuration',
+      icon: Mail,
+      clientAdminOnly: true,
+    },
+    {
       label: 'Tickets',
       href: '/dashboard/tickets',
       icon: LifeBuoy,
@@ -215,12 +221,6 @@ export function Sidebar() {
       label: 'Settings',
       href: '/dashboard/settings',
       icon: Settings,
-      clientAdminOnly: true,
-    },
-    {
-      label: 'Email Configuration',
-      href: '/dashboard/settings/email-configuration',
-      icon: Mail,
       clientAdminOnly: true,
     },
     {

@@ -51,7 +51,6 @@ import {
   TicketAssignmentRulesTab,
   AssignmentRuleItem,
 } from './components/ticket-assignment-rules-tab';
-import { EmailConfigurationTab } from './components/email-configuration-tab';
 
 // ==============================================================================
 // Types & Constants
@@ -328,7 +327,7 @@ const DEFAULT_ASSIGNMENT_RULES: AssignmentRuleItem[] = [
 
 export default function ConfigurationPage() {
   const { user } = useAuth();
-  const [activeSubTab, setActiveSubTab] = useState<'company' | 'departments' | 'heads' | 'rules' | 'email'>('company');
+  const [activeSubTab, setActiveSubTab] = useState<'company' | 'departments' | 'heads' | 'rules'>('company');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1202,22 +1201,6 @@ export default function ConfigurationPage() {
           <Badge variant="primary" className="bg-orange-100 text-orange-700 font-mono text-[10px] ml-1">
             {assignmentRules.length}
           </Badge>
-        </button>
-
-        <button
-          onClick={() => {
-            setActiveSubTab('email');
-            setFeedback(null);
-          }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-bold text-sm transition-all border-b-2 ${
-            activeSubTab === 'email'
-              ? 'border-orange-500 text-orange-600 bg-orange-50/50'
-              : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-          }`}
-        >
-          <Mail className="w-4 h-4" />
-          <span>5. Email Configuration</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-500 ml-1" />
         </button>
       </div>
 
@@ -2167,10 +2150,6 @@ export default function ConfigurationPage() {
               onSaveRules={handleSaveAssignmentRules}
               isSaving={isSaving}
             />
-          )}
-
-          {activeSubTab === 'email' && (
-            <EmailConfigurationTab />
           )}
         </>
       )}

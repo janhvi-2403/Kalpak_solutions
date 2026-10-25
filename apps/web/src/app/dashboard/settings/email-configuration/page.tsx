@@ -18,6 +18,9 @@ import {
   ShieldCheck,
   Settings,
   Layers,
+  SlidersHorizontal,
+  ExternalLink,
+  Shield,
 } from 'lucide-react';
 import {
   Button,
@@ -25,6 +28,10 @@ import {
   Dialog,
   Badge,
   Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
 } from '@/components/ui';
 import {
   SupportEmailVerificationStatus,
@@ -53,6 +60,28 @@ interface FormState {
   isActive: boolean;
 }
 
+interface InboundPolicyConfig {
+  id?: string;
+  supportEmail: string;
+  enabled: boolean;
+  autoCreateTicket: boolean;
+  autoRoute: boolean;
+  status: string;
+}
+
+interface InboundEmailAuditItem {
+  id: string;
+  fromEmail: string;
+  fromName?: string;
+  toEmail: string;
+  subject: string;
+  ticketId?: string;
+  ticketNumber?: string;
+  departmentName?: string;
+  receivedAt: string;
+  createdAt: string;
+}
+
 const initialFormState: FormState = {
   email: '',
   displayName: '',
@@ -66,6 +95,18 @@ export default function EmailConfigurationPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Inbound Intake & Routing Policy State (shifted from Configuration tab)
+  const [policyConfig, setPolicyConfig] = useState<InboundPolicyConfig>({
+    supportEmail: '',
+    enabled: true,
+    autoCreateTicket: true,
+    autoRoute: true,
+    status: 'ACTIVE',
+  });
+  const [isSavingPolicy, setIsSavingPolicy] = useState<boolean>(false);
+  const [recentInboundEmails, setRecentInboundEmails] = useState<InboundEmailAuditItem[]>([]);
+  const [isLoadingEmails, setIsLoadingEmails] = useState<boolean>(false);
 
   // Support Email Modal states
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -99,9 +140,34 @@ export default function EmailConfigurationPage() {
     }
   }, []);
 
+  const fetchInboundIntegration = useCallback(async () => {
+    setIsLoadingEmails(true);
+    try {
+      const res = await apiClient<{
+        emailConfig?: InboundPolicyConfig;
+        recentInboundEmails?: InboundEmailAuditItem[];
+      }>('/tenants/email-config');
+
+      if (res?.emailConfig) {
+        setPolicyConfig(res.emailConfig);
+      }
+      if (Array.isArray(res?.recentInboundEmails)) {
+        setRecentInboundEmails(res.recentInboundEmails);
+      }
+    } catch {
+      // Non-blocking for email directory
+    } finally {
+      setIsLoadingEmails(false);
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchSupportEmails(), fetchInboundIntegration()]);
+  }, [fetchSupportEmails, fetchInboundIntegration]);
+
   useEffect(() => {
-    fetchSupportEmails();
-  }, [fetchSupportEmails]);
+    refreshAll();
+  }, [refreshAll]);
 
   // Automatically dismiss success feedback after 5 seconds
   useEffect(() => {
@@ -301,6 +367,41 @@ export default function EmailConfigurationPage() {
     }
   };
 
+  // ==================== Intake Policy Handlers ====================
+
+  const handleSavePolicy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPolicy(true);
+    setFeedback(null);
+
+    const defaultAddress = emails.find((e) => e.isDefault)?.email || emails[0]?.email || policyConfig.supportEmail;
+
+    try {
+      const updated = await apiClient<InboundPolicyConfig>('/tenants/email-config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          supportEmail: defaultAddress || 'support@yourdomain.com',
+          enabled: policyConfig.enabled,
+          autoCreateTicket: policyConfig.autoCreateTicket,
+          autoRoute: policyConfig.autoRoute,
+        }),
+      });
+
+      setPolicyConfig(updated);
+      setFeedback({
+        type: 'success',
+        message: 'Inbound email intake and routing policies updated successfully!',
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err instanceof ApiClientError ? err.message : (err.message || 'Failed to save intake policies'),
+      });
+    } finally {
+      setIsSavingPolicy(false);
+    }
+  };
+
   // ==================== Computed Metrics ====================
 
   const metrics = useMemo(() => {
@@ -328,18 +429,18 @@ export default function EmailConfigurationPage() {
             </Badge>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Configure primary support email addresses for customer communications and ticket management.
+            Configure primary support mailboxes, automated ticket intake policies, and monitor real-time email ingestion.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
-            onClick={fetchSupportEmails}
-            disabled={isLoading}
+            onClick={refreshAll}
+            disabled={isLoading || isLoadingEmails}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading || isLoadingEmails ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button onClick={openAddModal} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white">
@@ -352,11 +453,11 @@ export default function EmailConfigurationPage() {
       {/* Sub-Navigation Tabs */}
       <div className="flex border-b border-slate-200 text-sm font-semibold">
         <Link
-          href="/dashboard/settings"
+          href="/dashboard/configuration"
           className="px-4 py-2.5 text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition-colors flex items-center gap-2"
         >
-          <Settings className="w-4 h-4" />
-          Policy & SLAs
+          <SlidersHorizontal className="w-4 h-4" />
+          Configuration
         </Link>
         <Link
           href="/dashboard/settings/email-configuration"
@@ -364,6 +465,13 @@ export default function EmailConfigurationPage() {
         >
           <Mail className="w-4 h-4" />
           Email Configuration
+        </Link>
+        <Link
+          href="/dashboard/settings"
+          className="px-4 py-2.5 text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition-colors flex items-center gap-2"
+        >
+          <Settings className="w-4 h-4" />
+          Policy & SLAs
         </Link>
       </div>
 
@@ -441,7 +549,7 @@ export default function EmailConfigurationPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SUPPORT EMAIL DIRECTORY                                  */}
+      {/* 1. SUPPORT EMAIL DIRECTORY                                */}
       {/* ======================================================== */}
       <Card className="border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -683,6 +791,186 @@ export default function EmailConfigurationPage() {
           </div>
           <span className="font-medium text-slate-400">Total: {emails.length} address{emails.length === 1 ? '' : 'es'}</span>
         </div>
+      </Card>
+
+      {/* ======================================================== */}
+      {/* 2. AUTOMATED TICKET INTAKE & ROUTING POLICIES           */}
+      {/* ======================================================== */}
+      <Card className="border-slate-200 bg-white shadow-sm overflow-hidden">
+        <CardHeader className="p-6 border-b border-slate-100">
+          <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Shield className="w-4 h-4 text-orange-600" />
+            Automated Ticket Intake &amp; Routing Policies
+          </CardTitle>
+          <CardDescription className="text-xs text-slate-500">
+            Configure automated service ticket ingestion and intelligent keyword-based department routing for incoming emails.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <form onSubmit={handleSavePolicy} className="space-y-6">
+            {/* Master Enable Intake Toggle */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="space-y-0.5">
+                <label className="text-sm font-bold text-slate-900">Enable Inbound Email Support</label>
+                <p className="text-xs text-slate-500">
+                  When enabled, real customer emails to your verified support address create service tickets in real time.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={policyConfig.enabled}
+                  onChange={(e) => setPolicyConfig({ ...policyConfig, enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500" />
+              </label>
+            </div>
+
+            {/* Automation Toggles */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-900">Auto-Create Tickets</span>
+                  <input
+                    type="checkbox"
+                    checked={policyConfig.autoCreateTicket}
+                    onChange={(e) => setPolicyConfig({ ...policyConfig, autoCreateTicket: e.target.checked })}
+                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  When enabled, incoming emails from new or registered customers automatically generate a service ticket with assigned tracking numbers.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-900">Automatic Routing</span>
+                  <input
+                    type="checkbox"
+                    checked={policyConfig.autoRoute}
+                    onChange={(e) => setPolicyConfig({ ...policyConfig, autoRoute: e.target.checked })}
+                    className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Auto-detects department (Maintenance, Electrical, Hydraulic, etc.) and priority based on email content keywords and registered assignment rules.
+                </p>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button
+                type="submit"
+                disabled={isSavingPolicy}
+                className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-6 shadow-sm"
+              >
+                {isSavingPolicy ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Saving Policies...
+                  </span>
+                ) : (
+                  'Save Intake Policies'
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* ======================================================== */}
+      {/* 3. RECENT INBOUND EMAILS AUDIT TRAIL                    */}
+      {/* ======================================================== */}
+      <Card className="border-slate-200 bg-white shadow-sm overflow-hidden">
+        <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-orange-600" />
+              Recent Inbound Emails &amp; Ingestion Audit Trail
+            </CardTitle>
+            <CardDescription className="text-xs text-slate-500">
+              Live record of customer emails received and converted to service tickets.
+            </CardDescription>
+          </div>
+          <span className="text-xs font-semibold text-slate-500">
+            {recentInboundEmails.length} {recentInboundEmails.length === 1 ? 'Record' : 'Records'}
+          </span>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoadingEmails ? (
+            <div className="p-12 text-center">
+              <RefreshCw className="w-6 h-6 text-orange-600 animate-spin mx-auto mb-2" />
+              <p className="text-xs text-slate-500">Loading recent inbound audit logs...</p>
+            </div>
+          ) : recentInboundEmails.length === 0 ? (
+            <div className="text-center py-12 px-4 bg-slate-50">
+              <Mail className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <h4 className="text-sm font-bold text-slate-700">No Inbound Emails Processed Yet</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                Customer emails received at your support address will automatically appear here with their linked service ticket number.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-6">Received</th>
+                    <th className="py-3 px-6">From</th>
+                    <th className="py-3 px-6">To</th>
+                    <th className="py-3 px-6">Subject</th>
+                    <th className="py-3 px-6">Routed Department</th>
+                    <th className="py-3 px-6 text-right">Linked Ticket</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentInboundEmails.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3 px-6 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                        {new Date(item.receivedAt).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-6">
+                        <div className="font-semibold text-slate-900">{item.fromName || item.fromEmail}</div>
+                        {item.fromName && <div className="text-[10px] text-slate-400 font-mono">{item.fromEmail}</div>}
+                      </td>
+                      <td className="py-3 px-6 font-mono text-[11px] text-slate-600">
+                        {item.toEmail}
+                      </td>
+                      <td className="py-3 px-6 font-medium text-slate-800 max-w-xs truncate">
+                        {item.subject}
+                      </td>
+                      <td className="py-3 px-6">
+                        {item.departmentName ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            {item.departmentName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-6 text-right">
+                        {item.ticketNumber ? (
+                          <Link
+                            href={`/dashboard/tickets`}
+                            className="inline-flex items-center gap-1 font-mono font-bold text-orange-600 hover:text-orange-700 hover:underline"
+                          >
+                            <span>#{item.ticketNumber}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400">Processing</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {/* Add / Edit Support Email Modal */}
