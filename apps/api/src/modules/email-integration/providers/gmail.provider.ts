@@ -40,11 +40,12 @@ export class GmailEmailProvider {
   }
 
   get redirectUri(): string {
-    return (
-      this.config.GOOGLE_REDIRECT_URI ||
-      process.env.GOOGLE_REDIRECT_URI ||
-      `${this.config.API_BASE_URL}/api/v1/email-integration/gmail/oauth/callback`
-    );
+    const configured = this.config.GOOGLE_REDIRECT_URI || process.env.GOOGLE_REDIRECT_URI;
+    if (configured && configured.trim()) {
+      return configured.trim();
+    }
+    const apiBase = (this.config.API_BASE_URL || process.env.API_BASE_URL || 'https://kalpak-api.onrender.com').replace(/\/+$/, '');
+    return `${apiBase}/api/v1/email-integration/gmail/oauth/callback`;
   }
 
   /**

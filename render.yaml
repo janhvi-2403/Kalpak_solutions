@@ -58,6 +58,8 @@ services:
         value: https://kalpak-web.onrender.com
       - key: API_BASE_URL
         value: https://kalpak-api.onrender.com
+      - key: GOOGLE_REDIRECT_URI
+        value: https://kalpak-api.onrender.com/api/v1/email-integration/gmail/oauth/callback
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
