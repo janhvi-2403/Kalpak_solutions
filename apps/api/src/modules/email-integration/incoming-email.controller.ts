@@ -50,7 +50,7 @@ export class SimulateEmailQueryDto {
 
 @ApiTags('Incoming Email Configuration')
 @ApiBearerAuth()
-@Controller('tenants/email-config/incoming')
+@Controller(['tenants/email-config/incoming', 'incoming-email/config'])
 @UseGuards(TenantGuard, PermissionsGuard)
 export class IncomingEmailController {
   constructor(private readonly incomingEmailService: IncomingEmailService) {}

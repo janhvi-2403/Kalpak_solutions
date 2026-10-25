@@ -82,12 +82,13 @@ export class EmailConfigController {
             forwardingStatus: 'CONNECTED',
           },
         });
-      } else if (!emailConfig.verifiedAt || emailConfig.provider !== 'CLOUDMAILIN' || emailConfig.forwardingStatus !== 'CONNECTED') {
+      } else if (!emailConfig.verifiedAt || emailConfig.forwardingStatus !== 'CONNECTED') {
+        const preferredProvider = connection?.status === EmailConnectionStatus.CONNECTED || emailConfig.provider === 'GMAIL' ? 'GMAIL' : 'CLOUDMAILIN';
         emailConfig = await tx.emailConfiguration.update({
           where: { id: emailConfig.id },
           data: {
             verifiedAt: emailConfig.verifiedAt || new Date(),
-            provider: 'CLOUDMAILIN',
+            provider: preferredProvider,
             forwardingStatus: 'CONNECTED',
             status: 'ACTIVE',
           },

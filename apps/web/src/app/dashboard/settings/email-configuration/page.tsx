@@ -106,56 +106,49 @@ export default function EmailConfigurationPage() {
 
   // ==================== Data Fetching ====================
 
-  const fetchInboundIntegration = useCallback(async () => {
+  const fetchGmailStatus = useCallback(async () => {
     try {
-      const configRes = await apiClient<IncomingConfigState>('/incoming-email/config');
-      setIncomingConfig(configRes);
-
-      // Fetch Gmail OAuth connection status
-      try {
-        const gmailStatus = await apiClient<GmailConnectionState>('/email-integration/gmail/status');
+      const gmailStatus = await apiClient<GmailConnectionState>('/email-integration/gmail/status');
+      if (gmailStatus) {
         setGmailConnection(gmailStatus);
-      } catch {
-        // Non-blocking if Gmail status route is uninitialized
       }
     } catch {
-      // Non-blocking
+      // Non-blocking if Gmail status route is uninitialized
     }
   }, []);
 
-  // Read URL query params for OAuth status redirects
-  useEffect(() => {
-    const errorParam = searchParams.get('error');
-    const successParam = searchParams.get('success');
-    const connectedParam = searchParams.get('connected');
-    const emailParam = searchParams.get('email');
-
-    if (errorParam) {
-      setFeedback({
-        type: 'error',
-        message: decodeURIComponent(errorParam),
-      });
-    } else if (connectedParam === 'true' || successParam) {
-      setFeedback({
-        type: 'success',
-        message: `Google Workspace support mailbox ${emailParam ? `(${decodeURIComponent(emailParam)}) ` : ''}connected successfully!`,
-      });
-      fetchInboundIntegration();
+  const fetchInboundIntegration = useCallback(async () => {
+    try {
+      const configRes = await apiClient<IncomingConfigState>('/tenants/email-config/incoming');
+      setIncomingConfig(configRes);
+    } catch {
+      try {
+        const fallbackRes = await apiClient<IncomingConfigState>('/incoming-email/config');
+        setIncomingConfig(fallbackRes);
+      } catch {
+        // Non-blocking
+      }
     }
-  }, [searchParams, fetchInboundIntegration]);
+  }, []);
 
   const fetchPolicyConfig = useCallback(async () => {
     try {
-      const data = await apiClient<InboundPolicyConfig>('/email-config');
-      if (data) {
+      const data = await apiClient<any>('/email-config');
+      if (data?.emailConfig) {
         setPolicyConfig({
-          id: data.id,
-          supportEmail: data.supportEmail || '',
-          enabled: data.enabled ?? true,
-          autoCreateTicket: data.autoCreateTicket ?? true,
-          autoRoute: data.autoRoute ?? true,
-          status: data.status || 'ACTIVE',
+          id: data.emailConfig.id,
+          supportEmail: data.emailConfig.supportEmail || '',
+          enabled: data.emailConfig.enabled ?? true,
+          autoCreateTicket: data.emailConfig.autoCreateTicket ?? true,
+          autoRoute: data.emailConfig.autoRoute ?? true,
+          status: data.emailConfig.status || 'ACTIVE',
         });
+      }
+      if (data?.connection) {
+        setGmailConnection((prev) => ({
+          ...prev,
+          ...data.connection,
+        }));
       }
     } catch {
       // Non-blocking
@@ -174,11 +167,49 @@ export default function EmailConfigurationPage() {
     }
   }, []);
 
+  // Read URL query params for OAuth status redirects
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    const successParam = searchParams.get('success');
+    const connectedParam = searchParams.get('connected');
+    const emailParam = searchParams.get('email');
+
+    if (errorParam) {
+      setFeedback({
+        type: 'error',
+        message: decodeURIComponent(errorParam),
+      });
+    } else if (connectedParam === 'true' || successParam) {
+      const connectedEmail = emailParam ? decodeURIComponent(emailParam) : null;
+      setFeedback({
+        type: 'success',
+        message: `Google Workspace support mailbox ${connectedEmail ? `(${connectedEmail}) ` : ''}connected successfully!`,
+      });
+      // Immediately reflect connected status in UI from verified server callback
+      if (connectedEmail) {
+        setGmailConnection({
+          isConnected: true,
+          status: 'CONNECTED',
+          emailAddress: connectedEmail,
+          lastSyncAt: new Date().toISOString(),
+          provider: 'GMAIL',
+        });
+      }
+      fetchGmailStatus();
+      fetchPolicyConfig();
+    }
+  }, [searchParams, fetchGmailStatus, fetchPolicyConfig]);
+
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
-    await Promise.all([fetchInboundIntegration(), fetchPolicyConfig(), fetchRecentEmails()]);
+    await Promise.all([
+      fetchInboundIntegration(),
+      fetchGmailStatus(),
+      fetchPolicyConfig(),
+      fetchRecentEmails(),
+    ]);
     setIsLoading(false);
-  }, [fetchInboundIntegration, fetchPolicyConfig, fetchRecentEmails]);
+  }, [fetchInboundIntegration, fetchGmailStatus, fetchPolicyConfig, fetchRecentEmails]);
 
   useEffect(() => {
     refreshAll();
@@ -229,7 +260,14 @@ export default function EmailConfigurationPage() {
         type: 'success',
         message: 'Gmail mailbox disconnected successfully.',
       });
-      await fetchInboundIntegration();
+      setGmailConnection({
+        isConnected: false,
+        status: 'DISCONNECTED',
+        emailAddress: null,
+        lastSyncAt: null,
+        provider: 'GMAIL',
+      });
+      await Promise.all([fetchGmailStatus(), fetchPolicyConfig(), fetchInboundIntegration()]);
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -253,8 +291,7 @@ export default function EmailConfigurationPage() {
         type: 'success',
         message: `Synced ${res?.syncedCount || 0} message(s) from your Gmail mailbox.`,
       });
-      await fetchInboundIntegration();
-      await fetchRecentEmails();
+      await Promise.all([fetchGmailStatus(), fetchPolicyConfig(), fetchRecentEmails()]);
     } catch (err: any) {
       setFeedback({
         type: 'error',
