@@ -72,7 +72,7 @@ export class HealthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send diagnostic test verification email' })
   async testSendVerification(@Body() body: { email?: string }) {
-    const to = (body?.email || 'janhvipagare85@gmail.com').trim().toLowerCase();
+    const to = (body?.email || 'support@kalpak.solutions').trim().toLowerCase();
     const result = await this.mailService.sendEmail({
       to,
       subject: 'Kalpak Solutions - Outbound Email Verification Diagnostic',

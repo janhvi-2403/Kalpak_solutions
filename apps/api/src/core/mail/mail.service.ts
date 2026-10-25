@@ -176,7 +176,7 @@ export class MailService implements OnModuleInit {
             const sender = process.env.GMAIL_USER
               ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>`
               : (fromAddress.includes('onboarding@resend.dev')
-                  ? 'Kalpak Solutions <janhvipagare3@gmail.com>'
+                  ? 'Kalpak Solutions <support@kalpak.solutions>'
                   : fromAddress);
 
             const info = await transporter.sendMail({
@@ -185,7 +185,7 @@ export class MailService implements OnModuleInit {
               subject,
               text,
               html,
-              replyTo: replyTo || 'janhvipagare3@gmail.com',
+              replyTo: replyTo || 'support@kalpak.solutions',
             });
             logger.info({ messageId: info.messageId, to: recipients, port, subject }, '[MailService] Email sent successfully via Brevo SMTP to actual recipient');
             return { success: true, messageId: info.messageId, provider: 'smtp' };
@@ -239,7 +239,7 @@ export class MailService implements OnModuleInit {
 
           // If no secondary transporter or it failed, check for Resend sandbox restriction:
           const match = error.message.match(/your own email address \(([^)]+)\)/i);
-          const authorizedOwner = (match && match[1] ? match[1] : (process.env.RESEND_OWNER_EMAIL || 'janhvipagare85@gmail.com')).trim();
+          const authorizedOwner = (match && match[1] ? match[1] : (process.env.RESEND_OWNER_EMAIL || 'support@kalpak.solutions')).trim();
 
           if (authorizedOwner && !recipients.map((r) => r.toLowerCase()).includes(authorizedOwner.toLowerCase())) {
             logger.info(

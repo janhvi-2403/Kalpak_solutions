@@ -2793,7 +2793,7 @@ export default function ConfigurationPage() {
                 <div className="space-y-1.5">
                   <p className="font-bold text-sm text-amber-900">Resend Free Sandbox Notice</p>
                   <p className="text-xs text-amber-800 leading-relaxed">
-                    Because your Resend account uses the sandbox domain <code>onboarding@resend.dev</code>, Resend only delivers to your registered account (<strong>{sentInviteModalData.authorizedOwner || 'janhvipagare85@gmail.com'}</strong>).
+                    Because your Resend account uses the sandbox domain <code>onboarding@resend.dev</code>, Resend only delivers to your registered account (<strong>{sentInviteModalData.authorizedOwner || 'support@kalpak.solutions'}</strong>).
                   </p>
                   <p className="text-[11px] text-amber-800 bg-amber-100/70 p-2.5 rounded-lg border border-amber-200 leading-normal">
                     💡 <strong>To send directly to {sentInviteModalData.email}:</strong> Add <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> in your Render environment variables, or verify a custom domain in Resend.

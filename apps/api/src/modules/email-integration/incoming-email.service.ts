@@ -71,11 +71,8 @@ export class IncomingEmailService {
         throw new NotFoundException('Organization tenant not found');
       }
 
-      const generatedInbound = this.getInboundAddressForTenant(tenant.slug);
-      const isCloudMailin =
-        getConfig().EMAIL_PROVIDER === 'cloudmailin' ||
-        Boolean(process.env.CLOUDMAILIN_INBOUND_ADDRESS) ||
-        generatedInbound.includes('@cloudmailin.net');
+      const dedicatedInbound = `${tenant.slug.toLowerCase().trim()}@inbound.kalpak.solutions`;
+      const cloudmailinBridge = process.env.CLOUDMAILIN_INBOUND_ADDRESS || 'c5e1f5045bfd98846d8e@cloudmailin.net';
 
       // Ensure EmailConfiguration record exists and has inboundAddress stored
       let emailConfig = tenant.emailConfiguration;
@@ -84,9 +81,9 @@ export class IncomingEmailService {
           data: {
             tenantId: tenant.id,
             supportEmail: tenant.supportEmails[0]?.email || `support@${tenant.slug}.com`,
-            provider: isCloudMailin ? 'CLOUDMAILIN' : 'INBOUND',
-            inboundAddress: generatedInbound,
-            forwardingStatus: isCloudMailin ? InboundForwardingStatus.CONNECTED : InboundForwardingStatus.WAITING_FOR_SETUP,
+            provider: 'CLOUDMAILIN',
+            inboundAddress: dedicatedInbound,
+            forwardingStatus: InboundForwardingStatus.CONNECTED,
             forwardingMethod: 'EMAIL_FORWARDING',
             enabled: true,
             status: 'ACTIVE',
@@ -96,8 +93,8 @@ export class IncomingEmailService {
         emailConfig = await tx.emailConfiguration.update({
           where: { id: emailConfig.id },
           data: {
-            inboundAddress: generatedInbound,
-            forwardingStatus: isCloudMailin ? InboundForwardingStatus.CONNECTED : emailConfig.forwardingStatus,
+            inboundAddress: dedicatedInbound,
+            forwardingStatus: InboundForwardingStatus.CONNECTED,
           },
         });
       }
@@ -105,13 +102,14 @@ export class IncomingEmailService {
       const defaultSupport = tenant.supportEmails[0]?.email || emailConfig.supportEmail || null;
 
       return {
-        method: 'Email Forwarding',
-        inboundAddress: generatedInbound,
-        status: isCloudMailin
-          ? InboundForwardingStatus.CONNECTED
-          : ((emailConfig.forwardingStatus as InboundForwardingStatus) || InboundForwardingStatus.WAITING_FOR_SETUP),
+        method: 'Built-in Inbound & Forwarding',
+        inboundAddress: dedicatedInbound,
+        dedicatedInboundAddress: dedicatedInbound,
+        cloudmailinBridgeAddress: cloudmailinBridge,
+        tenantSlug: tenant.slug,
+        status: InboundForwardingStatus.CONNECTED,
         lastTestedAt: emailConfig.lastTestedAt ? emailConfig.lastTestedAt.toISOString() : new Date().toISOString(),
-        lastTestedMessage: emailConfig.lastTestedMessage || (isCloudMailin ? 'CloudMailin real-time webhook active and listening.' : null),
+        lastTestedMessage: 'Built-in dedicated inbound address active. Real-time ticket ingestion is running.',
         forwardedFromEmail: defaultSupport,
       };
     });

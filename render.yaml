@@ -51,7 +51,7 @@ services:
       - key: SMTP_PASS
         sync: false
       - key: EMAIL_FROM
-        value: "Kalpak Solutions <janhvipagare3@gmail.com>"
+        value: "Kalpak Solutions <support@kalpak.solutions>"
       - key: CLOUDMAILIN_FORWARD_TARGET
         value: support@kalpak.solutions
       - key: WEB_BASE_URL

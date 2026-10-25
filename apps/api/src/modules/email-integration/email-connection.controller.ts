@@ -152,7 +152,7 @@ export class EmailConnectionController {
     @Res() res: Response
   ) {
     const webBaseUrl = this.config.WEB_BASE_URL || 'http://localhost:3000';
-    const redirectSettingsUrl = `${webBaseUrl}/dashboard/settings/email-to-ticket`;
+    const redirectSettingsUrl = `${webBaseUrl}/dashboard/settings/email-configuration`;
 
     if (error) {
       return res.redirect(

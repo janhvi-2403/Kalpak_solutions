@@ -3,6 +3,9 @@ import { InboundForwardingStatus } from './enums';
 export interface IncomingEmailConfigDto {
   method: string;
   inboundAddress: string;
+  dedicatedInboundAddress?: string;
+  cloudmailinBridgeAddress?: string;
+  tenantSlug?: string;
   status: InboundForwardingStatus;
   lastTestedAt?: string | null;
   lastTestedMessage?: string | null;
