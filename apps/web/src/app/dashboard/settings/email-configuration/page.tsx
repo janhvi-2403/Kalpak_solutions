@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import {
@@ -21,6 +21,9 @@ import {
   SlidersHorizontal,
   ExternalLink,
   Shield,
+  Zap,
+  KeyRound,
+  Check,
 } from 'lucide-react';
 import {
   Button,
@@ -114,6 +117,16 @@ export default function EmailConfigurationPage() {
   const [formData, setFormData] = useState<FormState>(initialFormState);
   const [formErrors, setFormErrors] = useState<{ email?: string; displayName?: string }>({});
 
+  // Real-Time Verification Modal State
+  const [verifyingCandidate, setVerifyingCandidate] = useState<SupportEmailItem | null>(null);
+  const [verificationCode, setVerificationCode] = useState<string>('');
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isConfirmingCode, setIsConfirmingCode] = useState<boolean>(false);
+  const [isInstantVerifying, setIsInstantVerifying] = useState<boolean>(false);
+  const [isResendingCode, setIsResendingCode] = useState<boolean>(false);
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
+  const [verificationSuccess, setVerificationSuccess] = useState<boolean>(false);
+
   // Delete confirmation modal state
   const [deleteCandidate, setDeleteCandidate] = useState<SupportEmailItem | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -121,7 +134,40 @@ export default function EmailConfigurationPage() {
   // Status toggle in progress tracking
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+  // Cooldown countdown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  // Real-time Polling: Check status while verification modal is open
+  const candidateIdRef = useRef<string | null>(null);
+  candidateIdRef.current = verifyingCandidate?.id || null;
+
+  useEffect(() => {
+    if (!verifyingCandidate || verificationSuccess) return;
+
+    const interval = setInterval(async () => {
+      const currentId = candidateIdRef.current;
+      if (!currentId) return;
+
+      try {
+        const item = await apiClient<SupportEmailItem>(`/tenants/support-emails/${currentId}`);
+        if (item && item.verificationStatus === SupportEmailVerificationStatus.VERIFIED) {
+          setVerificationSuccess(true);
+          fetchSupportEmails();
+        }
+      } catch {
+        // Polling failure is non-blocking
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [verifyingCandidate, verificationSuccess]);
 
   // ==================== Data Fetching ====================
 
@@ -245,8 +291,10 @@ export default function EmailConfigurationPage() {
           type: 'success',
           message: `Support email "${formData.email.trim().toLowerCase()}" updated successfully.`,
         });
+        setIsModalOpen(false);
+        await fetchSupportEmails();
       } else {
-        await apiClient<SupportEmailItem>('/tenants/support-emails', {
+        const created = await apiClient<SupportEmailItem>('/tenants/support-emails', {
           method: 'POST',
           body: JSON.stringify({
             email: formData.email.trim().toLowerCase(),
@@ -256,14 +304,12 @@ export default function EmailConfigurationPage() {
           }),
         });
 
-        setFeedback({
-          type: 'success',
-          message: `Support email "${formData.email.trim().toLowerCase()}" added successfully.`,
-        });
-      }
+        setIsModalOpen(false);
+        await fetchSupportEmails();
 
-      setIsModalOpen(false);
-      await fetchSupportEmails();
+        // Immediately open Real-Time Verification modal for the newly added address!
+        openVerificationModal(created);
+      }
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -346,24 +392,110 @@ export default function EmailConfigurationPage() {
     }
   };
 
-  const handleVerifyEmail = async (item: SupportEmailItem) => {
-    setVerifyingId(item.id);
+  // ==================== Real-Time Verification Handlers ====================
+
+  const openVerificationModal = (item: SupportEmailItem) => {
+    setVerifyingCandidate(item);
+    setVerificationCode('');
+    setVerificationError(null);
+    setVerificationSuccess(item.verificationStatus === SupportEmailVerificationStatus.VERIFIED);
+    setResendCooldown(0);
+  };
+
+  const handleConfirmCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyingCandidate) return;
+
+    const code = verificationCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setVerificationError('Please enter a valid 6-digit numeric verification code.');
+      return;
+    }
+
+    setIsConfirmingCode(true);
+    setVerificationError(null);
+
     try {
-      await apiClient(`/tenants/support-emails/${item.id}/verify`, {
+      await apiClient(`/tenants/support-emails/${verifyingCandidate.id}/confirm-code`, {
         method: 'POST',
+        body: JSON.stringify({ code }),
       });
+
+      setVerificationSuccess(true);
+      await fetchSupportEmails();
       setFeedback({
         type: 'success',
-        message: `Support email "${item.email}" verified successfully! Real-time ticket ingestion is active.`,
+        message: `Support email "${verifyingCandidate.email}" verified and activated successfully!`,
       });
-      await fetchSupportEmails();
     } catch (err: any) {
+      setVerificationError(
+        err instanceof ApiClientError
+          ? err.message
+          : err?.message || 'Invalid or expired verification code. Please try again.'
+      );
+    } finally {
+      setIsConfirmingCode(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!verifyingCandidate || resendCooldown > 0) return;
+
+    setIsResendingCode(true);
+    setVerificationError(null);
+
+    try {
+      const res = await apiClient<{ message?: string }>(`/tenants/support-emails/${verifyingCandidate.id}/resend`, {
+        method: 'POST',
+      });
+      setResendCooldown(60);
+      setFeedback({
+        type: 'success',
+        message: res?.message || `A fresh 6-digit verification code has been dispatched to ${verifyingCandidate.email}.`,
+      });
+    } catch (err: any) {
+      setVerificationError(
+        err instanceof ApiClientError
+          ? err.message
+          : err?.message || 'Failed to resend verification code. Please wait before retrying.'
+      );
+    } finally {
+      setIsResendingCode(false);
+    }
+  };
+
+  const handleInstantVerify = async (candidate?: SupportEmailItem) => {
+    const target = candidate || verifyingCandidate;
+    if (!target) return;
+
+    setIsInstantVerifying(true);
+    setVerificationError(null);
+
+    try {
+      await apiClient(`/tenants/support-emails/${target.id}/instant-verify`, {
+        method: 'POST',
+      });
+
+      setVerificationSuccess(true);
+      await fetchSupportEmails();
+      setFeedback({
+        type: 'success',
+        message: `Support email "${target.email}" verified instantly in real time! Real-time ticket ingestion is active.`,
+      });
+
+      // If modal was not open (table click), open modal in success state or close
+      if (!verifyingCandidate) {
+        setVerifyingCandidate(target);
+      }
+    } catch (err: any) {
+      const msg = err instanceof ApiClientError ? err.message : err?.message || 'Failed to instant-verify email.';
+      setVerificationError(msg);
       setFeedback({
         type: 'error',
-        message: err instanceof ApiClientError ? err.message : (err.message || 'Failed to verify support email'),
+        message: msg,
       });
     } finally {
-      setVerifyingId(null);
+      setIsInstantVerifying(false);
     }
   };
 
@@ -471,7 +603,7 @@ export default function EmailConfigurationPage() {
           className="px-4 py-2.5 text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition-colors flex items-center gap-2"
         >
           <Settings className="w-4 h-4" />
-          Policy & SLAs
+          Policy &amp; SLAs
         </Link>
       </div>
 
@@ -559,7 +691,7 @@ export default function EmailConfigurationPage() {
               Support Email Directory
             </h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              Add multiple support emails (e.g. general help, billing, enterprise VIP) with individual display names.
+              Manage multiple support inboxes with real-time verification and role designations.
             </p>
           </div>
 
@@ -610,7 +742,7 @@ export default function EmailConfigurationPage() {
                   <th className="py-3.5 px-6">
                     <span className="flex items-center gap-1">
                       Verification Status
-                      <span title="System-controlled read-only status" className="cursor-help">
+                      <span title="Real-time verified status" className="cursor-help">
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                       </span>
                     </span>
@@ -683,13 +815,13 @@ export default function EmailConfigurationPage() {
                     <td className="py-4 px-6">
                       <button
                         onClick={() => handleToggleStatus(item)}
-                        disabled={togglingId === item.id}
+                        disabled={togglingId === item.id || item.verificationStatus !== SupportEmailVerificationStatus.VERIFIED}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border ${
                           item.isActive
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                             : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                        }`}
-                        title="Click to toggle active status"
+                        } ${item.verificationStatus !== SupportEmailVerificationStatus.VERIFIED ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        title={item.verificationStatus !== SupportEmailVerificationStatus.VERIFIED ? 'Verify email before activating' : 'Click to toggle active status'}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
@@ -706,7 +838,7 @@ export default function EmailConfigurationPage() {
                       </button>
                     </td>
 
-                    {/* Verification Status with Real-time Verify Action */}
+                    {/* Verification Status with Real-Time Verification Actions */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-2 flex-wrap">
                         {item.verificationStatus === SupportEmailVerificationStatus.VERIFIED ? (
@@ -714,41 +846,34 @@ export default function EmailConfigurationPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Verified
                           </div>
-                        ) : item.verificationStatus === SupportEmailVerificationStatus.PENDING ? (
+                        ) : (
                           <>
                             <div
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                              title="System verification pending"
+                              title="Verification code pending"
                             >
-                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
                               Pending Verification
                             </div>
                             <Button
                               type="button"
                               size="sm"
-                              variant="outline"
-                              onClick={() => handleVerifyEmail(item)}
-                              disabled={verifyingId === item.id}
-                              className="h-7 px-2.5 text-xs font-bold text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
+                              onClick={() => openVerificationModal(item)}
+                              className="h-7 px-2.5 text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white shadow-sm flex items-center gap-1"
                             >
-                              {verifyingId === item.id ? 'Verifying...' : 'Verify Now'}
+                              <KeyRound className="w-3 h-3" />
+                              Verify Now
                             </Button>
-                          </>
-                        ) : (
-                          <>
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                              <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
-                              Unverified
-                            </div>
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => handleVerifyEmail(item)}
-                              disabled={verifyingId === item.id}
-                              className="h-7 px-2.5 text-xs font-bold text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
+                              onClick={() => handleInstantVerify(item)}
+                              className="h-7 px-2 text-xs font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50 flex items-center gap-1"
+                              title="One-click instant verification"
                             >
-                              {verifyingId === item.id ? 'Verifying...' : 'Verify Now'}
+                              <Zap className="w-3 h-3 text-emerald-600" />
+                              Instant
                             </Button>
                           </>
                         )}
@@ -973,6 +1098,176 @@ export default function EmailConfigurationPage() {
         </CardContent>
       </Card>
 
+      {/* ======================================================== */}
+      {/* REAL-TIME VERIFICATION MODAL                             */}
+      {/* ======================================================== */}
+      <Dialog
+        isOpen={Boolean(verifyingCandidate)}
+        onClose={() => !isConfirmingCode && !isInstantVerifying && setVerifyingCandidate(null)}
+        title="Verify Support Email"
+        description="Verify your support email address in real time using your 6-digit code or instant one-click activation."
+      >
+        <div className="space-y-5 pt-2">
+          {verifyingCandidate && (
+            <>
+              {/* Target Address Card */}
+              <div className="p-4 rounded-2xl bg-orange-50/60 border border-orange-200/80 flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Target Support Email</p>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Live Polling Active
+                    </span>
+                  </div>
+                  <p className="font-mono text-sm font-bold text-slate-900 truncate mt-0.5">{verifyingCandidate.email}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{verifyingCandidate.displayName}</p>
+                </div>
+              </div>
+
+              {verificationSuccess ? (
+                /* Verification Success State */
+                <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3 animate-in zoom-in-95 duration-200">
+                  <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-extrabold text-emerald-950">Email Verified in Real Time!</h3>
+                  <p className="text-xs text-emerald-800 leading-relaxed max-w-sm mx-auto">
+                    <strong>{verifyingCandidate.email}</strong> is now verified, active, and ready to ingest customer service inquiries and support tickets.
+                  </p>
+                  <div className="pt-2">
+                    <Button
+                      onClick={() => setVerifyingCandidate(null)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6"
+                    >
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Option A: 6-Digit Verification Code */}
+                  <form onSubmit={handleConfirmCode} className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                          6-Digit Verification Code <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[11px] text-slate-400">Check your email inbox</span>
+                      </div>
+                      <Input
+                        type="text"
+                        maxLength={6}
+                        value={verificationCode}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                          setVerificationCode(val);
+                          setVerificationError(null);
+                        }}
+                        placeholder="123456"
+                        className={`text-center font-mono text-xl tracking-[0.35em] font-bold ${
+                          verificationError ? 'border-red-400 focus:ring-red-300' : ''
+                        }`}
+                        autoFocus
+                      />
+                      {verificationError ? (
+                        <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          {verificationError}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 mt-1.5">
+                          Enter the 6-digit numeric verification code dispatched to this address.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleResendCode}
+                        disabled={isResendingCode || resendCooldown > 0}
+                        className="text-xs font-semibold text-orange-600 hover:text-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isResendingCode ? 'animate-spin' : ''}`} />
+                        {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}
+                      </button>
+
+                      <Button
+                        type="submit"
+                        disabled={isConfirmingCode || verificationCode.trim().length !== 6}
+                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs min-w-[140px]"
+                      >
+                        {isConfirmingCode ? (
+                          <span className="flex items-center gap-2">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Verifying...
+                          </span>
+                        ) : (
+                          'Confirm Code'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+
+                  {/* Divider */}
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200" />
+                    </div>
+                    <div className="relative flex justify-center text-[10px] uppercase font-bold text-slate-400">
+                      <span className="bg-white px-2">OR INSTANT VERIFICATION</span>
+                    </div>
+                  </div>
+
+                  {/* Option B: Instant 1-Click Real-Time Verification */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                        Instant Direct Verification
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Bypass email transit delay and activate this address immediately for your organization.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => handleInstantVerify()}
+                      disabled={isInstantVerifying}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-sm"
+                    >
+                      {isInstantVerifying ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      <span>Instant Verify</span>
+                    </Button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Close Action */}
+          <div className="flex justify-end pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setVerifyingCandidate(null)}
+              disabled={isConfirmingCode || isInstantVerifying}
+              className="text-xs"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
       {/* Add / Edit Support Email Modal */}
       <Dialog
         isOpen={isModalOpen}
@@ -1073,13 +1368,13 @@ export default function EmailConfigurationPage() {
             </label>
           </div>
 
-          {/* System Verification Notice (Read-only status) */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600">
-            <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+          {/* System Verification Notice */}
+          <div className="p-3.5 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-start gap-2.5 text-xs text-slate-600">
+            <Zap className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-slate-700">Verification Status (Read-Only)</p>
+              <p className="font-semibold text-slate-800">Real-Time Verification Prompt</p>
               <p className="text-slate-500 mt-0.5">
-                Verification status is system-controlled. Newly added addresses (or modified addresses) are automatically tagged as &ldquo;Pending Verification&rdquo;.
+                Upon saving, the real-time verification modal will open immediately to confirm with code or instant activation.
               </p>
             </div>
           </div>

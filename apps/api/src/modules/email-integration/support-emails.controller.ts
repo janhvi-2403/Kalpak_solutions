@@ -143,4 +143,16 @@ export class SupportEmailsController {
   ) {
     return this.supportEmailsService.resendVerification(tenantCtx.tenantId, id);
   }
+
+  @Post(':id/instant-verify')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(PermissionCode.TENANT_SETTINGS)
+  @ApiOperation({ summary: 'Instantly verify a support email address in real time' })
+  @ApiResponse({ status: 200, description: 'Support email instantly verified and activated' })
+  async instantVerify(
+    @CurrentTenant() tenantCtx: TenantContext,
+    @Param('id') id: string
+  ) {
+    return this.supportEmailsService.instantVerify(tenantCtx.tenantId, id);
+  }
 }

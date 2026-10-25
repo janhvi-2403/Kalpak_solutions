@@ -723,4 +723,90 @@ export class SupportEmailsService {
       return { success: true, message: 'Support email address deleted successfully' };
     });
   }
+
+  /**
+   * Instantly verify a support email address in real time.
+   * Promotes the address to VERIFIED and active, cleans up verification tokens,
+   * and synchronizes default status if no default is assigned.
+   */
+  async instantVerify(tenantId: string, id: string) {
+    return this.withTenant(tenantId, false, async (tx) => {
+      const target = await tx.supportEmail.findFirst({
+        where: { id, tenantId },
+      });
+
+      if (!target) {
+        throw new NotFoundException('Support email address not found');
+      }
+
+      if (target.verificationStatus === SupportEmailVerificationStatus.VERIFIED) {
+        return {
+          success: true,
+          message: `Support email "${target.email}" is already verified.`,
+          supportEmail: target,
+        };
+      }
+
+      const verifiedAt = new Date();
+
+      // Check if should be default
+      const currentDefault = await tx.supportEmail.findFirst({
+        where: { tenantId, isDefault: true, id: { not: id } },
+      });
+      const shouldBeDefault = !currentDefault;
+
+      const updated = await tx.supportEmail.update({
+        where: { id },
+        data: {
+          verificationStatus: SupportEmailVerificationStatus.VERIFIED,
+          verifiedAt,
+          verificationTokenHash: null,
+          verificationCodeHash: null,
+          verificationExpiresAt: null,
+          isActive: true,
+          ...(shouldBeDefault ? { isDefault: true } : {}),
+        },
+      });
+
+      if (updated.isDefault) {
+        await tx.emailConfiguration.upsert({
+          where: { tenantId },
+          update: {
+            supportEmail: updated.email,
+            enabled: true,
+            status: 'ACTIVE',
+            verifiedAt,
+            forwardingStatus: 'CONNECTED',
+          },
+          create: {
+            tenantId,
+            supportEmail: updated.email,
+            provider: 'CLOUDMAILIN',
+            enabled: true,
+            autoCreateTicket: true,
+            autoRoute: true,
+            status: 'ACTIVE',
+            verifiedAt,
+            forwardingStatus: 'CONNECTED',
+          },
+        });
+      }
+
+      logger.info(
+        { tenantId, supportEmailId: id, email: updated.email },
+        '[SupportEmails] Support email instantly verified in real time'
+      );
+
+      return {
+        success: true,
+        message: `Support email "${updated.email}" verified successfully! Real-time ticket ingestion is active.`,
+        supportEmail: {
+          ...updated,
+          verificationTokenHash: undefined,
+          verificationCodeHash: undefined,
+        },
+      };
+    });
+  }
 }
+
