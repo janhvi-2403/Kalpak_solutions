@@ -211,24 +211,9 @@ export default function SuperAdminDashboardPage() {
           })}
         </nav>
 
-        {/* User Info & Sign Out Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/80">
-          <div className="flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-900/60 border border-slate-800/80">
-            <div className="min-w-0 flex-1">
-              <span className="block text-xs font-black text-white truncate">
-                {user?.fullName || 'System Super Administrator'}
-              </span>
-              <span className="block text-[11px] text-slate-400 font-mono truncate">{user?.email || 'admin@kalpak.com'}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-2.5 rounded-xl bg-red-950/40 text-red-400 hover:bg-red-900/60 hover:text-white border border-red-900/40 transition-all shrink-0 flex items-center justify-center shadow-xs"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-slate-800/80 bg-slate-950/80 text-[11px] text-slate-500 text-center">
+          &copy; {new Date().getFullYear()} Kalpak Solutions Inc.
         </div>
       </aside>
 
@@ -245,11 +230,43 @@ export default function SuperAdminDashboardPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               SaaS Engine Live
             </span>
+
+            {/* Super Admin User Info & Sign Out (Top Right Corner) */}
+            <div className="flex items-center space-x-3 pl-3 border-l border-slate-200">
+              <div className="hidden md:block text-right">
+                <div className="text-xs font-bold text-slate-900 leading-tight">
+                  {user?.fullName || 'System Super Administrator'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono leading-tight">
+                  {user?.email || 'admin@kalpak.com'}
+                </div>
+              </div>
+
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                {user?.fullName
+                  ? user.fullName
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .substring(0, 2)
+                      .toUpperCase()
+                  : 'SA'}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Sign Out"
+              className="p-2 text-slate-500 hover:text-red-600 rounded-lg hover:bg-red-50 border border-slate-200 hover:border-red-200 transition-colors flex items-center justify-center shadow-xs"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 
