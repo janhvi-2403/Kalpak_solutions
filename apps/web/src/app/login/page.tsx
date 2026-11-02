@@ -17,8 +17,8 @@ export default function LoginPage() {
               Enterprise Service Operations & Ticket Management
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Log, prioritize, dispatch, and track customer hardware service calls with full SLA lifecycle
-              controls and PostgreSQL Row-Level Security isolation.
+              Streamline service workflows, accelerate incident resolution, and empower your support teams
+              with end-to-end SLA tracking, real-time collaboration, and enterprise-grade security.
             </p>
           </div>
         </div>
