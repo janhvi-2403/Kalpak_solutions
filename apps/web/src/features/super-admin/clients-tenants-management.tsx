@@ -721,7 +721,7 @@ export function ClientsTenantsManagement({ tenants = [], onRefresh }: ClientsTen
       <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Clients / Tenants</h1>
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Tenants</h1>
             <p className="text-xs text-slate-500">
               Search, filter, inspect details, and administer subscription access across all genuine registered companies.
             </p>

@@ -178,7 +178,7 @@ export default function SuperAdminDashboardPage() {
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
           {[
             { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, desc: 'Live platform telemetry' },
-            { id: 'clients', label: 'Clients / Tenants', icon: Building2, desc: 'Manage client accounts' },
+            { id: 'clients', label: 'Tenants', icon: Building2, desc: 'Manage tenant accounts' },
             { id: 'plans', label: 'Subscription Plans', icon: Layers, desc: 'Tier catalog & limits' },
             { id: 'billing', label: 'Billing & Payments', icon: Receipt, desc: 'Invoices & gateway' },
           ].map((item) => {
@@ -224,7 +224,7 @@ export default function SuperAdminDashboardPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wide">
               {activeTab === 'dashboard' && 'Executive Business Dashboard'}
-              {activeTab === 'clients' && 'Client Organization Management'}
+              {activeTab === 'clients' && 'Tenant Management'}
               {activeTab === 'plans' && 'Subscription Plan Catalogue & Entitlements'}
               {activeTab === 'billing' && 'Billing, Invoices & Payment Gateway'}
             </h1>
@@ -294,30 +294,30 @@ export default function SuperAdminDashboardPage() {
 
               {/* 6 Dashboard Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {/* Total Clients */}
+                {/* Total Tenants */}
                 <div className="p-6 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition-all">
                   <div className="flex items-center justify-between text-slate-500">
-                    <span className="text-xs font-bold uppercase tracking-wider">Total Clients</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Total Tenants</span>
                     <Users className="w-4 h-4 text-orange-600" />
                   </div>
                   <div className="mt-3 text-3xl sm:text-4xl font-black text-slate-900">{overview.totalTenants}</div>
                   <p className="mt-1 text-xs text-slate-500">All registered tenant companies</p>
                 </div>
 
-                {/* Active Clients */}
+                {/* Active Tenants */}
                 <div className="p-6 rounded-2xl bg-white border border-emerald-200 shadow-xs hover:shadow-md transition-all">
                   <div className="flex items-center justify-between text-emerald-700">
-                    <span className="text-xs font-bold uppercase tracking-wider">Active Clients</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Active Tenants</span>
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="mt-3 text-3xl sm:text-4xl font-black text-emerald-700">{overview.activeTenants}</div>
                   <p className="mt-1 text-xs text-slate-500">Paying organizations active on SaaS</p>
                 </div>
 
-                {/* Trial Clients */}
+                {/* Trial Tenants */}
                 <div className="p-6 rounded-2xl bg-white border border-blue-200 shadow-xs hover:shadow-md transition-all">
                   <div className="flex items-center justify-between text-blue-700">
-                    <span className="text-xs font-bold uppercase tracking-wider">Trial Clients</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Trial Tenants</span>
                     <Clock className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="mt-3 text-3xl sm:text-4xl font-black text-blue-700">{overview.trialTenants}</div>
@@ -351,7 +351,7 @@ export default function SuperAdminDashboardPage() {
                     <IndianRupee className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="mt-3 text-2xl sm:text-3xl font-black text-slate-900">{formatCurrency(revenueMetrics.mrr)}</div>
-                  <p className="mt-1 text-xs text-slate-500">MRR run rate from active clients</p>
+                  <p className="mt-1 text-xs text-slate-500">MRR run rate from active tenants</p>
                 </div>
               </div>
 
@@ -414,26 +414,26 @@ export default function SuperAdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Client Account Activity Table */}
+              {/* Tenant Account Activity Table */}
               <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-orange-600" />
-                      <span>Client Account Activity</span>
+                      <span>Tenant Account Activity</span>
                     </h3>
-                    <p className="text-xs text-slate-500">Account and security metadata across customer organizations</p>
+                    <p className="text-xs text-slate-500">Account and security metadata across tenant organizations</p>
                   </div>
                 </div>
 
                 {recentActivity.length === 0 ? (
                   <div className="text-center py-10 text-slate-500 text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    No client organizations registered yet. As clients register on the platform, live account activity will appear here.
+                    No tenant organizations registered yet. As tenants register on the platform, live account activity will appear here.
                   </div>
                 ) : (
                   <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
                     <div className="p-3 bg-slate-50 text-[11px] font-black text-slate-500 uppercase tracking-wider grid grid-cols-12">
-                      <div className="col-span-4">Client Company</div>
+                      <div className="col-span-4">Tenant Organization</div>
                       <div className="col-span-3">Event / Action</div>
                       <div className="col-span-3">Status</div>
                       <div className="col-span-2 text-right">Activity Time</div>
