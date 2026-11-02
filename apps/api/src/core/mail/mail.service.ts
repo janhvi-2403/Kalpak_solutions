@@ -82,8 +82,8 @@ export class MailService implements OnModuleInit {
       return configuredFrom;
     }
 
-    // Default authorized sender for Resend sandbox testing
-    return 'Kalpak Solutions <onboarding@resend.dev>';
+    // Default authorized sender for Brevo verified sender
+    return 'Kalpak Solutions <janhvipagare3@gmail.com>';
   }
 
   /**
@@ -176,7 +176,7 @@ export class MailService implements OnModuleInit {
             const sender = process.env.GMAIL_USER
               ? `"Kalpak Solutions" <${process.env.GMAIL_USER}>`
               : (fromAddress.includes('onboarding@resend.dev')
-                  ? 'Kalpak Solutions <support@kalpak.solutions>'
+                  ? 'Kalpak Solutions <janhvipagare3@gmail.com>'
                   : fromAddress);
 
             const info = await transporter.sendMail({
@@ -185,7 +185,7 @@ export class MailService implements OnModuleInit {
               subject,
               text,
               html,
-              replyTo: replyTo || 'support@kalpak.solutions',
+              replyTo: replyTo || 'janhvipagare3@gmail.com',
             });
             logger.info({ messageId: info.messageId, to: recipients, port, subject }, '[MailService] Email sent successfully via Brevo SMTP to actual recipient');
             return { success: true, messageId: info.messageId, provider: 'smtp' };

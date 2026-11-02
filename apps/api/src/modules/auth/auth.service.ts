@@ -337,7 +337,7 @@ export class AuthService {
     if (existingTenant) {
       const members = existingTenant.memberships || [];
       const hasUnverifiedMembers =
-        members.length > 0 &&
+        members.length === 0 ||
         members.every((m: any) => !m.user?.emailVerified && !m.user?.isSuperAdmin);
 
       if (hasUnverifiedMembers) {

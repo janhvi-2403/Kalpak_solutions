@@ -23,7 +23,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.$connect();
       logger.info('Database connection established successfully');
       await this.ensureBaselineRbac();
-      await this.ensureDemoLogins();
+      if (process.env.AUTO_SEED_DEMO === 'true') {
+        await this.ensureDemoLogins();
+      }
     } catch (error) {
       logger.error({ error }, 'Failed to connect to PostgreSQL database');
       throw error;
