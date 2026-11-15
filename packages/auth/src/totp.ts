@@ -109,10 +109,12 @@ export function calculateTotp(secret: string, timestampMs: number = Date.now(), 
 }
 
 /**
- * Verifies a 6-digit TOTP code allowing +/- 1 time step window for clock skew.
+ * Verifies a 6-digit TOTP code allowing +/- windowSteps for mobile clock skew.
+ * Normalizes input by stripping spaces or dashes (e.g. "123 456" -> "123456").
  */
-export function verifyTotp(token: string, secret: string, windowSteps: number = 1): boolean {
-  if (!token || token.length !== 6 || !/^\d{6}$/.test(token)) {
+export function verifyTotp(token: string, secret: string, windowSteps: number = 2): boolean {
+  const cleanToken = (token || '').replace(/\s+|-/g, '').trim();
+  if (!cleanToken || cleanToken.length !== 6 || !/^\d{6}$/.test(cleanToken)) {
     return false;
   }
 
@@ -121,7 +123,7 @@ export function verifyTotp(token: string, secret: string, windowSteps: number = 
 
   for (let i = -windowSteps; i <= windowSteps; i++) {
     const candidate = calculateTotp(secret, now + i * timeStepMs);
-    if (candidate === token) {
+    if (candidate === cleanToken) {
       return true;
     }
   }

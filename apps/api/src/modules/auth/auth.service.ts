@@ -1279,13 +1279,13 @@ export class AuthService {
       throw new ForbiddenException('MFA is not configured for this account');
     }
 
-    const cleanCode = code.trim();
+    const cleanCode = (code || '').replace(/\s+|-/g, '').trim();
     let isValid = false;
 
     // 1. Try 6-digit TOTP verification first
     if (/^\d{6}$/.test(cleanCode) && session.user.mfaSecret) {
       const rawSecret = decryptSecret(session.user.mfaSecret, this.config.MFA_ENCRYPTION_KEY);
-      isValid = verifyTotp(cleanCode, rawSecret);
+      isValid = verifyTotp(cleanCode, rawSecret, 2);
     }
 
     // 2. Try Emergency Backup Code if TOTP failed or backup code format entered (XXXX-XXXX)
@@ -1527,31 +1527,70 @@ export class AuthService {
     };
   }
 
-  async setupUserMfa(userId: string) {
+  async setupUserMfa(userId: string, forceRegenerate = false) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, mfaEnabled: true },
+      select: { id: true, email: true, mfaEnabled: true, mfaSecret: true, mfaBackupCodes: true },
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const rawSecret = generateTotpSecret();
+    let rawSecret: string | null = null;
+
+    // If an MFA secret is already pending verification, reuse it to prevent rapid polls or page refreshes from invalidating the displayed QR code
+    if (!forceRegenerate && user.mfaSecret && !user.mfaEnabled) {
+      try {
+        rawSecret = decryptSecret(user.mfaSecret, this.config.MFA_ENCRYPTION_KEY);
+      } catch {
+        rawSecret = null;
+      }
+    }
+
+    if (!rawSecret) {
+      rawSecret = generateTotpSecret();
+      const backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
+      const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
+      const encryptedSecret = encryptSecret(rawSecret, this.config.MFA_ENCRYPTION_KEY);
+
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          mfaSecret: encryptedSecret,
+          mfaBackupCodes: hashedBackupCodes,
+        },
+      });
+
+      const otpauthUri = getTotpUri(
+        rawSecret,
+        user.email,
+        this.config.MFA_APP_NAME || 'Kalpak Solutions'
+      );
+      const qrCode = await generateTotpQrDataUrl(otpauthUri);
+
+      return {
+        secret: rawSecret,
+        otpauthUri,
+        qrCode,
+        backupCodes,
+      };
+    }
+
+    // Reuse existing stable secret
     const otpauthUri = getTotpUri(
       rawSecret,
       user.email,
       this.config.MFA_APP_NAME || 'Kalpak Solutions'
     );
     const qrCode = await generateTotpQrDataUrl(otpauthUri);
-    const backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
-    const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
-    const encryptedSecret = encryptSecret(rawSecret, this.config.MFA_ENCRYPTION_KEY);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        mfaSecret: encryptedSecret,
-        mfaBackupCodes: hashedBackupCodes,
-      },
-    });
+    let backupCodes: string[] = [];
+    if (!user.mfaBackupCodes || user.mfaBackupCodes.length === 0) {
+      backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
+      const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { mfaBackupCodes: hashedBackupCodes },
+      });
+    }
 
     return {
       secret: rawSecret,
@@ -1576,7 +1615,8 @@ export class AuthService {
     }
 
     const rawSecret = decryptSecret(user.mfaSecret, this.config.MFA_ENCRYPTION_KEY);
-    const isValid = verifyTotp(code.trim(), rawSecret);
+    const cleanCode = (code || '').replace(/\s+|-/g, '').trim();
+    const isValid = verifyTotp(cleanCode, rawSecret, 2);
     if (!isValid) {
       throw new BadRequestException('Invalid verification code. Please check your authenticator app.');
     }
