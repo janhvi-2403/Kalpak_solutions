@@ -10,7 +10,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/api run build
-    startCommand: node apps/api/dist/main.js
+    startCommand: (pnpm --filter @kalpak/database run db:migrate:deploy || pnpm --filter @kalpak/database exec prisma db push --skip-generate) && node apps/api/dist/main.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
