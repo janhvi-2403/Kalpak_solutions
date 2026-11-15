@@ -74,6 +74,9 @@ function VerifyEmailContent() {
             setMfaSetup(res.mfaSetup);
           }
           setIsVerified(true);
+          if (res.mfaConfigured) {
+            setMfaEnabledSuccess(true);
+          }
         })
         .catch((err) => {
           if (err instanceof ApiClientError) {
@@ -117,6 +120,9 @@ function VerifyEmailContent() {
             setMfaSetup(res.mfaSetup);
           }
           setIsVerified(true);
+          if (res.mfaConfigured) {
+            setMfaEnabledSuccess(true);
+          }
         }
       } catch {
         // Silently continue polling

@@ -1582,15 +1582,12 @@ export class AuthService {
     );
     const qrCode = await generateTotpQrDataUrl(otpauthUri);
 
-    let backupCodes: string[] = [];
-    if (!user.mfaBackupCodes || user.mfaBackupCodes.length === 0) {
-      backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
-      const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { mfaBackupCodes: hashedBackupCodes },
-      });
-    }
+    const backupCodes = generateBackupCodes(this.config.MFA_BACKUP_CODES_COUNT || 8);
+    const hashedBackupCodes = backupCodes.map((c) => hashBackupCode(c));
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { mfaBackupCodes: hashedBackupCodes },
+    });
 
     return {
       secret: rawSecret,
@@ -1626,12 +1623,16 @@ export class AuthService {
       data: { mfaEnabled: true },
     });
 
-    if (sessionId) {
-      await this.prisma.session.updateMany({
-        where: { id: sessionId },
-        data: { mfaVerified: true },
-      });
-    }
+    // Mark all active sessions of this user (including the current session) verified
+    await this.prisma.session.updateMany({
+      where: {
+        OR: [
+          { userId: user.id, revokedAt: null },
+          ...(sessionId ? [{ id: sessionId }] : []),
+        ],
+      },
+      data: { mfaVerified: true },
+    });
 
     await this.auditService.record({
       actorId: user.id,
