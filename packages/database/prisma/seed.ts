@@ -179,7 +179,7 @@ async function main() {
   console.log('Seeding initial demonstration accounts and tenant...');
   const { hashPassword } = await import('@kalpak/auth');
 
-  // 1. Super Admin User
+  // 1. Super Admin Users
   const superAdminPasswordHash = await hashPassword('KalpakAdmin123!');
   await prisma.user.upsert({
     where: { email: 'admin@kalpak.com' },
@@ -195,6 +195,28 @@ async function main() {
       email: 'admin@kalpak.com',
       fullName: 'System Super Administrator',
       passwordHash: superAdminPasswordHash,
+      isActive: true,
+      isSuperAdmin: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+  });
+
+  const kalpakAdminPasswordHash = await hashPassword('Kalpaksolutions123');
+  await prisma.user.upsert({
+    where: { email: 'kalpak123@gmail.com' },
+    update: {
+      fullName: 'Kalpak Super Administrator',
+      passwordHash: kalpakAdminPasswordHash,
+      isActive: true,
+      isSuperAdmin: true,
+      emailVerified: true,
+      emailVerifiedAt: new Date(),
+    },
+    create: {
+      email: 'kalpak123@gmail.com',
+      fullName: 'Kalpak Super Administrator',
+      passwordHash: kalpakAdminPasswordHash,
       isActive: true,
       isSuperAdmin: true,
       emailVerified: true,

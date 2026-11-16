@@ -23,6 +23,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.$connect();
       logger.info('Database connection established successfully');
       await this.ensureBaselineRbac();
+      await this.ensureSuperAdmin();
       if (process.env.AUTO_SEED_DEMO === 'true') {
         await this.ensureDemoLogins();
       }
@@ -376,6 +377,59 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   /**
    * Automatically guarantees that official company testing accounts exist and are verified.
    */
+
+  /**
+   * Automatically guarantees that root super administrator accounts exist and are verified.
+   */
+  async ensureSuperAdmin() {
+    try {
+      const { hashPassword } = await import('@kalpak/auth');
+
+      const superAdmins = [
+        {
+          email: 'kalpak123@gmail.com',
+          password: 'Kalpaksolutions123',
+          fullName: 'Kalpak Super Administrator',
+        },
+        {
+          email: 'admin@kalpak.com',
+          password: 'KalpakAdmin123!',
+          fullName: 'System Super Administrator',
+        },
+      ];
+
+      for (const sa of superAdmins) {
+        const passwordHash = await hashPassword(sa.password);
+        await this.user.upsert({
+          where: { email: sa.email },
+          update: {
+            fullName: sa.fullName,
+            passwordHash,
+            isActive: true,
+            isSuperAdmin: true,
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+            mfaEnabled: false,
+            deletedAt: null,
+          },
+          create: {
+            email: sa.email,
+            fullName: sa.fullName,
+            passwordHash,
+            isActive: true,
+            isSuperAdmin: true,
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+            mfaEnabled: false,
+          },
+        });
+      }
+      logger.info('[PrismaService] Super Admin accounts (kalpak123@gmail.com, admin@kalpak.com) verified successfully');
+    } catch (error) {
+      logger.warn({ error }, '[PrismaService] Failed to ensure Super Admin accounts');
+    }
+  }
+
   async ensureDemoLogins() {
     try {
       const { hashPassword } = await import('@kalpak/auth');

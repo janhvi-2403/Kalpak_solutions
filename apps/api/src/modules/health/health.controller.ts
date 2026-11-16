@@ -246,5 +246,18 @@ export class HealthController {
       message: 'All previous test entries have been cleanly purged.',
     };
   }
+
+  @Public()
+  @Post('seed-super-admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Provision or reset default super admin credentials' })
+  async seedSuperAdmin() {
+    await this.prisma.ensureSuperAdmin();
+    return {
+      success: true,
+      message: 'Super administrator accounts provisioned successfully',
+      superAdmins: ['kalpak123@gmail.com', 'admin@kalpak.com'],
+    };
+  }
 }
 
