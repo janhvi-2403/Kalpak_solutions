@@ -62,6 +62,7 @@ function VerifyEmailContent() {
         user?: any;
         mfaSetup?: MfaSetupData;
         alreadyConfigured?: boolean;
+        mfaConfigured?: boolean;
       }>('/auth/verify-email', {
         method: 'POST',
         body: JSON.stringify({ token }),
