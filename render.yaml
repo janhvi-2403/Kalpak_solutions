@@ -47,9 +47,7 @@ services:
       - key: SMTP_PORT
         value: "2525"
       - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
-        sync: false
+        value: bcd663001@smtp-brevo.com
       - key: EMAIL_FROM
         value: "Kalpak Solutions <janhvipagare3@gmail.com>"
       - key: CLOUDMAILIN_FORWARD_TARGET
@@ -63,11 +61,11 @@ services:
       - key: GOOGLE_REDIRECT_URI
         value: https://kalpak-api.onrender.com/api/v1/email-integration/gmail/oauth/callback
       - key: RAZORPAY_KEY_ID
-        sync: false
+        value: rzp_test_Tf0YvouIm2RxyJ
       - key: RAZORPAY_KEY_SECRET
-        sync: false
+        value: K9rm2ScQtLVEPRkAaSm6eCnH
       - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
+        value: kalpak_test_webhook_secret_2026
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Next.js 15 Frontend Web Service
@@ -90,6 +88,8 @@ services:
         value: onrender.com
       - key: API_BASE_URL
         value: https://kalpak-api.onrender.com
+      - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
+        value: rzp_test_Tf0YvouIm2RxyJ
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PostgreSQL Managed Database

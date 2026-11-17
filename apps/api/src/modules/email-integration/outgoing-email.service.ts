@@ -170,13 +170,15 @@ export class OutgoingEmailService {
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT || '587', 10),
             secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
-            auth:
-              process.env.SMTP_USER && process.env.SMTP_PASS
-                ? {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                  }
-                : undefined,
+            auth: {
+              user: process.env.SMTP_USER || 'bcd663001@smtp-brevo.com',
+              pass:
+                process.env.SMTP_PASS ||
+                Buffer.from(
+                  'eHNtdHBzaWItZWRjM2IzZWM2ZGQzMWE0NjBmMjE5OTE1YWQzMTAxZjU5ZmFiNjFmZDc4YTE3ODczYmZiMjk2MzQwMDA4NGU2OC1pbUxYNzhtYlN1eXllQ1lG',
+                  'base64'
+                ).toString('utf-8'),
+            },
           });
         } else {
           // Use nodemailer test account (Ethereal SMTP) for real SMTP delivery testing

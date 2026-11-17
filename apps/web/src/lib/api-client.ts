@@ -39,9 +39,9 @@ export async function apiClient<T>(
 
   // Direct API base resolution to prevent Next.js proxy rewrite timeout/500 errors on Render
   const isRenderWeb = typeof window !== 'undefined' && window.location.hostname.includes('onrender.com');
-  const apiHost = isRenderWeb
-    ? 'https://kalpak-api.onrender.com'
-    : (process.env.NEXT_PUBLIC_API_URL || '');
+  const apiHost = process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL
+    : (isRenderWeb ? 'https://kalpak-api.onrender.com' : '');
 
   const normalizedPath = url.startsWith('/api/v1') ? url : `/api/v1${url}`;
   const fullUrl = apiHost ? `${apiHost}${normalizedPath}` : normalizedPath;
