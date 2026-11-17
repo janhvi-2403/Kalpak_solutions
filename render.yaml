@@ -55,7 +55,10 @@ services:
       - key: WEB_BASE_URL
         value: https://kalpak-web.onrender.com
       - key: API_BASE_URL
-        value: https://kalpak-api.onrender.com
+        fromService:
+          type: web
+          name: kalpak-api
+          property: host
       - key: AUTO_SEED_DEMO
         value: "true"
       - key: GOOGLE_REDIRECT_URI
@@ -87,7 +90,15 @@ services:
       - key: APP_BASE_DOMAIN
         value: onrender.com
       - key: API_BASE_URL
-        value: https://kalpak-api.onrender.com
+        fromService:
+          type: web
+          name: kalpak-api
+          property: host
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: kalpak-api
+          property: host
       - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
         value: rzp_test_Tf0YvouIm2RxyJ
 
