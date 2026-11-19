@@ -10,7 +10,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install -g pnpm@10.29.2 && pnpm install && pnpm --filter @kalpak/database run db:generate && pnpm --filter "./packages/*" run build && pnpm --filter @kalpak/api run build
-    startCommand: (pnpm --filter @kalpak/database run db:migrate:deploy || pnpm --filter @kalpak/database exec prisma db push --skip-generate) && node apps/api/dist/main.js
+    startCommand: (pnpm --filter @kalpak/database exec prisma migrate resolve --rolled-back 20260901000000_init || true) && (pnpm --filter @kalpak/database run db:migrate:deploy || pnpm --filter @kalpak/database exec prisma db push --skip-generate) && node apps/api/dist/main.js
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -53,12 +53,12 @@ services:
       - key: CLOUDMAILIN_FORWARD_TARGET
         value: support@kalpak.solutions
       - key: WEB_BASE_URL
-        value: https://kalpak-web.onrender.com
+        value: https://kalpak-web-wzow.onrender.com
       - key: API_BASE_URL
         fromService:
           type: web
           name: kalpak-api
-          property: host
+          property: hostURL
       - key: AUTO_SEED_DEMO
         value: "true"
       - key: GOOGLE_REDIRECT_URI
@@ -93,12 +93,12 @@ services:
         fromService:
           type: web
           name: kalpak-api
-          property: host
+          property: hostURL
       - key: NEXT_PUBLIC_API_URL
         fromService:
           type: web
           name: kalpak-api
-          property: host
+          property: hostURL
       - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
         value: rzp_test_Tf0YvouIm2RxyJ
 
