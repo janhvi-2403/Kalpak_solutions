@@ -58,7 +58,7 @@ services:
         fromService:
           type: web
           name: kalpak-api
-          property: hostURL
+          property: host
       - key: AUTO_SEED_DEMO
         value: "true"
       - key: GOOGLE_REDIRECT_URI
@@ -93,12 +93,12 @@ services:
         fromService:
           type: web
           name: kalpak-api
-          property: hostURL
+          property: host
       - key: NEXT_PUBLIC_API_URL
         fromService:
           type: web
           name: kalpak-api
-          property: hostURL
+          property: host
       - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
         value: rzp_test_Tf0YvouIm2RxyJ
 

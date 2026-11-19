@@ -5,8 +5,16 @@ export const envSchema = z.object({
   APP_NAME: z.string().default('kalpak-saas-platform'),
   PORT: z.coerce.number().int().positive().default(4000),
   WEB_PORT: z.coerce.number().int().positive().default(3000),
-  API_BASE_URL: z.string().url().default('http://localhost:4000'),
-  WEB_BASE_URL: z.string().url().default('http://localhost:3000'),
+  API_BASE_URL: z
+    .string()
+    .transform((val) => (val && !val.startsWith('http') ? `https://${val}` : val))
+    .pipe(z.string().url())
+    .default('http://localhost:4000'),
+  WEB_BASE_URL: z
+    .string()
+    .transform((val) => (val && !val.startsWith('http') ? `https://${val}` : val))
+    .pipe(z.string().url())
+    .default('http://localhost:3000'),
   APP_BASE_DOMAIN: z.string().default('localhost'),
 
   // PostgreSQL Connection
